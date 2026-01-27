@@ -67,11 +67,80 @@ flux reconcile kustomization apps --with-source
 
 Requires `/etc/hosts` entries for `*.localhost` domains.
 
+## Development Standards
+
+### Python Style
+- **PEP 8** - Follow standard Python style guide
+- **Type hints** - Required for all function signatures
+- **Docstrings** - Google style for public functions/classes
+- **Line length** - 88 characters (Black default)
+- **Imports** - Use `isort` ordering (stdlib, third-party, local)
+- **Formatting** - Use `black` for consistent formatting
+- **Linting** - Use `ruff` for fast linting
+
+### Naming Conventions
+- `snake_case` for functions, variables, modules
+- `PascalCase` for classes
+- `UPPER_CASE` for constants
+- Prefix private methods/attributes with `_`
+
+### Error Handling
+- Use specific exception types, not bare `except:`
+- Raise `HTTPException` with appropriate status codes in routes
+- Log errors with context before re-raising
+
+### Testing Requirements
+- **Write tests for all new features** - No feature is complete without tests
+- **Test file naming** - `test_<module>.py` in `tests/` directory
+- **Use pytest** - With pytest-asyncio for async code
+- **Test coverage** - Aim for >80% on new code
+- **Test types:**
+  - Unit tests for core logic (storage, parser)
+  - Integration tests for API routes (use httpx TestClient)
+  - Edge cases and error conditions
+
+Example test structure:
+```python
+# tests/test_storage.py
+import pytest
+from graphwiki.core.storage import FileStorage
+
+@pytest.fixture
+def storage(tmp_path):
+    return FileStorage(tmp_path)
+
+@pytest.mark.asyncio
+async def test_save_and_get_page(storage):
+    await storage.save_page("TestPage", "# Hello")
+    page = await storage.get_page("TestPage")
+    assert page is not None
+    assert page.content == "# Hello"
+```
+
+### Code Quality Checklist
+Before committing:
+- [ ] Code follows PEP 8 style
+- [ ] Type hints added
+- [ ] Tests written and passing
+- [ ] No hardcoded secrets or credentials
+- [ ] Error handling is appropriate
+- [ ] Docstrings for public APIs
+
+### Git Commits
+- Write clear, concise commit messages
+- Use imperative mood ("Add feature" not "Added feature")
+- Reference issues if applicable
+- Keep commits focused and atomic
+
+### Dependencies
+- Add to `pyproject.toml` under `[project.dependencies]`
+- Pin minimum versions (`>=X.Y`), not exact versions
+- Dev dependencies go in `[project.optional-dependencies.dev]`
+
 ## Code Conventions
 
-### Python
+### Python Application
 - Use async/await for all storage operations
-- Type hints required
 - Settings via pydantic-settings with `GRAPHWIKI_` prefix
 - Storage layer is abstract - `FileStorage` implements `Storage` ABC
 
@@ -90,6 +159,23 @@ Requires `/etc/hosts` entries for `*.localhost` domains.
 - All apps deployed via Flux from `deploy/apps/`
 - Use Kustomize structure
 - Istio VirtualService for routing
+
+## Security Practices
+
+- **No secrets in code** - Use environment variables or k8s secrets
+- **Validate user input** - Sanitize page names, prevent path traversal
+- **No SQL injection** - Use parameterized queries (when DB is added)
+- **XSS prevention** - Jinja2 auto-escapes; be careful with `| safe`
+- **CSRF protection** - Use tokens for state-changing operations (future)
+- **Dependencies** - Keep updated, check for vulnerabilities
+
+## Documentation Practices
+
+- **Update docs with code** - If behavior changes, update relevant docs
+- **ADRs for decisions** - Document significant technical decisions in `docs/adr/`
+- **PRDs for features** - New features should have requirements in `docs/prd/`
+- **Code comments** - Explain "why", not "what" (code shows what)
+- **README updates** - Keep root README current with project status
 
 ## Architecture Decisions
 
@@ -121,6 +207,43 @@ Requires `/etc/hosts` entries for `*.localhost` domains.
 cd src
 pip install -e ".[dev]"
 pytest
+pytest --cov=graphwiki          # With coverage
+pytest -x                        # Stop on first failure
+pytest -k "test_storage"         # Run specific tests
 ```
 
 Tests use pytest + pytest-asyncio + httpx for async API testing.
+
+## Recommended Tools
+
+```bash
+# Install dev tools
+pip install black ruff isort pytest pytest-asyncio pytest-cov httpx
+
+# Format code
+black src/
+isort src/
+
+# Lint
+ruff check src/
+
+# Type checking (optional)
+pip install mypy
+mypy src/graphwiki/
+```
+
+Add to `pyproject.toml` for consistent configuration:
+```toml
+[tool.black]
+line-length = 88
+
+[tool.isort]
+profile = "black"
+
+[tool.ruff]
+line-length = 88
+select = ["E", "F", "I", "N", "W"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+```
