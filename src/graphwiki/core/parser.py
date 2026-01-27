@@ -93,6 +93,8 @@ def create_parser(page_exists: Callable[[str], bool] | None = None) -> Markdown:
             "sane_lists",  # Better list handling
             "smarty",  # Smart quotes and dashes
             "toc",  # Table of contents
+            # PyMdown extensions
+            "pymdownx.tasklist",  # Task lists with checkboxes
             # Custom extensions
             StrikethroughExtension(),  # ~~strikethrough~~
             WikiLinkExtension(page_exists=page_exists),  # [[WikiLinks]]
