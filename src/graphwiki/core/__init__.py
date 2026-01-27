@@ -1,0 +1,1 @@
+"""Core GraphWiki functionality."""

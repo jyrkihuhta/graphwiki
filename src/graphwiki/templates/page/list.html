@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+
+{% block title %}All Pages - {{ app_title }}{% endblock %}
+
+{% block content %}
+<div class="page-list">
+    <h1>All Pages</h1>
+
+    {% if pages %}
+    <ul class="pages">
+        {% for page in pages %}
+        <li>
+            <a href="/page/{{ page.replace(' ', '_') }}">{{ page }}</a>
+        </li>
+        {% endfor %}
+    </ul>
+    {% else %}
+    <p class="empty-state">
+        No pages yet.
+        <a href="/page/Home/edit">Create your first page</a>
+    </p>
+    {% endif %}
+</div>
+{% endblock %}

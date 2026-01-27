@@ -36,3 +36,6 @@ kubeconfig*
 # Local development
 .local/
 tmp/
+
+# Wiki data (keep structure, ignore content)
+data/pages/*.md

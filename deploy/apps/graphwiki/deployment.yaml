@@ -1,0 +1,52 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: graphwiki
+  namespace: graphwiki
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: graphwiki
+  template:
+    metadata:
+      labels:
+        app: graphwiki
+    spec:
+      containers:
+      - name: graphwiki
+        image: graphwiki:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8000
+        env:
+        - name: GRAPHWIKI_DATA_DIR
+          value: /data/pages
+        - name: GRAPHWIKI_DEBUG
+          value: "false"
+        volumeMounts:
+        - name: data
+          mountPath: /data/pages
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "50m"
+          limits:
+            memory: "256Mi"
+            cpu: "500m"
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 8000
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 8000
+          initialDelaySeconds: 10
+          periodSeconds: 30
+      volumes:
+      - name: data
+        persistentVolumeClaim:
+          claimName: graphwiki-data
