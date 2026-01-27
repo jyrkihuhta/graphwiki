@@ -6,11 +6,26 @@ from xml.etree.ElementTree import Element
 
 from markdown import Markdown
 from markdown.extensions import Extension
-from markdown.inlinepatterns import InlineProcessor
+from markdown.inlinepatterns import InlineProcessor, SimpleTagInlineProcessor
 
 
 # Pattern for wiki links: [[PageName]] or [[PageName|Display Text]]
 WIKI_LINK_PATTERN = r"\[\[([^\]|]+)(?:\|([^\]]+))?\]\]"
+
+# Pattern for strikethrough: ~~text~~
+STRIKETHROUGH_PATTERN = r"~~(.*?)~~"
+
+
+class StrikethroughExtension(Extension):
+    """Markdown extension for ~~strikethrough~~ text."""
+
+    def extendMarkdown(self, md: Markdown) -> None:
+        """Add strikethrough pattern to markdown parser."""
+        md.inlinePatterns.register(
+            SimpleTagInlineProcessor(STRIKETHROUGH_PATTERN, "del"),
+            "strikethrough",
+            50,
+        )
 
 
 class WikiLinkInlineProcessor(InlineProcessor):
@@ -72,10 +87,14 @@ def create_parser(page_exists: Callable[[str], bool] | None = None) -> Markdown:
     """
     return Markdown(
         extensions=[
-            "fenced_code",
-            "tables",
-            "toc",
-            WikiLinkExtension(page_exists=page_exists),
+            # Core formatting
+            "extra",  # Includes: abbreviations, attr_list, def_list, fenced_code, footnotes, md_in_html, tables
+            "sane_lists",  # Better list handling
+            "smarty",  # Smart quotes and dashes
+            "toc",  # Table of contents
+            # Custom extensions
+            StrikethroughExtension(),  # ~~strikethrough~~
+            WikiLinkExtension(page_exists=page_exists),  # [[WikiLinks]]
         ]
     )
 
