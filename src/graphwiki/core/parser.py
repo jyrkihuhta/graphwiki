@@ -13,7 +13,8 @@ from markdown.inlinepatterns import InlineProcessor, SimpleTagInlineProcessor
 WIKI_LINK_PATTERN = r"\[\[([^\]|]+)(?:\|([^\]]+))?\]\]"
 
 # Pattern for strikethrough: ~~text~~
-STRIKETHROUGH_PATTERN = r"~~(.*?)~~"
+# Group 2 must contain the text (SimpleTagInlineProcessor expectation)
+STRIKETHROUGH_PATTERN = r"(~~)(.*?)~~"
 
 
 class StrikethroughExtension(Extension):
