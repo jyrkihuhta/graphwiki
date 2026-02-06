@@ -1,43 +1,164 @@
 # GraphWiki Architecture
 
-This document describes the current architecture of GraphWiki and its deployment infrastructure.
+This document describes the architecture of GraphWiki and its deployment infrastructure.
 
 ## System Overview
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                         Browser                                  │
-└─────────────────────────┬───────────────────────────────────────┘
-                          │ HTTP
-                          ▼
+│              (HTMX + D3.js graph visualization)                  │
+└──────────┬──────────────────────────────┬───────────────────────┘
+           │ HTTP/HTMX                    │ WebSocket
+           ▼                              ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│                    k3d Load Balancer                             │
-│                   (localhost:8080/8443)                          │
-└─────────────────────────┬───────────────────────────────────────┘
-                          │
-                          ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                  Istio Ingress Gateway                           │
-│            (Gateway + VirtualService routing)                    │
-├─────────────────────────────────────────────────────────────────┤
-│  wiki.localhost:8080  →  graphwiki service                       │
-│  rancher.localhost:8443  →  rancher service                      │
-│  test.localhost:8080  →  test-app service                        │
-└─────────────────────────┬───────────────────────────────────────┘
-                          │
-         ┌────────────────┼────────────────┐
-         ▼                ▼                ▼
-┌─────────────┐  ┌─────────────┐  ┌─────────────┐
-│  GraphWiki  │  │   Rancher   │  │  Test App   │
-│   (Pod)     │  │   (Pods)    │  │   (Pod)     │
-└──────┬──────┘  └─────────────┘  └─────────────┘
-       │
-       ▼
-┌─────────────┐
-│     PVC     │
-│ (wiki data) │
-└─────────────┘
+│                       FastAPI Application                        │
+│                                                                  │
+│  ┌──────────┐  ┌──────────┐  ┌──────────────┐  ┌────────────┐  │
+│  │  Routes   │  │  Parser  │  │ Graph Wrapper │  │ WS Manager │  │
+│  │ (main.py) │  │(parser.py│  │  (graph.py)   │  │(ws_manager)│  │
+│  └────┬─────┘  └────┬─────┘  └──────┬───────┘  └─────┬──────┘  │
+│       │              │               │                │          │
+│       ▼              │               ▼                │          │
+│  ┌──────────┐        │        ┌─────────────┐        │          │
+│  │ Storage   │        │        │ graph_core  │        │          │
+│  │(storage.py│◄───────┘        │ (Rust/PyO3) │◄───────┘          │
+│  └────┬─────┘                  └──────┬──────┘                   │
+│       │                               │                          │
+└───────┼───────────────────────────────┼──────────────────────────┘
+        │                               │
+        ▼                               ▼
+  ┌───────────┐                  ┌─────────────┐
+  │ Markdown  │                  │  petgraph   │
+  │   Files   │◄─── watches ────│  WikiGraph  │
+  │ data/pages│                  │ (in-memory) │
+  └───────────┘                  └─────────────┘
 ```
+
+## Application Layer
+
+### FastAPI Application
+
+**Source:** `src/graphwiki/`
+
+```
+graphwiki/
+├── main.py             # FastAPI app, routes, WebSocket endpoint
+├── config.py           # pydantic-settings configuration
+├── core/
+│   ├── storage.py      # Storage abstraction + FileStorage
+│   ├── parser.py       # Markdown + wiki links + MetaTable macro
+│   ├── graph.py        # Rust engine wrapper (optional import)
+│   ├── ws_manager.py   # WebSocket connection manager + event fanout
+│   └── models.py       # Page model
+├── templates/
+│   ├── base.html       # Base layout
+│   ├── graph.html      # Graph visualization page
+│   └── page/
+│       ├── view.html   # Page view with backlinks panel
+│       ├── edit.html   # Page editing
+│       └── list.html   # Page listing
+└── static/
+    ├── css/style.css   # Styles
+    └── js/graph.js     # D3.js force-directed graph
+```
+
+### Routes
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/` | Page listing |
+| GET | `/page/{name}` | View page (redirects to edit if missing) |
+| GET | `/page/{name}/edit` | Edit form |
+| POST | `/page/{name}` | Save page (HTMX-aware) |
+| GET | `/page/{name}/raw` | Raw markdown (JSON) |
+| POST | `/page/{name}/delete` | Delete page |
+| GET | `/graph` | Graph visualization page |
+| GET | `/api/graph` | Graph data as JSON (nodes + links) |
+| WS | `/ws/graph` | WebSocket for real-time graph events |
+
+### Storage Architecture
+
+Abstract storage layer for future extensibility:
+
+```python
+class Storage(ABC):
+    """Base class for page storage backends."""
+    async def get_page(name: str) -> Page | None
+    async def save_page(name: str, content: str) -> Page
+    async def delete_page(name: str) -> bool
+    async def list_pages() -> list[str]
+    async def page_exists(name: str) -> bool
+```
+
+Current implementation: `FileStorage`
+- Pages stored as `{data_dir}/{PageName}.md`
+- YAML frontmatter supported for metadata
+- Filename sanitization (spaces to underscores)
+
+### Parser Architecture
+
+Markdown processing pipeline with custom extensions:
+
+1. **Preprocessors:**
+   - `MetaTablePreprocessor` — expands `<<MetaTable(...)>>` macros into HTML tables by querying the graph engine
+
+2. **Inline processors:**
+   - `WikiLinkExtension` — `[[PageName]]` and `[[PageName|Text]]` to HTML links
+   - `StrikethroughExtension` — `~~text~~` to `<del>` tags
+
+3. **Third-party extensions:**
+   - `extra` — tables, fenced code, footnotes
+   - `sane_lists` — better list parsing
+   - `smarty` — smart quotes and dashes
+   - `toc` — table of contents
+   - `pymdownx.tasklist` — checkbox task lists
+
+Wiki links check page existence (via graph engine or filesystem fallback) to apply different CSS classes for existing vs missing pages.
+
+### Graph Engine
+
+The Rust graph engine (`graph-core/`) provides fast graph operations exposed to Python via PyO3.
+
+**Architecture:**
+- `WikiGraph` built on `petgraph::DiGraph` — directed graph of pages and links
+- YAML frontmatter parsed for metadata (via `serde_yaml`)
+- Wiki links extracted from Markdown (via `pulldown-cmark`)
+- File watcher (`notify-debouncer-mini`) for live updates with 500ms debounce
+- Thread-safe graph access via `Arc<Mutex<WikiGraph>>`
+- Event queue (`GraphEvent` enum) for change notifications
+
+**Rust modules:**
+
+| Module | Purpose |
+|--------|---------|
+| `lib.rs` | PyO3 entry point, `GraphEngine` class |
+| `graph.rs` | `WikiGraph` using petgraph |
+| `parser.rs` | Frontmatter + wiki link extraction |
+| `models.rs` | `PageNode`, `WikiLink` structs |
+| `query.rs` | `Filter` enum, `query()`, `metatable()` |
+| `events.rs` | `GraphEvent` enum, `EventQueue` |
+| `watcher.rs` | `FileWatcher` with notify crate |
+
+**Python wrapper** (`core/graph.py`):
+- Optional import — app works without `graph_core` installed
+- Singleton `GraphEngine` initialized on FastAPI startup
+- `init_engine()` / `shutdown_engine()` lifecycle management
+- Falls back to filesystem for `page_exists()` when engine unavailable
+
+### WebSocket and Real-time Updates
+
+**Connection Manager** (`core/ws_manager.py`):
+- Singleton `ConnectionManager` with per-client `asyncio.Queue` fanout
+- Background task polls `graph_core.poll_events()` at 0.5s intervals
+- Events broadcast to all connected clients as JSON
+- Auto-cleanup on client disconnect
+
+**Client** (`static/js/graph.js`):
+- D3.js v7 force-directed graph
+- WebSocket connection with auto-reconnect
+- Live node/link additions and removals
+- Click-to-navigate, drag, zoom/pan
 
 ## Infrastructure Layer
 
@@ -54,11 +175,11 @@ Local Kubernetes cluster running in Docker containers:
 
 ### Istio Service Mesh
 
-Provides ingress routing and future observability:
+Provides ingress routing:
 
-- `istio-base` - CRDs and cluster-wide resources
-- `istiod` - Control plane
-- `istio-ingress` - Gateway for external traffic
+- `istio-base` — CRDs and cluster-wide resources
+- `istiod` — Control plane
+- `istio-ingress` — Gateway for external traffic
 
 Routing configured via Gateway and VirtualService resources.
 
@@ -70,7 +191,7 @@ Cluster management UI accessible at https://rancher.localhost:8443
 
 - Installed via Helm (rancher-latest repo)
 - Uses cert-manager for TLS
-- Single-cluster deployment (Rancher on workload cluster)
+- Single-cluster deployment
 
 **Terraform:** `infra/local/rancher.tf`
 
@@ -94,66 +215,6 @@ deploy/
 
 Push to `main` branch triggers automatic deployment.
 
-## Application Layer
-
-### GraphWiki Application
-
-**Stack:**
-- FastAPI (Python 3.12+) - async web framework
-- Jinja2 - server-side templates
-- HTMX - dynamic updates without heavy JavaScript
-- Markdown + pymdown-extensions - content parsing
-
-**Source:** `src/graphwiki/`
-
-```
-graphwiki/
-├── main.py         # FastAPI app, routes
-├── config.py       # pydantic-settings configuration
-├── core/
-│   ├── storage.py  # Storage abstraction + FileStorage
-│   ├── parser.py   # Markdown + wiki link parsing
-│   └── models.py   # Page model
-├── templates/      # Jinja2 HTML templates
-└── static/         # CSS, JS assets
-```
-
-### Storage Architecture
-
-Abstract storage layer for future extensibility:
-
-```python
-class Storage(ABC):
-    """Base class for page storage backends."""
-    async def get_page(name: str) -> Page | None
-    async def save_page(name: str, content: str) -> Page
-    async def delete_page(name: str) -> bool
-    async def list_pages() -> list[str]
-    async def page_exists(name: str) -> bool
-```
-
-Current implementation: `FileStorage`
-- Pages stored as `{data_dir}/{PageName}.md`
-- YAML frontmatter supported for metadata
-- Filename sanitization (spaces → underscores)
-
-### Parser Architecture
-
-Markdown processing pipeline:
-
-1. **Input:** Raw Markdown with wiki links
-2. **Extensions:**
-   - `extra` - tables, fenced code, footnotes
-   - `sane_lists` - better list parsing
-   - `smarty` - typography (quotes, dashes)
-   - `toc` - table of contents
-   - `pymdownx.tasklist` - checkbox lists
-   - `WikiLinkExtension` - `[[PageName]]` → HTML links
-   - `StrikethroughExtension` - `~~text~~` → `<del>`
-3. **Output:** HTML string
-
-Wiki links check page existence to apply different CSS classes.
-
 ## Deployment
 
 ### Container
@@ -169,6 +230,8 @@ COPY graphwiki/ ./graphwiki/
 RUN mkdir -p /data/pages
 CMD ["uvicorn", "graphwiki.main:app", "--host", "0.0.0.0", "--port", "8000"]
 ```
+
+> **Note:** The Dockerfile does not yet include the Rust graph engine build. This is a planned improvement.
 
 ### Kubernetes Resources
 
@@ -206,10 +269,18 @@ Or push to Git and let Flux handle it (requires image registry).
 | `GRAPHWIKI_DATA_DIR` | `data/pages` | Storage directory |
 | `GRAPHWIKI_DEBUG` | `false` | Debug mode |
 | `GRAPHWIKI_APP_TITLE` | `GraphWiki` | App title |
+| `GRAPHWIKI_GRAPH_WATCH` | `true` | Enable file watching for live updates |
 
-### Kubernetes ConfigMap (future)
+## Architecture Decisions
 
-Currently using environment variables in Deployment spec.
+| Decision | Choice | Rationale |
+|----------|--------|-----------|
+| k3d Terraform | `null_resource` + CLI | Provider unreliable ([ADR-001](adr/001-k3d-terraform-approach.md)) |
+| Istio CRDs | `kubectl apply` via null_resource | Terraform CRD validation issues |
+| Storage | Abstract class + FileStorage | Prepare for future database backend |
+| Frontend | HTMX + Jinja2 + D3.js | Server-rendered, D3 for graph visualization |
+| Graph engine | Rust + PyO3 | Performance for graph operations, optional dependency |
+| Real-time | WebSocket + asyncio fanout | Per-client queue, 0.5s poll interval |
 
 ## URLs
 
@@ -221,22 +292,18 @@ Currently using environment variables in Deployment spec.
 
 ## Future Considerations
 
-### Metatables
-
-Will require:
-- YAML frontmatter parsing (already supported in storage)
-- Query language for metadata
-- Table rendering component
-
 ### Search
 
 Options:
 - SQLite FTS for simple full-text search
-- Elasticsearch/Meilisearch for advanced features
+- Meilisearch for advanced features
 
 ### Authentication
 
 Options:
-- Rancher authentication integration
 - OAuth2 (GitHub, Google)
 - Simple username/password with sessions
+
+### Graph Persistence
+
+Serialize the in-memory graph to disk for fast startup instead of rebuilding from files on every launch.

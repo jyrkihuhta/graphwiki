@@ -27,8 +27,8 @@ Build an MVP wiki platform with:
 - User authentication and access control
 - Version history / page revisions
 - Full-text search
-- Metatables (planned for Phase 2)
-- Graph visualization
+- ~~Metatables~~ — implemented in Phase 3 (Milestone 3 + 5)
+- ~~Graph visualization~~ — implemented in Phase 3 (Milestone 6)
 - Real-time collaboration
 
 ## Architecture
@@ -116,6 +116,7 @@ Environment variables with `GRAPHWIKI_` prefix:
 | `GRAPHWIKI_DATA_DIR` | `data/pages` | Page storage directory |
 | `GRAPHWIKI_DEBUG` | `false` | Debug mode |
 | `GRAPHWIKI_APP_TITLE` | `GraphWiki` | Application title |
+| `GRAPHWIKI_GRAPH_WATCH` | `true` | Enable file watching for live graph updates |
 
 ## Requirements
 
@@ -137,10 +138,10 @@ Environment variables with `GRAPHWIKI_` prefix:
 ### Future Enhancements
 
 - [ ] YAML frontmatter metadata display
-- [ ] Backlinks panel (pages linking to current page)
+- [x] Backlinks panel (pages linking to current page) — Phase 3 Milestone 5
 - [ ] Search functionality
-- [ ] Metatables queries
-- [ ] Graph visualization
+- [x] MetaTable queries — Phase 3 Milestone 3 + 5
+- [x] Graph visualization — Phase 3 Milestone 6
 - [ ] Version history
 - [ ] User accounts
 

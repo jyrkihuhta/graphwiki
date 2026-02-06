@@ -4,38 +4,86 @@ This guide covers setting up GraphWiki for local development and deploying to Ku
 
 ## Prerequisites
 
-Install these tools:
+### For local development
 
-- [Docker](https://docs.docker.com/get-docker/) - Container runtime
-- [k3d](https://k3d.io/) - Local Kubernetes in Docker
-- [kubectl](https://kubernetes.io/docs/tasks/tools/) - Kubernetes CLI
+- [Python](https://www.python.org/) >= 3.12
+- [Rust](https://rustup.rs/) — for the graph engine (optional, but recommended)
+- [Maturin](https://www.maturin.rs/) — Python/Rust build tool (installed automatically by `dev.sh`)
+
+### For Kubernetes deployment
+
+- [Docker](https://docs.docker.com/get-docker/) — Container runtime
+- [k3d](https://k3d.io/) — Local Kubernetes in Docker
+- [kubectl](https://kubernetes.io/docs/tasks/tools/) — Kubernetes CLI
 - [Terraform](https://developer.hashicorp.com/terraform/install) >= 1.0
-- [Flux CLI](https://fluxcd.io/flux/installation/) - GitOps toolkit
-- [Python](https://www.python.org/) >= 3.12 - For local development
-- [uv](https://github.com/astral-sh/uv) (optional) - Fast Python package manager
+- [Flux CLI](https://fluxcd.io/flux/installation/) — GitOps toolkit
 
 ## Quick Start (Local Development)
 
-Run GraphWiki directly without Kubernetes:
+### Recommended: With Rust graph engine
+
+The `dev.sh` script builds the Rust graph engine, installs dependencies, and starts the server:
 
 ```bash
 # Clone the repository
 git clone https://github.com/jyrkihuhta/graphwiki.git
 cd graphwiki
 
-# Install dependencies
-cd src
-pip install -e .
-# Or with uv: uv pip install -e .
-
-# Create data directory
-mkdir -p data/pages
-
-# Run the application
-uvicorn graphwiki.main:app --reload --host 0.0.0.0 --port 8000
+# Build Rust engine + start server
+./dev.sh
 ```
 
 Access at http://localhost:8000
+
+`dev.sh` options:
+```bash
+./dev.sh                 # Build Rust engine + start server
+./dev.sh --skip-build    # Start server without rebuilding Rust
+./dev.sh --build-only    # Build Rust engine only
+```
+
+### Without the Rust engine
+
+If you just want to work on the wiki without graph features (backlinks, MetaTable queries, graph visualization), you can skip the Rust build entirely:
+
+```bash
+cd src
+pip install -e .
+uvicorn graphwiki.main:app --reload
+```
+
+The app runs normally — graph features gracefully degrade to empty/unavailable.
+
+### Building the Rust engine manually
+
+If you need to build the graph engine separately:
+
+```bash
+cd graph-core
+source ~/.cargo/env          # Ensure Rust is in PATH
+python -m venv .venv && source .venv/bin/activate
+pip install maturin
+
+# Python 3.14+ requires this flag
+PYO3_USE_ABI3_FORWARD_COMPATIBILITY=1 maturin develop
+```
+
+### Running tests
+
+```bash
+# Python integration tests (59 tests)
+cd src
+pip install -e ".[dev]"
+pytest tests/ -v
+
+# Rust graph engine tests (70 tests)
+cd graph-core
+source .venv/bin/activate
+python -m pytest tests/ -v
+
+# With coverage
+cd src && pytest --cov=graphwiki
+```
 
 ## Full Kubernetes Deployment
 
@@ -120,8 +168,9 @@ kubectl rollout status deployment/graphwiki -n graphwiki
 ### Making Code Changes
 
 1. Edit code in `src/graphwiki/`
-2. For local development: uvicorn auto-reloads
-3. For k8s deployment:
+2. For local development: `./dev.sh --skip-build` (uvicorn auto-reloads)
+3. For Rust changes: `./dev.sh` (rebuilds engine and restarts)
+4. For k8s deployment:
 
 ```bash
 # Rebuild and redeploy
@@ -153,6 +202,38 @@ kubectl logs -f deployment/istio-ingress -n istio-ingress
 
 # Flux logs
 kubectl logs -f deployment/source-controller -n flux-system
+```
+
+## Project Structure
+
+```
+graphwiki/
+├── dev.sh                      # Development startup script
+├── graph-core/                 # Rust graph engine (petgraph + PyO3)
+│   ├── Cargo.toml
+│   ├── src/                    # Rust source
+│   └── tests/                  # PyO3 integration tests (70 tests)
+├── src/
+│   ├── graphwiki/              # Python application
+│   │   ├── main.py             # FastAPI routes + WebSocket
+│   │   ├── core/               # Storage, parser, graph, WebSocket manager
+│   │   ├── templates/          # Jinja2 templates
+│   │   └── static/             # CSS + D3.js graph visualization
+│   ├── tests/                  # Integration tests (59 tests)
+│   ├── pyproject.toml          # Python dependencies
+│   └── Dockerfile              # Container build
+├── docs/                       # Documentation
+│   ├── architecture.md         # System design
+│   ├── prd/                    # Product requirements
+│   ├── adr/                    # Architecture decisions
+│   └── domains/                # Domain-specific design docs
+├── deploy/
+│   ├── flux/                   # Flux GitOps configuration
+│   └── apps/                   # Application manifests
+│       ├── graphwiki/          # GraphWiki k8s resources
+│       └── test-app/           # Test application
+├── infra/local/                # Terraform (k3d + Istio + Rancher)
+└── data/pages/                 # Wiki content (gitignored)
 ```
 
 ## Troubleshooting
@@ -209,6 +290,19 @@ docker exec k3d-graphwiki-server-0 crictl images | grep graphwiki
 kubectl delete pod -l app=graphwiki -n graphwiki
 ```
 
+### Rust Engine Build Fails
+
+```bash
+# Ensure Rust is installed
+rustup --version
+
+# Ensure correct Python version
+python --version  # Must be 3.12+
+
+# For Python 3.14+, set ABI3 compatibility flag
+PYO3_USE_ABI3_FORWARD_COMPATIBILITY=1 maturin develop
+```
+
 ## Cleanup
 
 ```bash
@@ -220,32 +314,8 @@ terraform destroy
 k3d cluster delete graphwiki
 ```
 
-## Project Structure
-
-```
-graphwiki/
-├── docs/                    # Documentation
-│   ├── prd/                 # Product requirements
-│   ├── adr/                 # Architecture decisions
-│   └── research/            # Background research
-├── infra/
-│   └── local/               # Terraform for k3d + Rancher + Istio
-├── src/
-│   ├── graphwiki/           # Python application
-│   ├── pyproject.toml       # Dependencies
-│   └── Dockerfile           # Container build
-├── deploy/
-│   ├── flux/                # Flux GitOps configuration
-│   └── apps/                # Application manifests
-│       ├── graphwiki/       # GraphWiki k8s resources
-│       └── test-app/        # Test application
-├── data/
-│   └── pages/               # Wiki content (gitignored)
-└── tests/                   # Test suites
-```
-
 ## Next Steps
 
 - Read the [Architecture](architecture.md) document for system design details
-- Check [PRD-002](prd/002-graphwiki-mvp.md) for feature status
-- Explore [Graphingwiki features](research/graphingwiki-features.md) for future plans
+- Check [TODO.md](../TODO.md) for current tasks and roadmap
+- Explore the [Graph Engine domain doc](domains/graph-engine.md) for Rust engine details
