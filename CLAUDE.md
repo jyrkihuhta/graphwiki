@@ -7,26 +7,45 @@ GraphWiki is a modern wiki platform inspired by MoinMoin, Graphingwiki, and Obsi
 - Wiki links (`[[PageName]]` syntax)
 - Kubernetes-native deployment with GitOps
 
-**Tech Stack:** FastAPI, Jinja2, HTMX, Python 3.12+, k3d, Istio, Rancher, Flux
+**Tech Stack:** FastAPI, Jinja2, HTMX, Python 3.12+, Rust (graph engine), k3d, Istio, Rancher, Flux
 
 ## Key Documentation
 
 Read these for full context:
+- `TODO.md` - Current tasks, milestones, and progress
 - `docs/getting-started.md` - Setup and deployment guide
 - `docs/architecture.md` - System design and components
 - `docs/prd/002-graphwiki-mvp.md` - Application requirements and status
 - `docs/prd/001-infrastructure.md` - Infrastructure requirements
+- `docs/domains/*.md` - Domain-specific design docs (for subagents)
 
 ## Project Structure
 
 ```
+dev.sh                  # Development startup script (build Rust + start server)
+graph-core/             # Rust graph engine (Phase 3)
+  src/lib.rs            # PyO3 entry point, GraphEngine class
+  src/graph.rs          # petgraph WikiGraph
+  src/parser.rs         # Frontmatter + wiki link parsing
+  src/models.rs         # PageNode, WikiLink structs
+  src/query.rs          # Filter enum, query(), metatable()
+  src/events.rs         # GraphEvent enum, EventQueue
+  src/watcher.rs        # FileWatcher with notify crate
+  tests/                # Python integration tests (70 tests)
+
 src/graphwiki/          # Python application
-  main.py               # FastAPI routes
+  main.py               # FastAPI routes + WebSocket endpoint
   config.py             # Settings (GRAPHWIKI_* env vars)
   core/storage.py       # FileStorage implementation
-  core/parser.py        # Markdown + wiki link parsing
+  core/parser.py        # Markdown + wiki link + MetaTable parsing
+  core/graph.py         # Graph engine wrapper (optional import)
+  core/ws_manager.py    # WebSocket connection manager + event fanout
   templates/            # Jinja2 templates
-  static/               # CSS
+  static/css/           # CSS
+  static/js/graph.js    # D3.js graph visualization
+  tests/                # Integration tests (59 tests)
+
+docs/domains/           # Domain documentation for subagents
 
 infra/local/            # Terraform for local k8s
   main.tf               # k3d cluster (uses null_resource, not provider)
@@ -40,7 +59,12 @@ deploy/flux/            # Flux GitOps configuration
 ## Common Commands
 
 ```bash
-# Local development (no k8s)
+# Local development with Rust engine (recommended)
+./dev.sh                    # Build Rust engine + start server
+./dev.sh --skip-build       # Start server without rebuilding Rust
+./dev.sh --build-only       # Build Rust engine only
+
+# Local development without Rust engine
 cd src && uvicorn graphwiki.main:app --reload
 
 # Build and deploy to k8s
@@ -149,6 +173,7 @@ Before committing:
 - Wiki links: `WikiLinkExtension` (custom)
 - Task lists: `pymdownx.tasklist`
 - Strikethrough: `StrikethroughExtension` (custom)
+- MetaTable: `MetaTableExtension` (custom preprocessor, queries graph engine)
 
 ### Templates
 - Base template: `templates/base.html`
@@ -184,7 +209,8 @@ Before committing:
 | k3d Terraform | `null_resource` + CLI | Provider unreliable (ADR-001) |
 | Istio CRDs | `kubectl apply` via null_resource | Terraform CRD validation issues |
 | Storage | Abstract class + FileStorage | Prepare for future DB backend |
-| Frontend | HTMX + Jinja2 | Server-rendered, minimal JS |
+| Frontend | HTMX + Jinja2 + D3.js | Server-rendered, D3 for graph viz |
+| Real-time | WebSocket + asyncio fanout | Per-client queue, 0.5s poll interval |
 
 ## Gotchas
 
@@ -192,14 +218,71 @@ Before committing:
 2. **Traefik disabled** - Using Istio ingress instead
 3. **Flux deploys from Git** - Local manifest changes need commit+push (or manual kubectl apply)
 4. **Markdown parser groups** - `SimpleTagInlineProcessor` expects text in group(2), not group(1)
+5. **poll_events() drains queue** - Only the `ConnectionManager` singleton should call `poll_events()` to avoid losing events
+6. **ASGITransport skips lifespan** - In tests, manually call `init_engine()`/`shutdown_engine()` instead of relying on FastAPI lifespan
+7. **graph_core is optional** - `core/graph.py` uses `try/except ImportError`; app works without it
+8. **Form fields default** - Use `Form("")` not `Form(...)` for optional/empty-allowed form fields; `Form(...)` rejects empty strings with 422
 
-## Future Work (Phase 3)
+## Phase 3: Graph Engine (Complete)
 
-- Metatables - Query pages by YAML frontmatter metadata
+Phase 3 adds a Rust-based graph engine for metadata queries and visualization.
+
+**See:** `TODO.md` for current milestone status and `docs/domains/graph-engine.md` for design.
+
+### Completed
+- ✅ Milestone 1: Rust Foundation (Maturin, PyO3)
+- ✅ Milestone 2: Graph Core (petgraph, frontmatter/link parsing, backlinks)
+- ✅ Milestone 3: Query Engine (Filter enum, query(), metatable() - 39 tests)
+- ✅ Milestone 4: File Watching (notify-debouncer-mini, GraphEvent, poll_events() - 18 tests)
+- ✅ Milestone 5: Python Integration (backlinks panel, MetaTable macro, graph-backed page_exists)
+- ✅ Milestone 6: Real-time Visualization (D3.js force graph, WebSocket, live updates)
+
+**129 total tests passing** (70 graph-core + 59 integration)
+
+### Graph Engine Commands
+```bash
+cd graph-core
+source ~/.cargo/env
+source .venv/bin/activate
+PYO3_USE_ABI3_FORWARD_COMPATIBILITY=1 maturin develop
+python -m pytest tests/ -v       # 70 tests
+
+cd src
+python -m pytest tests/ -v       # 59 tests
+```
+
+## Subagent Workflow
+
+This project uses domain-based subagents for focused implementation work.
+
+### Domain Documentation
+Each domain has a dedicated doc in `docs/domains/`:
+
+| Domain | Doc | Description |
+|--------|-----|-------------|
+| Graph Engine | `graph-engine.md` | Rust core, petgraph, PyO3 |
+| Business Logic | `business-logic.md` | Python wiki functionality |
+| Authentication | `authentication.md` | User auth (planned) |
+| Infrastructure | `infrastructure.md` | k8s, deployment |
+| Observability | `observability.md` | Logging, metrics |
+| Testing | `testing.md` | Test strategy, CI/CD |
+
+### Spawning Subagents
+To work on a domain, spawn a subagent that reads the domain doc:
+```
+Task(subagent_type="general-purpose",
+     prompt="Read docs/domains/<domain>.md and implement <task>")
+```
+
+The agent reads the domain doc for context, works autonomously, and reports back.
+
+## Future Work
+
 - Search - Full-text search
-- Graph visualization - Page link visualization
 - Version history - Track page changes
 - Authentication - User accounts
+- Frontmatter display - Show parsed metadata in page view
+- Graph persistence - Serialize graph to disk for fast startup
 
 ## Testing
 

@@ -15,6 +15,19 @@
         {{ html_content | safe }}
     </div>
 
+    {% if backlinks %}
+    <aside class="backlinks-panel">
+        <h3>Pages linking here</h3>
+        <ul class="backlinks-list">
+            {% for link in backlinks %}
+            <li>
+                <a href="/page/{{ link.replace(' ', '_') }}" class="wiki-link">{{ link }}</a>
+            </li>
+            {% endfor %}
+        </ul>
+    </aside>
+    {% endif %}
+
     {% if page.metadata.tags %}
     <footer class="page-footer">
         <div class="tags">

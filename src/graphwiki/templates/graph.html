@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+
+{% block title %}Graph - {{ app_title }}{% endblock %}
+
+{% block main_class %}main--full-width{% endblock %}
+
+{% block content %}
+<div class="graph-page">
+    <div class="graph-toolbar">
+        <h1>Page Graph</h1>
+        <span class="graph-stats" id="graph-stats"></span>
+        <span class="graph-ws-status" id="ws-status">Connecting...</span>
+    </div>
+    <div class="graph-container" id="graph-container">
+        <svg id="graph-svg"></svg>
+    </div>
+    <div class="graph-unavailable" id="graph-unavailable" style="display: none;">
+        <p>Graph engine is not available. Install <code>graph-core</code> to enable visualization.</p>
+    </div>
+</div>
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<script src="/static/js/graph.js"></script>
+{% endblock %}

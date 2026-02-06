@@ -1,0 +1,26 @@
+[package]
+name = "graph_core"
+version = "0.1.0"
+edition = "2021"
+description = "Rust graph engine for GraphWiki with PyO3 bindings"
+license = "MIT"
+
+[lib]
+name = "graph_core"
+crate-type = ["cdylib"]
+
+[dependencies]
+pyo3 = { version = "0.23", features = ["extension-module"] }
+petgraph = "0.8"
+pulldown-cmark = "0.12"
+notify-debouncer-mini = "0.7"
+serde = { version = "1.0", features = ["derive"] }
+serde_yaml = "0.9"
+regex = "1.11"
+
+[dev-dependencies]
+tempfile = "3.15"
+
+[profile.release]
+lto = true
+opt-level = 3

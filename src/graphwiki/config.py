@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     data_dir: Path = Path("data/pages")
     debug: bool = False
     app_title: str = "GraphWiki"
+    graph_watch: bool = True
 
     model_config = SettingsConfigDict(
         env_prefix="GRAPHWIKI_",
