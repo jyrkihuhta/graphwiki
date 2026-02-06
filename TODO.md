@@ -44,7 +44,7 @@ Set up the Rust project structure and basic PyO3 integration.
 - [x] Set up Cargo.toml with dependencies (pyo3, petgraph, pulldown-cmark)
 - [x] Create basic PyO3 module that Python can import
 - [x] Add Rust build to development workflow
-- [ ] Document Rust development setup in getting-started.md
+- [x] Document Rust development setup in getting-started.md
 
 **Build commands:**
 ```bash
