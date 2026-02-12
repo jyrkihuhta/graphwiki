@@ -162,6 +162,91 @@ class TestBacklinksRoute:
 
 
 # ============================================================
+# Frontmatter display tests
+# ============================================================
+
+
+class TestFrontmatterDisplay:
+    @pytest.mark.skipif(
+        not GRAPH_ENGINE_AVAILABLE, reason="graph_core not installed"
+    )
+    @pytest.mark.asyncio
+    async def test_view_page_shows_frontmatter(self, wiki_dir):
+        """Frontmatter metadata should appear in the page view."""
+        from httpx import AsyncClient, ASGITransport
+        import os
+
+        os.environ["GRAPHWIKI_DATA_DIR"] = str(wiki_dir)
+
+        import importlib
+        import graphwiki.config
+        importlib.reload(graphwiki.config)
+        import graphwiki.main
+        importlib.reload(graphwiki.main)
+
+        init_engine(wiki_dir, watch=False)
+
+        transport = ASGITransport(app=graphwiki.main.app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.get("/page/HomePage")
+            assert response.status_code == 200
+            body = response.text
+            assert "frontmatter-card" in body
+            assert "status" in body
+            assert "published" in body
+
+    @pytest.mark.skipif(
+        not GRAPH_ENGINE_AVAILABLE, reason="graph_core not installed"
+    )
+    @pytest.mark.asyncio
+    async def test_frontmatter_not_shown_when_empty(self, wiki_dir):
+        """Pages without frontmatter should not show the panel."""
+        from httpx import AsyncClient, ASGITransport
+        import os
+
+        # Create a page with no frontmatter
+        (wiki_dir / "Plain.md").write_text("# Plain page\n\nNo metadata here.\n")
+
+        os.environ["GRAPHWIKI_DATA_DIR"] = str(wiki_dir)
+
+        import importlib
+        import graphwiki.config
+        importlib.reload(graphwiki.config)
+        import graphwiki.main
+        importlib.reload(graphwiki.main)
+
+        init_engine(wiki_dir, watch=False)
+
+        transport = ASGITransport(app=graphwiki.main.app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.get("/page/Plain")
+            assert response.status_code == 200
+            assert "frontmatter-card" not in response.text
+
+    @pytest.mark.asyncio
+    async def test_frontmatter_not_shown_without_engine(self, wiki_dir):
+        """Frontmatter panel should not appear when engine is unavailable."""
+        import os
+
+        os.environ["GRAPHWIKI_DATA_DIR"] = str(wiki_dir)
+
+        import importlib
+        import graphwiki.config
+        importlib.reload(graphwiki.config)
+        import graphwiki.main
+        importlib.reload(graphwiki.main)
+
+        with patch("graphwiki.main.get_engine", return_value=None):
+            from httpx import AsyncClient, ASGITransport
+
+            transport = ASGITransport(app=graphwiki.main.app)
+            async with AsyncClient(transport=transport, base_url="http://test") as client:
+                response = await client.get("/page/HomePage")
+                assert response.status_code == 200
+                assert "frontmatter-card" not in response.text
+
+
+# ============================================================
 # MetaTable preprocessor tests
 # ============================================================
 

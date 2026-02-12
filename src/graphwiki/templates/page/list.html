@@ -4,16 +4,57 @@
 
 {% block content %}
 <div class="page-list">
+    {% if recent_pages %}
+    <section class="recent-pages">
+        <h2>Recently Modified</h2>
+        <ul class="recent-list">
+            {% for p in recent_pages %}
+            <li class="recent-item">
+                <a href="/page/{{ p.name.replace(' ', '_') }}">{{ p.title }}</a>
+                {% if p.metadata.modified %}
+                <time class="recent-date"
+                      title="{{ p.metadata.modified.strftime('%Y-%m-%d %H:%M') }}">{{ p.metadata.modified | timeago }}</time>
+                {% endif %}
+            </li>
+            {% endfor %}
+        </ul>
+    </section>
+    {% endif %}
+
     <h1>All Pages</h1>
 
-    {% if pages %}
-    <ul class="pages">
-        {% for page in pages %}
-        <li>
-            <a href="/page/{{ page.replace(' ', '_') }}">{{ page }}</a>
-        </li>
-        {% endfor %}
-    </ul>
+    {% if all_pages %}
+    <div class="page-list-table-wrap">
+        <table class="page-list-table">
+            <thead>
+                <tr>
+                    <th>Page</th>
+                    <th>Modified</th>
+                    <th>Tags</th>
+                    <th>Words</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for p in all_pages %}
+                <tr>
+                    <td><a href="/page/{{ p.name.replace(' ', '_') }}">{{ p.title }}</a></td>
+                    <td class="page-list-date">
+                        {% if p.metadata.modified %}
+                        <time datetime="{{ p.metadata.modified.isoformat() }}"
+                              title="{{ p.metadata.modified.strftime('%Y-%m-%d %H:%M') }}">{{ p.metadata.modified | timeago }}</time>
+                        {% endif %}
+                    </td>
+                    <td class="page-list-tags">
+                        {% for tag in p.metadata.tags %}
+                        <a href="/search?tag={{ tag }}" class="tag tag-link tag--small">{{ tag }}</a>
+                        {% endfor %}
+                    </td>
+                    <td class="page-list-words">{{ p.word_count }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
     {% else %}
     <p class="empty-state">
         No pages yet.

@@ -1,6 +1,8 @@
 """GraphWiki FastAPI application."""
 
+import json
 from contextlib import asynccontextmanager
+from datetime import datetime
 from pathlib import Path
 
 from fastapi import FastAPI, Form, HTTPException, Request, WebSocket, WebSocketDisconnect
@@ -12,7 +14,7 @@ from graphwiki.config import settings
 from graphwiki.core.graph import get_engine, init_engine, shutdown_engine
 from graphwiki.core.ws_manager import manager
 from graphwiki.core.models import Page
-from graphwiki.core.parser import parse_wiki_content
+from graphwiki.core.parser import parse_wiki_content, parse_wiki_content_with_toc
 from graphwiki.core.storage import FileStorage
 
 
@@ -39,6 +41,31 @@ static_path = Path(__file__).parent / "static"
 
 templates = Jinja2Templates(directory=str(templates_path))
 app.mount("/static", StaticFiles(directory=str(static_path)), name="static")
+
+
+def timeago_filter(dt: datetime | None) -> str:
+    """Convert datetime to relative time string."""
+    if dt is None:
+        return ""
+    now = datetime.now()
+    diff = now - dt
+    seconds = diff.total_seconds()
+    if seconds < 60:
+        return "just now"
+    elif seconds < 3600:
+        m = int(seconds // 60)
+        return f"{m}m ago"
+    elif seconds < 86400:
+        h = int(seconds // 3600)
+        return f"{h}h ago"
+    elif seconds < 604800:
+        d = int(seconds // 86400)
+        return f"{d}d ago"
+    else:
+        return dt.strftime("%Y-%m-%d")
+
+
+templates.env.filters["timeago"] = timeago_filter
 
 # Initialize storage
 storage = FileStorage(settings.data_dir)
@@ -72,10 +99,15 @@ def page_exists_sync(name: str) -> bool:
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request):
     """Home page - list all pages."""
-    pages = await storage.list_pages()
+    all_pages = await storage.list_pages_with_metadata()
+    recent_pages = sorted(
+        [p for p in all_pages if p.metadata.modified],
+        key=lambda p: p.metadata.modified,
+        reverse=True,
+    )[:10]
     return templates.TemplateResponse(
         "page/list.html",
-        get_context(request, pages=pages),
+        get_context(request, all_pages=all_pages, recent_pages=recent_pages),
     )
 
 
@@ -88,21 +120,35 @@ async def view_page(request: Request, name: str):
         # Page doesn't exist - redirect to edit to create it
         return RedirectResponse(url=f"/page/{name}/edit", status_code=302)
 
-    # Parse content with wiki links
-    html_content = parse_wiki_content(page.content, page_exists=page_exists_sync)
+    # Parse content with wiki links and TOC
+    html_content, toc_html = parse_wiki_content_with_toc(
+        page.content, page_exists=page_exists_sync
+    )
 
-    # Get backlinks from graph engine
+    # Get backlinks and frontmatter metadata from graph engine
     backlinks: list[str] = []
+    frontmatter: dict[str, list[str]] = {}
     engine = get_engine()
     if engine is not None:
         try:
             backlinks = sorted(engine.get_backlinks(name))
         except Exception:
             pass
+        try:
+            frontmatter = engine.get_metadata(name) or {}
+        except Exception:
+            pass
 
     return templates.TemplateResponse(
         "page/view.html",
-        get_context(request, page=page, html_content=html_content, backlinks=backlinks),
+        get_context(
+            request,
+            page=page,
+            html_content=html_content,
+            toc_html=toc_html,
+            backlinks=backlinks,
+            frontmatter=frontmatter,
+        ),
     )
 
 
@@ -114,10 +160,13 @@ async def edit_page(request: Request, name: str):
     if page is None:
         # New page
         page = Page(name=name, content="", exists=False)
+        raw_content = ""
+    else:
+        raw_content = await storage.get_raw_content(name) or ""
 
     return templates.TemplateResponse(
         "page/edit.html",
-        get_context(request, page=page),
+        get_context(request, page=page, raw_content=raw_content),
     )
 
 
@@ -131,19 +180,34 @@ async def save_page(request: Request, name: str, content: str = Form("")):
         # Return just the content area for HTMX swap
         html_content = parse_wiki_content(page.content, page_exists=page_exists_sync)
         backlinks: list[str] = []
+        frontmatter: dict[str, list[str]] = {}
         engine = get_engine()
         if engine is not None:
             try:
                 backlinks = sorted(engine.get_backlinks(name))
             except Exception:
                 pass
-        return templates.TemplateResponse(
+            try:
+                frontmatter = engine.get_metadata(name) or {}
+            except Exception:
+                pass
+        response = templates.TemplateResponse(
             "page/view.html",
-            get_context(request, page=page, html_content=html_content, backlinks=backlinks),
+            get_context(
+                request,
+                page=page,
+                html_content=html_content,
+                backlinks=backlinks,
+                frontmatter=frontmatter,
+            ),
         )
+        response.headers["HX-Trigger"] = json.dumps(
+            {"showToast": {"message": "Page saved", "type": "success"}}
+        )
+        return response
 
     # Regular form submit - redirect to view
-    return RedirectResponse(url=f"/page/{name}", status_code=302)
+    return RedirectResponse(url=f"/page/{name}?toast=saved", status_code=302)
 
 
 @app.get("/page/{name}/raw")
@@ -161,7 +225,74 @@ async def delete_page(name: str):
     deleted = await storage.delete_page(name)
     if not deleted:
         raise HTTPException(status_code=404, detail="Page not found")
-    return RedirectResponse(url="/", status_code=302)
+    return RedirectResponse(url="/?toast=deleted", status_code=302)
+
+
+# ========== Editor API ==========
+
+
+@app.post("/api/preview", response_class=HTMLResponse)
+async def api_preview(content: str = Form("")):
+    """Render markdown preview for the editor."""
+    html = parse_wiki_content(content, page_exists=page_exists_sync)
+    return HTMLResponse(html)
+
+
+@app.get("/api/autocomplete", response_class=HTMLResponse)
+async def api_autocomplete(request: Request, q: str = ""):
+    """Return matching page names for wiki link autocomplete."""
+    if not q:
+        return HTMLResponse("")
+    pages = await storage.list_pages()
+    q_lower = q.lower()
+    matches = [p for p in pages if q_lower in p.lower()][:10]
+    items = "".join(
+        f'<li class="autocomplete-item" data-value="{name}">{name}</li>'
+        for name in matches
+    )
+    return HTMLResponse(f'<ul class="autocomplete-list">{items}</ul>' if items else "")
+
+
+# ========== Search & Navigation ==========
+
+
+@app.get("/search", response_class=HTMLResponse)
+async def search_page(request: Request, q: str = "", tag: str = ""):
+    """Search pages by query or tag."""
+    results = []
+    if tag:
+        pages = await storage.search_by_tag(tag)
+        results = [
+            {"name": p.name, "title": p.title, "snippet": p.content[:150].replace("\n", " "), "match_type": "tag"}
+            for p in pages
+        ]
+    elif q:
+        results = await storage.search_pages(q)
+
+    if request.headers.get("HX-Request"):
+        return templates.TemplateResponse(
+            "partials/search_results.html",
+            {"request": request, "results": results, "query": q, "tag": tag},
+        )
+    return templates.TemplateResponse(
+        "search.html",
+        get_context(request, results=results, query=q, tag=tag),
+    )
+
+
+@app.get("/tags", response_class=HTMLResponse)
+async def tags_page(request: Request):
+    """Tag index page with counts."""
+    pages = await storage.list_pages_with_metadata()
+    tag_counts: dict[str, int] = {}
+    for page in pages:
+        for tag in page.metadata.tags:
+            tag_counts[tag] = tag_counts.get(tag, 0) + 1
+    tags_sorted = sorted(tag_counts.items(), key=lambda x: x[0].lower())
+    return templates.TemplateResponse(
+        "tags.html",
+        get_context(request, tags=tags_sorted),
+    )
 
 
 # ========== Graph visualization ==========

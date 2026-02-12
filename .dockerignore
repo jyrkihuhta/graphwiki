@@ -1,0 +1,11 @@
+.git
+infra/
+deploy/
+docs/
+*.md
+__pycache__
+.pytest_cache
+graph-core/target
+src/tests/
+src/data/
+.claude/

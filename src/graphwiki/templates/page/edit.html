@@ -2,46 +2,98 @@
 
 {% block title %}{% if page.exists %}Edit{% else %}Create{% endif %} {{ page.title }} - {{ app_title }}{% endblock %}
 
+{% block main_class %}main--full-width{% endblock %}
+
 {% block content %}
 <div class="page-edit">
     <header class="page-header">
         <h1>{% if page.exists %}Edit{% else %}Create{% endif %}: {{ page.title }}</h1>
-    </header>
-
-    <form method="post" action="/page/{{ page.name.replace(' ', '_') }}" class="edit-form">
-        <div class="form-group">
-            <label for="content">Content (Markdown)</label>
-            <textarea
-                name="content"
-                id="content"
-                rows="20"
-                placeholder="Write your page content here...
-
-Use Markdown for formatting:
-- **bold** and *italic*
-- # Headings
-- [links](url)
-- [[WikiLinks]] to other pages
-- [[PageName|Display Text]] for custom link text"
-            >{{ page.content }}</textarea>
-        </div>
-
-        <div class="form-actions">
-            <button type="submit" class="btn btn-primary">Save</button>
+        <div class="page-actions">
+            <button type="submit" form="edit-form" class="btn btn-primary">Save</button>
             {% if page.exists %}
             <a href="/page/{{ page.name.replace(' ', '_') }}" class="btn">Cancel</a>
             {% else %}
             <a href="/" class="btn">Cancel</a>
             {% endif %}
         </div>
-    </form>
+    </header>
 
-    <div class="help-text">
-        <h3>Wiki Link Syntax</h3>
-        <ul>
-            <li><code>[[PageName]]</code> - Link to another page</li>
-            <li><code>[[PageName|Display Text]]</code> - Link with custom text</li>
-        </ul>
+    <div class="editor-toolbar" id="editor-toolbar">
+        <button type="button" data-action="bold" title="Bold (Ctrl+B)"><strong>B</strong></button>
+        <button type="button" data-action="italic" title="Italic (Ctrl+I)"><em>I</em></button>
+        <button type="button" data-action="strikethrough" title="Strikethrough"><del>S</del></button>
+        <button type="button" data-action="heading" title="Heading">H</button>
+        <button type="button" data-action="code" title="Code">&lt;/&gt;</button>
+        <button type="button" data-action="link" title="Link (Ctrl+K)">&#128279;</button>
+        <button type="button" data-action="wikilink" title="Wiki Link">[[]]</button>
+        <span class="toolbar-separator"></span>
+        <button type="button" id="toggle-preview" title="Toggle Preview (Ctrl+P)">Preview</button>
+    </div>
+
+    <div class="editor-split" id="editor-split">
+        <div class="editor-pane">
+            <form method="post" action="/page/{{ page.name.replace(' ', '_') }}" id="edit-form">
+                <textarea
+                    name="content"
+                    id="content"
+                    placeholder="Write your page content here using Markdown..."
+                >{{ raw_content }}</textarea>
+            </form>
+            <div id="autocomplete-dropdown" class="autocomplete-dropdown"></div>
+        </div>
+        <div class="preview-pane" id="preview-pane">
+            <span class="spinner htmx-indicator"></span>
+            <p class="preview-placeholder">Start typing to see a live preview...</p>
+        </div>
+    </div>
+
+    <div class="editor-tips">
+        <details>
+            <summary>Formatting Tips</summary>
+            <div class="editor-tips-content">
+                <div class="tips-columns">
+                    <div class="tips-column">
+                        <h4>Markdown</h4>
+                        <ul>
+                            <li><code>**bold**</code> &rarr; <strong>bold</strong></li>
+                            <li><code>*italic*</code> &rarr; <em>italic</em></li>
+                            <li><code>~~strike~~</code> &rarr; <del>strike</del></li>
+                            <li><code># Heading</code></li>
+                            <li><code>`code`</code></li>
+                            <li><code>- [ ] task</code></li>
+                        </ul>
+                    </div>
+                    <div class="tips-column">
+                        <h4>Wiki</h4>
+                        <ul>
+                            <li><code>[[PageName]]</code> &mdash; link to page</li>
+                            <li><code>[[Page|text]]</code> &mdash; custom text</li>
+                            <li><code>&lt;&lt;MetaTable(...)&gt;&gt;</code> &mdash; query</li>
+                        </ul>
+                        <h4>Frontmatter</h4>
+                        <ul>
+                            <li>Add <code>---</code> block at top</li>
+                            <li>Fields: title, tags, status, author</li>
+                        </ul>
+                    </div>
+                    <div class="tips-column">
+                        <h4>Shortcuts</h4>
+                        <ul>
+                            <li><kbd>Ctrl+B</kbd> Bold</li>
+                            <li><kbd>Ctrl+I</kbd> Italic</li>
+                            <li><kbd>Ctrl+K</kbd> Link</li>
+                            <li><kbd>Ctrl+S</kbd> Save</li>
+                            <li><kbd>Ctrl+P</kbd> Toggle preview</li>
+                            <li><kbd>[[</kbd> Autocomplete</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </details>
     </div>
 </div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="/static/js/editor.js"></script>
 {% endblock %}

@@ -2,40 +2,100 @@
 
 {% block title %}{{ page.title }} - {{ app_title }}{% endblock %}
 
+{% block main_class %}main--page-view{% endblock %}
+
 {% block content %}
-<article class="page">
-    <header class="page-header">
-        <h1>{{ page.title }}</h1>
-        <div class="page-actions">
-            <a href="/page/{{ page.name.replace(' ', '_') }}/edit" class="btn">Edit</a>
-        </div>
-    </header>
-
-    <div class="page-content" id="page-content">
-        {{ html_content | safe }}
-    </div>
-
-    {% if backlinks %}
-    <aside class="backlinks-panel">
-        <h3>Pages linking here</h3>
-        <ul class="backlinks-list">
-            {% for link in backlinks %}
-            <li>
-                <a href="/page/{{ link.replace(' ', '_') }}" class="wiki-link">{{ link }}</a>
-            </li>
-            {% endfor %}
-        </ul>
+<article class="page {% if toc_html and '<li>' in toc_html %}page--with-toc{% endif %}">
+    {% if toc_html and '<li>' in toc_html %}
+    <aside class="toc-sidebar" id="toc-sidebar">
+        <details class="toc-details" open>
+            <summary>Contents</summary>
+            <div class="toc">{{ toc_html | safe }}</div>
+        </details>
     </aside>
     {% endif %}
 
-    {% if page.metadata.tags %}
-    <footer class="page-footer">
-        <div class="tags">
-            {% for tag in page.metadata.tags %}
-            <span class="tag">{{ tag }}</span>
-            {% endfor %}
+    <div class="page-body">
+        <nav class="breadcrumb" aria-label="breadcrumb">
+            <a href="/">Home</a> / <span>{{ page.title }}</span>
+        </nav>
+        <header class="page-header">
+            <h1>{{ page.title }}</h1>
+            <div class="page-actions">
+                <a href="/page/{{ page.name.replace(' ', '_') }}/edit" class="btn">Edit</a>
+                <form method="post" action="/page/{{ page.name.replace(' ', '_') }}/delete"
+                      onsubmit="return confirm('Delete &quot;{{ page.title }}&quot;? This cannot be undone.');"
+                      style="display:inline">
+                    <button type="submit" class="btn btn-danger">Delete</button>
+                </form>
+            </div>
+        </header>
+
+        <div class="page-content" id="page-content">
+            {% if frontmatter %}
+            <aside class="frontmatter-card">
+                <h4 class="frontmatter-card-header">Properties</h4>
+                <dl class="frontmatter-dl">
+                    {% for key, values in frontmatter.items() %}
+                    <div class="frontmatter-row">
+                        <dt>{{ key }}</dt>
+                        <dd>
+                            {% if key == 'tags' %}
+                                <div class="frontmatter-tags">
+                                    {% for v in values %}
+                                    <a href="/search?tag={{ v }}" class="tag tag-link">{{ v }}</a>
+                                    {% endfor %}
+                                </div>
+                            {% else %}
+                                {{ values | join(", ") }}
+                            {% endif %}
+                        </dd>
+                    </div>
+                    {% endfor %}
+                </dl>
+            </aside>
+            {% endif %}
+
+            {{ html_content | safe }}
         </div>
-    </footer>
-    {% endif %}
+
+        {% if backlinks %}
+        <aside class="backlinks-panel">
+            <h3>Pages linking here</h3>
+            <ul class="backlinks-list">
+                {% for link in backlinks %}
+                <li>
+                    <a href="/page/{{ link.replace(' ', '_') }}" class="wiki-link">{{ link }}</a>
+                </li>
+                {% endfor %}
+            </ul>
+        </aside>
+        {% endif %}
+
+        {% if page.metadata.tags %}
+        <footer class="page-footer">
+            <div class="tags">
+                {% for tag in page.metadata.tags %}
+                <a href="/search?tag={{ tag }}" class="tag tag-link">{{ tag }}</a>
+                {% endfor %}
+            </div>
+        </footer>
+        {% endif %}
+    </div>
 </article>
 {% endblock %}
+
+{% if toc_html and '<li>' in toc_html %}
+{% block extra_scripts %}
+<script>
+(function() {
+    var details = document.querySelector('.toc-details');
+    var article = document.querySelector('.page--with-toc');
+    if (!details || !article) return;
+    details.addEventListener('toggle', function() {
+        article.classList.toggle('page--toc-collapsed', !details.open);
+    });
+})();
+</script>
+{% endblock %}
+{% endif %}

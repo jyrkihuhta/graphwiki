@@ -7,6 +7,11 @@
     var wsStatusEl = document.getElementById("ws-status");
     var unavailableEl = document.getElementById("graph-unavailable");
 
+    // Read theme colors from CSS variables
+    function getThemeColor(varName, fallback) {
+        return getComputedStyle(document.documentElement).getPropertyValue(varName).trim() || fallback;
+    }
+
     // Sizing
     function getSize() {
         var rect = container.getBoundingClientRect();
@@ -41,7 +46,7 @@
         .attr("orient", "auto")
         .append("path")
         .attr("d", "M0,-5L10,0L0,5")
-        .attr("fill", "#999");
+        .attr("fill", "var(--color-text-muted)");
 
     // Force simulation
     var simulation = d3.forceSimulation(nodes)
@@ -81,6 +86,10 @@
     }
 
     function render() {
+        var linkColor = getThemeColor("--color-text-muted", "#999");
+        var textColor = getThemeColor("--color-text", "#333");
+        var nodeStroke = getThemeColor("--color-bg", "#fff");
+
         // Links
         linkSel = linkGroup.selectAll("line")
             .data(links, function (d) {
@@ -90,7 +99,7 @@
             });
         linkSel.exit().remove();
         linkSel = linkSel.enter().append("line")
-            .attr("stroke", "#999")
+            .attr("stroke", linkColor)
             .attr("stroke-opacity", 0.6)
             .attr("stroke-width", 1.5)
             .attr("marker-end", "url(#arrowhead)")
@@ -112,14 +121,14 @@
         nodeEnter.append("circle")
             .attr("r", 8)
             .attr("fill", function (d) { return color(d.id); })
-            .attr("stroke", "#fff")
+            .attr("stroke", nodeStroke)
             .attr("stroke-width", 1.5);
 
         nodeEnter.append("text")
             .attr("dx", 12)
             .attr("dy", 4)
             .attr("font-size", "12px")
-            .attr("fill", "#333")
+            .attr("fill", textColor)
             .text(function (d) { return d.id; });
 
         nodeSel = nodeEnter.merge(nodeSel);
@@ -148,6 +157,7 @@
     }
 
     function flashNode(name) {
+        var nodeStroke = getThemeColor("--color-bg", "#fff");
         nodeGroup.selectAll("g.node")
             .filter(function (d) { return d.id === name; })
             .select("circle")
@@ -157,7 +167,7 @@
             .attr("stroke-width", 3)
             .transition().duration(600)
             .attr("r", 8)
-            .attr("stroke", "#fff")
+            .attr("stroke", nodeStroke)
             .attr("stroke-width", 1.5);
     }
 

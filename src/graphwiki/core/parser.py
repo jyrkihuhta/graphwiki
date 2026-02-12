@@ -134,15 +134,16 @@ def _render_metatable(filters: list, columns: list[str]) -> str:
         columns: Column names to display.
 
     Returns:
-        HTML table string.
+        HTML table string wrapped in a div.
     """
     from graphwiki.core.graph import get_engine
 
     engine = get_engine()
     if engine is None:
         return (
+            '<div class="metatable-wrapper">'
             '<p class="metatable-unavailable">'
-            "<em>MetaTable: graph engine not available</em></p>"
+            "<em>MetaTable: graph engine not available</em></p></div>"
         )
 
     if not columns:
@@ -151,12 +152,18 @@ def _render_metatable(filters: list, columns: list[str]) -> str:
     try:
         result = engine.metatable(filters, columns)
     except Exception as e:
-        return f'<p class="metatable-error"><em>MetaTable error: {e}</em></p>'
+        return (
+            f'<div class="metatable-wrapper">'
+            f'<p class="metatable-error"><em>MetaTable error: {e}</em></p></div>'
+        )
 
     if not result.rows:
-        return '<p class="metatable-empty"><em>No matching pages found</em></p>'
+        return (
+            '<div class="metatable-wrapper">'
+            '<p class="metatable-empty"><em>No matching pages found</em></p></div>'
+        )
 
-    lines = ['<table class="metatable">']
+    lines = ['<div class="metatable-wrapper">', '<table class="metatable">']
     lines.append("<thead><tr>")
     for col in result.columns:
         lines.append(f"<th>{col}</th>")
@@ -164,6 +171,9 @@ def _render_metatable(filters: list, columns: list[str]) -> str:
     lines.append("<tbody>")
 
     for row in result:
+        # Skip completely empty rows
+        if all(not row.get(col) for col in result.columns):
+            continue
         lines.append("<tr>")
         for col in result.columns:
             values = row.get(col)
@@ -179,6 +189,7 @@ def _render_metatable(filters: list, columns: list[str]) -> str:
         lines.append("</tr>")
 
     lines.append("</tbody></table>")
+    lines.append("</div>")
     return "\n".join(lines)
 
 
@@ -196,12 +207,30 @@ class MetaTablePreprocessor(Preprocessor):
         if "<<MetaTable(" not in text:
             return lines
 
+        # Strip out fenced code blocks so we don't replace macros inside them
+        code_block_re = re.compile(r"(```.*?```|~~~.*?~~~)", re.DOTALL)
+        code_blocks: list[str] = []
+
+        def stash_code(m: re.Match) -> str:
+            placeholder = f"\x00CODEBLOCK{len(code_blocks)}\x00"
+            code_blocks.append(m.group(0))
+            return placeholder
+
+        text = code_block_re.sub(stash_code, text)
+
         def replace_match(m: re.Match) -> str:
             args_str = m.group(1)
             filters, columns = _parse_metatable_args(args_str)
-            return _render_metatable(filters, columns)
+            html = _render_metatable(filters, columns)
+            # Stash raw HTML so Markdown parser doesn't wrap it in <p> tags
+            return self.md.htmlStash.store(html)
 
         text = METATABLE_PATTERN.sub(replace_match, text)
+
+        # Restore code blocks
+        for i, block in enumerate(code_blocks):
+            text = text.replace(f"\x00CODEBLOCK{i}\x00", block)
+
         return text.split("\n")
 
 
@@ -259,6 +288,25 @@ def parse_wiki_content(
     """
     parser = create_parser(page_exists)
     return parser.convert(content)
+
+
+def parse_wiki_content_with_toc(
+    content: str,
+    page_exists: Callable[[str], bool] | None = None,
+) -> tuple[str, str]:
+    """Parse wiki content and return HTML with table of contents.
+
+    Args:
+        content: Markdown content with wiki links.
+        page_exists: Callback to check if a page exists.
+
+    Returns:
+        Tuple of (html_content, toc_html).
+    """
+    parser = create_parser(page_exists)
+    html = parser.convert(content)
+    toc_html = getattr(parser, "toc", "")
+    return html, toc_html
 
 
 def extract_wiki_links(content: str) -> list[str]:

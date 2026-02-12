@@ -219,19 +219,14 @@ Push to `main` branch triggers automatic deployment.
 
 ### Container
 
-**Dockerfile:** `src/Dockerfile`
+**Dockerfile:** `Dockerfile` (repo root, multi-stage build)
 
-```dockerfile
-FROM python:3.12-slim
-WORKDIR /app
-COPY pyproject.toml .
-RUN pip install --no-cache-dir .
-COPY graphwiki/ ./graphwiki/
-RUN mkdir -p /data/pages
-CMD ["uvicorn", "graphwiki.main:app", "--host", "0.0.0.0", "--port", "8000"]
+- **Stage 1 (`rust-builder`):** Installs Rust + Maturin, compiles `graph_core` wheel from `graph-core/`
+- **Stage 2 (runtime):** Installs Python deps + graph_core wheel, copies application code
+
+```bash
+docker build -t graphwiki:latest .
 ```
-
-> **Note:** The Dockerfile does not yet include the Rust graph engine build. This is a planned improvement.
 
 ### Kubernetes Resources
 
@@ -248,8 +243,8 @@ CMD ["uvicorn", "graphwiki.main:app", "--host", "0.0.0.0", "--port", "8000"]
 ### Build & Deploy Workflow
 
 ```bash
-# Build image
-cd src && docker build -t graphwiki:latest .
+# Build image (from repo root)
+docker build -t graphwiki:latest .
 
 # Import to k3d
 k3d image import graphwiki:latest -c graphwiki

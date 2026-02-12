@@ -7,11 +7,16 @@ A modern, self-hosted wiki platform inspired by [MoinMoin](https://moinmo.in/), 
 - **Markdown wiki pages** - Full Markdown support with tables, code blocks, task lists, strikethrough, and more
 - **Wiki links** - `[[PageName]]` and `[[PageName|Display Text]]` syntax with missing-page detection
 - **Backlinks** - Panel showing all pages that link to the current page
+- **Frontmatter metadata** - YAML frontmatter displayed in page view, queryable via graph engine
 - **MetaTable queries** - Graphingwiki-style metadata queries via `<<MetaTable(...)>>` macro with YAML frontmatter
+- **Custom macros** - Extensible `<<Macro(...)>>` system for embedding dynamic content ([developer guide](docs/custom-macros.md))
 - **Graph visualization** - Interactive D3.js force-directed graph at `/graph` with real-time WebSocket updates
 - **Rust graph engine** - Fast graph operations powered by [petgraph](https://github.com/petgraph/petgraph) + [PyO3](https://pyo3.rs/)
 - **File-based storage** - Pages stored as plain Markdown files, easy to backup and version control
+- **Split-pane editor** - Optional live Markdown preview (toggle with Ctrl+P), toolbar, keyboard shortcuts (Ctrl+B/I/K/S), wiki link autocomplete
+- **Search & discovery** - Instant search box, full-text search, tag index, TOC sidebar, breadcrumbs, recently modified pages
 - **HTMX interactions** - Snappy server-rendered UI without heavy JavaScript
+- **CI pipeline** - GitHub Actions running both Python and Rust test suites with coverage enforcement
 - **Kubernetes-native** - Deployed via GitOps with Flux, Istio ingress, and Rancher management
 
 ## Quick Start
@@ -92,10 +97,11 @@ Visit `/graph` for an interactive force-directed graph of all pages and their li
 ## Running Tests
 
 ```bash
-# Python integration tests (59 tests)
+# Python tests (177 tests)
 cd src
 pip install -e ".[dev]"
 pytest tests/ -v
+pytest tests/ --cov=graphwiki    # With coverage
 
 # Rust graph engine tests (70 tests)
 cd graph-core
@@ -104,7 +110,7 @@ PYO3_USE_ABI3_FORWARD_COMPATIBILITY=1 maturin develop
 python -m pytest tests/ -v
 ```
 
-**129 total tests** across both test suites.
+**247 total tests** across both test suites. CI runs automatically via GitHub Actions.
 
 ## Project Structure
 
@@ -115,8 +121,9 @@ graphwiki/
 │   ├── Cargo.toml
 │   ├── src/                    # Rust source (lib, graph, parser, models, query, events, watcher)
 │   └── tests/                  # PyO3 integration tests (70 tests)
+├── Dockerfile                  # Multi-stage build (Rust + Python)
+├── .github/workflows/ci.yml   # CI pipeline (GitHub Actions)
 ├── src/                        # Python application
-│   ├── Dockerfile
 │   ├── pyproject.toml
 │   ├── graphwiki/
 │   │   ├── main.py             # FastAPI routes + WebSocket endpoint
@@ -129,10 +136,11 @@ graphwiki/
 │   │   │   └── models.py       # Pydantic models
 │   │   ├── templates/          # Jinja2 templates (base, page views, graph)
 │   │   └── static/             # CSS + D3.js graph visualization
-│   └── tests/                  # Integration tests (59 tests)
+│   └── tests/                  # Tests (177 tests)
 ├── docs/                       # Documentation
 │   ├── architecture.md         # System design
 │   ├── getting-started.md      # Setup and deployment guide
+│   ├── custom-macros.md        # Macro developer guide
 │   ├── prd/                    # Product requirements
 │   ├── adr/                    # Architecture decision records
 │   ├── domains/                # Domain-specific design docs
@@ -178,7 +186,7 @@ For deploying to a local k3d cluster with Istio and Flux GitOps, see the [Gettin
 ```bash
 # Quick overview
 cd infra/local && terraform apply     # Create k3d cluster + Istio + Rancher
-cd src && docker build -t graphwiki:latest .
+docker build -t graphwiki:latest .    # Build from repo root (multi-stage with Rust)
 k3d image import graphwiki:latest -c graphwiki
 kubectl rollout restart deployment/graphwiki -n graphwiki
 ```
@@ -191,20 +199,22 @@ Access at **http://wiki.localhost:8080** (requires `/etc/hosts` entry).
 |----------|-------------|
 | [Getting Started](docs/getting-started.md) | Setup guide for local dev and k8s deployment |
 | [Architecture](docs/architecture.md) | System design and component overview |
-| [TODO](TODO.md) | Current tasks and roadmap |
+| [Custom Macros](docs/custom-macros.md) | Developer guide for creating `<<Macro>>` extensions |
+| [TODO](TODO.md) | Milestones and roadmap |
 | [PRD: Infrastructure](docs/prd/001-infrastructure.md) | Infrastructure requirements |
 | [PRD: GraphWiki MVP](docs/prd/002-graphwiki-mvp.md) | Application requirements |
 | [ADR-001: k3d Approach](docs/adr/001-k3d-terraform-approach.md) | k3d Terraform decision |
 
 ## Status
 
-| Phase | Description | Status |
-|-------|-------------|--------|
-| Phase 1 | Infrastructure (k3d, Istio, Rancher, Flux) | Complete |
-| Phase 2 | Wiki MVP (CRUD, Markdown, wiki links, k8s deploy) | Complete |
-| Phase 3 | Graph Engine (Rust, MetaTable, backlinks, D3.js viz, WebSocket) | Complete |
+| Milestones | Description | Status |
+|------------|-------------|--------|
+| 1–6 | Infrastructure, Wiki MVP, Graph Engine, Visualization | ✅ Complete |
+| 7–8 | Editor Experience, Navigation & Discovery | ✅ Complete |
+| 9–11 | Visual Polish, Graph Enhancements, Macros | Planned |
+| 12–13 | Authentication, Observability | Planned |
 
-See [TODO.md](TODO.md) for remaining tasks and future plans.
+**247 tests**, CI active. See [TODO.md](TODO.md) for the full roadmap.
 
 ## License
 

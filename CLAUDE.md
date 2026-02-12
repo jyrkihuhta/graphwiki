@@ -17,6 +17,7 @@ Read these for full context:
 - `docs/architecture.md` - System design and components
 - `docs/prd/002-graphwiki-mvp.md` - Application requirements and status
 - `docs/prd/001-infrastructure.md` - Infrastructure requirements
+- `docs/custom-macros.md` - How to create custom `<<Macro>>` extensions
 - `docs/domains/*.md` - Domain-specific design docs (for subagents)
 
 ## Project Structure
@@ -36,15 +37,19 @@ graph-core/             # Rust graph engine (Phase 3)
 src/graphwiki/          # Python application
   main.py               # FastAPI routes + WebSocket endpoint
   config.py             # Settings (GRAPHWIKI_* env vars)
-  core/storage.py       # FileStorage implementation
-  core/parser.py        # Markdown + wiki link + MetaTable parsing
+  core/storage.py       # FileStorage implementation (incl. search, tag filter)
+  core/parser.py        # Markdown + wiki link + MetaTable + TOC parsing
   core/graph.py         # Graph engine wrapper (optional import)
   core/ws_manager.py    # WebSocket connection manager + event fanout
   templates/            # Jinja2 templates
+  templates/partials/   # HTMX partial fragments (preview, search results)
   static/css/           # CSS
   static/js/graph.js    # D3.js graph visualization
-  tests/                # Integration tests (59 tests)
+  static/js/editor.js   # Editor toolbar, shortcuts, autocomplete, preview toggle
+  tests/                # Tests (177 tests)
 
+Dockerfile              # Multi-stage build (Rust + Python)
+.github/workflows/      # CI pipeline (GitHub Actions)
 docs/domains/           # Domain documentation for subagents
 
 infra/local/            # Terraform for local k8s
@@ -67,8 +72,8 @@ deploy/flux/            # Flux GitOps configuration
 # Local development without Rust engine
 cd src && uvicorn graphwiki.main:app --reload
 
-# Build and deploy to k8s
-cd src && docker build -t graphwiki:latest .
+# Build and deploy to k8s (Dockerfile at repo root)
+docker build -t graphwiki:latest .
 k3d image import graphwiki:latest -c graphwiki
 kubectl rollout restart deployment/graphwiki -n graphwiki
 
@@ -173,12 +178,20 @@ Before committing:
 - Wiki links: `WikiLinkExtension` (custom)
 - Task lists: `pymdownx.tasklist`
 - Strikethrough: `StrikethroughExtension` (custom)
-- MetaTable: `MetaTableExtension` (custom preprocessor, queries graph engine)
+- MetaTable: `MetaTableExtension` (custom preprocessor, queries graph engine, uses `htmlStash` for clean rendering, skips fenced code blocks)
 
 ### Templates
-- Base template: `templates/base.html`
+- Base template: `templates/base.html` (search box, `{% block extra_scripts %}`)
+- Partials in `templates/partials/` for HTMX fragment responses
 - HTMX for dynamic updates (check `HX-Request` header)
 - Minimal custom CSS, no framework
+
+### Routes (new in M7/M8)
+- `POST /api/preview` — Markdown preview for editor (HTMX)
+- `GET /api/autocomplete?q=` — Wiki link autocomplete (max 10 results)
+- `GET /search?q=&tag=` — Full search + tag filter (HTMX partial or full page)
+- `GET /tags` — Tag index with counts
+- `POST /page/{name}/delete` — Delete page (with browser `confirm()` dialog)
 
 ### Kubernetes
 - All apps deployed via Flux from `deploy/apps/`
@@ -222,22 +235,21 @@ Before committing:
 6. **ASGITransport skips lifespan** - In tests, manually call `init_engine()`/`shutdown_engine()` instead of relying on FastAPI lifespan
 7. **graph_core is optional** - `core/graph.py` uses `try/except ImportError`; app works without it
 8. **Form fields default** - Use `Form("")` not `Form(...)` for optional/empty-allowed form fields; `Form(...)` rejects empty strings with 422
+9. **Test fixture after reload** - `test_app_smoke.py` uses `importlib.reload(graphwiki.main)` which replaces `storage`. New test files must access `graphwiki.main.storage` dynamically (not via `from graphwiki.main import storage`) to survive reloads
+10. **TOC guard** - Use `{% if toc_html and '<li>' in toc_html %}` to avoid showing empty TOC sidebar
+11. **PageMetadata allows extras** - `model_config = ConfigDict(extra="allow")` so custom frontmatter fields (status, author, priority, etc.) survive the parse/save round-trip
+12. **Editor shows raw content** - The edit template uses `{{ raw_content }}` (includes frontmatter) not `{{ page.content }}` (body only). The `get_raw_content()` method returns the full file.
+13. **Preview toggle is JS-driven** - The editor textarea has no `hx-*` attributes in the template; `editor.js` adds them dynamically based on localStorage preference. Tests should not assert `hx-post` in server-rendered HTML.
+14. **MetaTable uses htmlStash** - The `MetaTablePreprocessor` stashes rendered HTML via `self.md.htmlStash.store()` to prevent the Markdown block parser from wrapping tables in `<p>` tags
+15. **MetaTable skips code blocks** - The preprocessor strips out fenced code blocks (`` ``` `` and `~~~`) before replacing macros, then restores them. MetaTable syntax inside code blocks renders as literal text.
 
-## Phase 3: Graph Engine (Complete)
+## Completed Milestones (1–8)
 
-Phase 3 adds a Rust-based graph engine for metadata queries and visualization.
+Milestones 1–8 cover infrastructure, wiki MVP, Rust graph engine, editor experience, and navigation/discovery. All complete.
 
-**See:** `TODO.md` for current milestone status and `docs/domains/graph-engine.md` for design.
+**247 total tests passing** (70 graph-core + 177 Python), CI pipeline active.
 
-### Completed
-- ✅ Milestone 1: Rust Foundation (Maturin, PyO3)
-- ✅ Milestone 2: Graph Core (petgraph, frontmatter/link parsing, backlinks)
-- ✅ Milestone 3: Query Engine (Filter enum, query(), metatable() - 39 tests)
-- ✅ Milestone 4: File Watching (notify-debouncer-mini, GraphEvent, poll_events() - 18 tests)
-- ✅ Milestone 5: Python Integration (backlinks panel, MetaTable macro, graph-backed page_exists)
-- ✅ Milestone 6: Real-time Visualization (D3.js force graph, WebSocket, live updates)
-
-**129 total tests passing** (70 graph-core + 59 integration)
+**See:** `docs/domains/graph-engine.md` for Rust engine design.
 
 ### Graph Engine Commands
 ```bash
@@ -248,7 +260,7 @@ PYO3_USE_ABI3_FORWARD_COMPATIBILITY=1 maturin develop
 python -m pytest tests/ -v       # 70 tests
 
 cd src
-python -m pytest tests/ -v       # 59 tests
+python -m pytest tests/ -v       # 177 tests
 ```
 
 ## Subagent Workflow
@@ -276,12 +288,21 @@ Task(subagent_type="general-purpose",
 
 The agent reads the domain doc for context, works autonomously, and reports back.
 
+## Current Milestones (9–13)
+
+**See:** `TODO.md` for full details and `docs/custom-macros.md` for the macro developer guide.
+
+- Milestone 7: Editor Experience (live preview, toolbar, shortcuts) ✅
+- Milestone 8: Navigation & Discovery (search, TOC sidebar, tags) ✅
+- Milestone 9: Visual Polish & Responsiveness (dark mode, mobile, notifications)
+- Milestone 10: Graph Visualization Enhancements (search, focus mode, node sizing)
+- Milestone 11: Macro System & Documentation (developer guide, built-in macros)
+- Milestone 12: Authentication (user accounts, access control)
+- Milestone 13: Observability (structured logging, metrics)
+
 ## Future Work
 
-- Search - Full-text search
 - Version history - Track page changes
-- Authentication - User accounts
-- Frontmatter display - Show parsed metadata in page view
 - Graph persistence - Serialize graph to disk for fast startup
 
 ## Testing

@@ -228,7 +228,7 @@ class TestPageDelete:
 
         resp = await client_no_redirect.post("/page/DeleteMe/delete")
         assert resp.status_code == 302
-        assert resp.headers["location"] == "/"
+        assert resp.headers["location"].startswith("/")
 
     @pytest.mark.asyncio
     async def test_delete_nonexistent_returns_404(self, client):

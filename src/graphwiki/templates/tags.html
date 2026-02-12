@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+
+{% block title %}Tags - {{ app_title }}{% endblock %}
+
+{% block content %}
+<div class="tags-page">
+    <h1>Tags</h1>
+
+    {% if tags %}
+    <div class="tag-cloud">
+        {% for tag_name, count in tags %}
+        <a href="/search?tag={{ tag_name }}" class="tag tag-link">
+            {{ tag_name }} <span class="tag-count">{{ count }}</span>
+        </a>
+        {% endfor %}
+    </div>
+    {% else %}
+    <p class="empty-state">No tags found. Add tags to pages using YAML frontmatter.</p>
+    {% endif %}
+</div>
+{% endblock %}

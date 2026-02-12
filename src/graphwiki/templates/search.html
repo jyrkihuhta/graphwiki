@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+
+{% block title %}Search{% if query %}: {{ query }}{% endif %}{% if tag %} tag: {{ tag }}{% endif %} - {{ app_title }}{% endblock %}
+
+{% block content %}
+<div class="search-page">
+    <h1>
+        {% if tag %}
+        Pages tagged "{{ tag }}"
+        {% else %}
+        Search Results{% if query %} for "{{ query }}"{% endif %}
+        {% endif %}
+    </h1>
+
+    <form action="/search" method="get" class="search-form">
+        <input type="text" name="q" value="{{ query }}" placeholder="Search pages..." class="search-input-full" autofocus>
+        <button type="submit" class="btn btn-primary">Search</button>
+    </form>
+
+    {% if results %}
+    <ul class="search-results-list">
+        {% for r in results %}
+        <li class="search-result-item">
+            <a href="/page/{{ r.name.replace(' ', '_') }}" class="search-result-link">{{ r.title }}</a>
+            <span class="search-result-type">{{ r.match_type }}</span>
+            <p class="search-result-snippet">{{ r.snippet }}</p>
+        </li>
+        {% endfor %}
+    </ul>
+    {% elif query or tag %}
+    <p class="empty-state">No pages found.</p>
+    {% endif %}
+</div>
+{% endblock %}

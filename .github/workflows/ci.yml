@@ -1,0 +1,66 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test-python:
+    name: Python tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Build graph_core
+        run: |
+          pip install maturin
+          cd graph-core
+          PYO3_USE_ABI3_FORWARD_COMPATIBILITY=1 maturin develop
+
+      - name: Install Python dependencies
+        run: pip install -e "src[dev]"
+
+      - name: Run tests with coverage
+        run: |
+          cd src
+          pytest tests/ -v --cov=graphwiki --cov-report=term-missing --cov-fail-under=80
+
+  test-rust:
+    name: Rust engine tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Build graph_core
+        run: |
+          pip install maturin pytest
+          cd graph-core
+          PYO3_USE_ABI3_FORWARD_COMPATIBILITY=1 maturin develop
+
+      - name: Run Rust engine tests
+        run: |
+          cd graph-core
+          pytest tests/ -v
+
+  docker-build:
+    name: Docker build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: docker build -t graphwiki:ci .
