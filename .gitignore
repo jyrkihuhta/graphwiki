@@ -16,6 +16,7 @@ venv/
 *.egg-info/
 dist/
 build/
+.coverage
 
 # IDE
 .idea/
