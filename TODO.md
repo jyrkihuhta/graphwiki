@@ -13,7 +13,7 @@
 | — | Infrastructure (Dockerfile, CI, 87% coverage) | ✅ Complete |
 | 7 | **Editor Experience** — live preview, toolbar, shortcuts, autocomplete | ✅ Complete |
 | 8 | **Navigation & Discovery** — search, TOC sidebar, tags, recent changes | ✅ Complete |
-| 9 | **Visual Polish** — dark mode, mobile responsive, notifications, code highlighting | Planned |
+| 9 | **Visual Polish** — dark mode, mobile responsive, notifications, code highlighting | ✅ Complete |
 | 10 | **Graph Enhancements** — node search, focus mode, tooltips, sizing | Planned |
 | 11 | **Macro System** — PageList, RecentChanges, BackLinks, PageCount macros | Planned |
 | 12 | **Authentication** — user accounts, login/logout, access control | Planned |
@@ -21,7 +21,7 @@
 
 **Priority:** 7 → 8 → 11 → 9 → 10 → 12 → 13
 
-**247 tests passing** (70 graph-core + 177 Python), CI pipeline active.
+**274 tests passing** (70 graph-core + 204 Python), CI pipeline active.
 
 ---
 
@@ -56,18 +56,18 @@ Help users find and move between pages efficiently.
 
 **Key files:** `templates/base.html` (search), `main.py` (search/tags routes), `templates/page/view.html` (TOC), `templates/tags.html`, `templates/search.html`
 
-### Milestone 9: Visual Polish & Responsiveness
+### Milestone 9: Visual Polish & Responsiveness ✅
 Elevate the visual design and make it work on all screen sizes.
 
-- [ ] Dark mode toggle with CSS custom properties (persist choice in localStorage)
-- [ ] Responsive breakpoints (mobile nav hamburger, stacked layouts below 768px)
-- [ ] Toast notifications for save/delete/error feedback (HTMX `hx-swap-oob`)
+- [x] Dark mode toggle with CSS custom properties (persist choice in localStorage)
+- [x] Responsive breakpoints (mobile nav hamburger, stacked layouts below 768px)
+- [x] Toast notifications for save/delete/error feedback (HTMX `HX-Trigger` + query params)
 - [x] Delete confirmation dialog (`confirm()` on delete button in page view)
-- [ ] Improved page list with metadata columns (modified date, tag pills, word count)
-- [ ] Syntax highlighting for fenced code blocks (highlight.js or Prism)
-- [ ] Smooth page transitions and loading states
+- [x] Improved page list with metadata columns (modified date, tag pills, word count)
+- [x] Syntax highlighting for fenced code blocks (highlight.js with dark/light themes)
+- [x] Smooth page transitions and loading states (loading bar, spinner, fade-in)
 
-**Key files:** `static/css/style.css`, `static/css/dark.css` (new or CSS variables), `static/js/theme.js` (new), `templates/base.html`
+**Key files:** `static/css/style.css` (dark theme, responsive, toast, loading), `templates/base.html` (theme toggle, hamburger, toast, loading bar, highlight.js), `main.py` (timeago filter, toast redirects)
 
 ### Milestone 10: Graph Visualization Enhancements
 Make the graph view more useful for navigation and exploration.
@@ -118,8 +118,8 @@ Add structured logging and metrics for production readiness.
 
 - [x] Editor has live preview and toolbar
 - [x] Users can search pages by name and content
-- [ ] Dark mode works with one click
-- [ ] Mobile layout is usable
+- [x] Dark mode works with one click
+- [x] Mobile layout is usable
 - [ ] Developer docs explain how to create custom macros
 - [ ] At least 3 new built-in macros available
 - [ ] Users can log in and edits are attributed

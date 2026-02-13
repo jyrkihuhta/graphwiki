@@ -46,7 +46,7 @@ src/graphwiki/          # Python application
   static/css/           # CSS
   static/js/graph.js    # D3.js graph visualization
   static/js/editor.js   # Editor toolbar, shortcuts, autocomplete, preview toggle
-  tests/                # Tests (177 tests)
+  tests/                # Tests (204 tests)
 
 Dockerfile              # Multi-stage build (Rust + Python)
 .github/workflows/      # CI pipeline (GitHub Actions)
@@ -181,9 +181,11 @@ Before committing:
 - MetaTable: `MetaTableExtension` (custom preprocessor, queries graph engine, uses `htmlStash` for clean rendering, skips fenced code blocks)
 
 ### Templates
-- Base template: `templates/base.html` (search box, `{% block extra_scripts %}`)
+- Base template: `templates/base.html` (search box, theme toggle, hamburger nav, toast container, loading bar, highlight.js, `{% block extra_scripts %}`)
 - Partials in `templates/partials/` for HTMX fragment responses
 - HTMX for dynamic updates (check `HX-Request` header)
+- Dark mode via `[data-theme="dark"]` CSS custom properties + localStorage (`graphwiki-theme`)
+- highlight.js for syntax highlighting (CDN, light/dark theme switching)
 - Minimal custom CSS, no framework
 
 ### Routes (new in M7/M8)
@@ -242,12 +244,17 @@ Before committing:
 13. **Preview toggle is JS-driven** - The editor textarea has no `hx-*` attributes in the template; `editor.js` adds them dynamically based on localStorage preference. Tests should not assert `hx-post` in server-rendered HTML.
 14. **MetaTable uses htmlStash** - The `MetaTablePreprocessor` stashes rendered HTML via `self.md.htmlStash.store()` to prevent the Markdown block parser from wrapping tables in `<p>` tags
 15. **MetaTable skips code blocks** - The preprocessor strips out fenced code blocks (`` ``` `` and `~~~`) before replacing macros, then restores them. MetaTable syntax inside code blocks renders as literal text.
+16. **Dark mode flash prevention** - An inline `<script>` in `<head>` reads `localStorage('graphwiki-theme')` and sets `data-theme` on `<html>` before the stylesheet loads. This prevents a flash of wrong theme.
+17. **Toast two-path approach** - Redirect flows use `?toast=saved`/`?toast=deleted` query params (JS reads and removes). HTMX flows use `HX-Trigger` response header with `showToast` event.
+18. **highlight.js re-highlight on HTMX swap** - After HTMX content swaps (editor preview), code blocks must be re-highlighted via `htmx:afterSwap` event listener calling `hljs.highlightElement()`.
+19. **Page list uses all_pages not pages** - The index route passes `all_pages` (list of `Page` objects from `list_pages_with_metadata()`) to the template for the metadata table. The old `pages` (list of names) is no longer used.
+20. **timeago filter** - Custom Jinja2 filter registered on `templates.env.filters["timeago"]` for relative date display.
 
-## Completed Milestones (1–8)
+## Completed Milestones (1–9)
 
-Milestones 1–8 cover infrastructure, wiki MVP, Rust graph engine, editor experience, and navigation/discovery. All complete.
+Milestones 1–9 cover infrastructure, wiki MVP, Rust graph engine, editor experience, navigation/discovery, and visual polish. All complete.
 
-**247 total tests passing** (70 graph-core + 177 Python), CI pipeline active.
+**274 total tests passing** (70 graph-core + 204 Python), CI pipeline active.
 
 **See:** `docs/domains/graph-engine.md` for Rust engine design.
 
@@ -260,7 +267,7 @@ PYO3_USE_ABI3_FORWARD_COMPATIBILITY=1 maturin develop
 python -m pytest tests/ -v       # 70 tests
 
 cd src
-python -m pytest tests/ -v       # 177 tests
+python -m pytest tests/ -v       # 204 tests
 ```
 
 ## Subagent Workflow
@@ -294,7 +301,7 @@ The agent reads the domain doc for context, works autonomously, and reports back
 
 - Milestone 7: Editor Experience (live preview, toolbar, shortcuts) ✅
 - Milestone 8: Navigation & Discovery (search, TOC sidebar, tags) ✅
-- Milestone 9: Visual Polish & Responsiveness (dark mode, mobile, notifications)
+- Milestone 9: Visual Polish & Responsiveness (dark mode, mobile, notifications) ✅
 - Milestone 10: Graph Visualization Enhancements (search, focus mode, node sizing)
 - Milestone 11: Macro System & Documentation (developer guide, built-in macros)
 - Milestone 12: Authentication (user accounts, access control)

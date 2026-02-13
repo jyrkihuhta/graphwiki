@@ -60,7 +60,7 @@ src/graphwiki/
 │   └── tags.html     # Tag index page
 ├── static/css/       # CSS
 ├── static/js/        # graph.js, editor.js
-└── tests/            # Tests (177 tests)
+└── tests/            # Tests (204 tests)
 ```
 
 ## Design Patterns

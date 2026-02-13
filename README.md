@@ -15,6 +15,10 @@ A modern, self-hosted wiki platform inspired by [MoinMoin](https://moinmo.in/), 
 - **File-based storage** - Pages stored as plain Markdown files, easy to backup and version control
 - **Split-pane editor** - Optional live Markdown preview (toggle with Ctrl+P), toolbar, keyboard shortcuts (Ctrl+B/I/K/S), wiki link autocomplete
 - **Search & discovery** - Instant search box, full-text search, tag index, TOC sidebar, breadcrumbs, recently modified pages
+- **Dark mode** - One-click toggle with CSS custom properties, persisted in localStorage
+- **Responsive design** - Mobile-friendly with hamburger nav, stacked layouts below 768px
+- **Syntax highlighting** - Fenced code blocks highlighted via highlight.js with light/dark themes
+- **Toast notifications** - Save/delete feedback with auto-dismiss animations
 - **HTMX interactions** - Snappy server-rendered UI without heavy JavaScript
 - **CI pipeline** - GitHub Actions running both Python and Rust test suites with coverage enforcement
 - **Kubernetes-native** - Deployed via GitOps with Flux, Istio ingress, and Rancher management
@@ -97,7 +101,7 @@ Visit `/graph` for an interactive force-directed graph of all pages and their li
 ## Running Tests
 
 ```bash
-# Python tests (177 tests)
+# Python tests (204 tests)
 cd src
 pip install -e ".[dev]"
 pytest tests/ -v
@@ -110,7 +114,7 @@ PYO3_USE_ABI3_FORWARD_COMPATIBILITY=1 maturin develop
 python -m pytest tests/ -v
 ```
 
-**247 total tests** across both test suites. CI runs automatically via GitHub Actions.
+**274 total tests** across both test suites. CI runs automatically via GitHub Actions.
 
 ## Project Structure
 
@@ -136,7 +140,7 @@ graphwiki/
 │   │   │   └── models.py       # Pydantic models
 │   │   ├── templates/          # Jinja2 templates (base, page views, graph)
 │   │   └── static/             # CSS + D3.js graph visualization
-│   └── tests/                  # Tests (177 tests)
+│   └── tests/                  # Tests (204 tests)
 ├── docs/                       # Documentation
 │   ├── architecture.md         # System design
 │   ├── getting-started.md      # Setup and deployment guide
@@ -211,10 +215,11 @@ Access at **http://wiki.localhost:8080** (requires `/etc/hosts` entry).
 |------------|-------------|--------|
 | 1–6 | Infrastructure, Wiki MVP, Graph Engine, Visualization | ✅ Complete |
 | 7–8 | Editor Experience, Navigation & Discovery | ✅ Complete |
-| 9–11 | Visual Polish, Graph Enhancements, Macros | Planned |
+| 9 | Visual Polish & Responsiveness | ✅ Complete |
+| 10–11 | Graph Enhancements, Macros | Planned |
 | 12–13 | Authentication, Observability | Planned |
 
-**247 tests**, CI active. See [TODO.md](TODO.md) for the full roadmap.
+**274 tests**, CI active. See [TODO.md](TODO.md) for the full roadmap.
 
 ## License
 
