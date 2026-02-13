@@ -140,7 +140,8 @@ graphwiki/
 │   ├── src/                    # Rust source (lib, graph, parser, models, query, events, watcher)
 │   └── tests/                  # PyO3 integration tests (70 tests)
 ├── Dockerfile                  # Multi-stage build (Rust + Python)
-├── .github/workflows/ci.yml   # CI pipeline (GitHub Actions)
+├── .github/                    # CI, lint, stale workflows + issue/PR templates + Dependabot
+├── scripts/                    # Utility scripts (remove-example-data.sh)
 ├── src/                        # Python application
 │   ├── pyproject.toml
 │   ├── graphwiki/
@@ -154,6 +155,7 @@ graphwiki/
 │   │   │   └── models.py       # Pydantic models
 │   │   ├── templates/          # Jinja2 templates (base, page views, graph)
 │   │   └── static/             # CSS + D3.js graph visualization
+│   ├── data/pages/             # Example wiki pages (11 pages)
 │   └── tests/                  # Tests (204 tests)
 ├── docs/                       # Documentation
 │   ├── architecture.md         # System design
@@ -222,6 +224,7 @@ Access at **http://wiki.localhost:8080** (requires `/etc/hosts` entry).
 | [PRD: Infrastructure](docs/prd/001-infrastructure.md) | Infrastructure requirements |
 | [PRD: GraphWiki MVP](docs/prd/002-graphwiki-mvp.md) | Application requirements |
 | [ADR-001: k3d Approach](docs/adr/001-k3d-terraform-approach.md) | k3d Terraform decision |
+| [Contributing](CONTRIBUTING.md) | Contributor guide |
 
 ## Status
 

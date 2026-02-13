@@ -13,6 +13,7 @@ GraphWiki is a modern wiki platform inspired by MoinMoin, Graphingwiki, and Obsi
 
 Read these for full context:
 - `TODO.md` - Current tasks, milestones, and progress
+- `CONTRIBUTING.md` - Contributor guide (dev setup, coding standards, PR process)
 - `docs/getting-started.md` - Setup and deployment guide
 - `docs/architecture.md` - System design and components
 - `docs/prd/002-graphwiki-mvp.md` - Application requirements and status
@@ -49,7 +50,12 @@ src/graphwiki/          # Python application
   tests/                # Tests (204 tests)
 
 Dockerfile              # Multi-stage build (Rust + Python)
-.github/workflows/      # CI pipeline (GitHub Actions)
+.github/workflows/      # CI (ci.yml), lint (lint.yml), stale issues (stale.yml)
+.github/ISSUE_TEMPLATE/ # Bug report + feature request templates
+.github/pull_request_template.md
+.github/dependabot.yml  # Dependency update config (pip, cargo, actions)
+scripts/                # Utility scripts (remove-example-data.sh)
+src/data/pages/         # Example wiki pages (11 pages)
 docs/domains/           # Domain documentation for subagents
 
 infra/local/            # Terraform for local k8s
