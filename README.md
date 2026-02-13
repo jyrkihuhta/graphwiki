@@ -51,6 +51,20 @@ pip install -e .
 uvicorn graphwiki.main:app --reload
 ```
 
+### Example Pages
+
+The repository includes example wiki pages in `src/data/pages/` that demonstrate wiki links, MetaTable queries, frontmatter metadata, task lists, and more. To load them, copy them into your data directory:
+
+```bash
+cp src/data/pages/*.md data/pages/
+```
+
+To remove the example pages and start fresh:
+
+```bash
+./scripts/remove-example-data.sh
+```
+
 ### Prerequisites
 
 - **Python 3.12+**
