@@ -8,7 +8,7 @@ import asyncio
 import logging
 from typing import Any
 
-from graphwiki.core.graph import get_engine
+from meshwiki.core.graph import get_engine
 
 logger = logging.getLogger(__name__)
 

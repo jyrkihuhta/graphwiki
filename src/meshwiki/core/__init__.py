@@ -1,0 +1,1 @@
+"""Core MeshWiki functionality."""

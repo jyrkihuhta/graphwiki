@@ -1,6 +1,6 @@
 """Unit tests for the Markdown parser and extensions."""
 
-from graphwiki.core.parser import (
+from meshwiki.core.parser import (
     create_parser,
     extract_wiki_links,
     parse_wiki_content,

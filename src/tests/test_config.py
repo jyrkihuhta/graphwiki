@@ -3,7 +3,7 @@
 from pathlib import Path
 from unittest.mock import patch
 
-from graphwiki.config import Settings
+from meshwiki.config import Settings
 
 
 class TestSettings:
@@ -12,15 +12,15 @@ class TestSettings:
             s = Settings()
             assert s.data_dir == Path("data/pages")
             assert s.debug is False
-            assert s.app_title == "GraphWiki"
+            assert s.app_title == "MeshWiki"
             assert s.graph_watch is True
 
     def test_from_env(self):
         env = {
-            "GRAPHWIKI_DATA_DIR": "/tmp/wiki",
-            "GRAPHWIKI_DEBUG": "true",
-            "GRAPHWIKI_APP_TITLE": "MyWiki",
-            "GRAPHWIKI_GRAPH_WATCH": "false",
+            "MESHWIKI_DATA_DIR": "/tmp/wiki",
+            "MESHWIKI_DEBUG": "true",
+            "MESHWIKI_APP_TITLE": "MyWiki",
+            "MESHWIKI_GRAPH_WATCH": "false",
         }
         with patch.dict("os.environ", env, clear=True):
             s = Settings()
@@ -30,7 +30,7 @@ class TestSettings:
             assert s.graph_watch is False
 
     def test_debug_false_values(self):
-        with patch.dict("os.environ", {"GRAPHWIKI_DEBUG": "false"}, clear=True):
+        with patch.dict("os.environ", {"MESHWIKI_DEBUG": "false"}, clear=True):
             s = Settings()
             assert s.debug is False
 

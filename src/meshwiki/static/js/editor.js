@@ -189,11 +189,11 @@
     var previewPane = document.getElementById("preview-pane");
     var editorSplit = document.getElementById("editor-split");
     var toggleBtn = document.getElementById("toggle-preview");
-    var previewEnabled = localStorage.getItem("graphwiki-preview") !== "false";
+    var previewEnabled = localStorage.getItem("meshwiki-preview") !== "false";
 
     function enablePreview() {
         previewEnabled = true;
-        localStorage.setItem("graphwiki-preview", "true");
+        localStorage.setItem("meshwiki-preview", "true");
         editorSplit.classList.remove("editor-split--no-preview");
         textarea.setAttribute("hx-post", "/api/preview");
         textarea.setAttribute("hx-trigger", "keyup changed delay:300ms");
@@ -207,7 +207,7 @@
 
     function disablePreview() {
         previewEnabled = false;
-        localStorage.setItem("graphwiki-preview", "false");
+        localStorage.setItem("meshwiki-preview", "false");
         editorSplit.classList.add("editor-split--no-preview");
         textarea.removeAttribute("hx-post");
         textarea.removeAttribute("hx-trigger");

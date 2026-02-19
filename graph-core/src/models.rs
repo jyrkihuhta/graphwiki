@@ -1,4 +1,4 @@
-//! Data models for the GraphWiki graph engine.
+//! Data models for the MeshWiki graph engine.
 //!
 //! This module defines the core data structures used to represent
 //! wiki pages and the links between them.

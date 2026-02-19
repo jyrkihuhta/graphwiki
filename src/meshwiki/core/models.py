@@ -1,4 +1,4 @@
-"""Data models for GraphWiki."""
+"""Data models for MeshWiki."""
 
 from datetime import datetime
 

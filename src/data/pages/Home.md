@@ -1,10 +1,12 @@
 ---
-title: Home
+created: '2026-02-18T10:14:53.225375'
+modified: '2026-02-18T10:17:45.672991'
 tags:
-  - navigation
+- navigation
+title: Home
 ---
 
-# Welcome to GraphWiki
+# Welcome to MeshWiki
 
 A modern wiki platform with graph-powered metadata queries, backlinks, and live visualization.
 

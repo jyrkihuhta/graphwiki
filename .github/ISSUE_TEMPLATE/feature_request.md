@@ -1,6 +1,6 @@
 ---
 name: Feature Request
-about: Suggest a new feature or improvement for GraphWiki
+about: Suggest a new feature or improvement for MeshWiki
 title: ''
 labels: enhancement
 assignees: ''

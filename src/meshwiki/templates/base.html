@@ -4,10 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}{{ app_title }}{% endblock %}</title>
-    <script>(function(){var t=localStorage.getItem('graphwiki-theme');if(t)document.documentElement.setAttribute('data-theme',t);})()</script>
+    <script>(function(){var t=localStorage.getItem('meshwiki-theme');if(t)document.documentElement.setAttribute('data-theme',t);})()</script>
     <link rel="stylesheet" href="/static/css/style.css">
     <link id="hljs-theme" rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css">
-    <script>(function(){var t=localStorage.getItem('graphwiki-theme');if(t==='dark'){var l=document.getElementById('hljs-theme');if(l)l.href='https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css';}})()</script>
+    <script>(function(){var t=localStorage.getItem('meshwiki-theme');if(t==='dark'){var l=document.getElementById('hljs-theme');if(l)l.href='https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css';}})()</script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
     <script src="https://unpkg.com/htmx.org@1.9.10"></script>
 </head>
@@ -39,7 +39,7 @@
         </main>
 
         <footer class="footer">
-            <p>GraphWiki - A modern wiki platform</p>
+            <p>MeshWiki - A modern wiki platform</p>
         </footer>
     </div>
     <div id="loading-bar" class="loading-bar"></div>
@@ -54,7 +54,7 @@
         btn.addEventListener('click', function() {
             var theme = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
             document.documentElement.setAttribute('data-theme', theme);
-            localStorage.setItem('graphwiki-theme', theme);
+            localStorage.setItem('meshwiki-theme', theme);
             btn.textContent = theme === 'dark' ? 'Light' : 'Dark';
             // Switch highlight.js theme
             var hljsLink = document.getElementById('hljs-theme');

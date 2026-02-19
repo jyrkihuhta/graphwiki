@@ -1,6 +1,6 @@
 ---
 name: Bug Report
-about: Report a bug to help us improve GraphWiki
+about: Report a bug to help us improve MeshWiki
 title: ''
 labels: bug
 assignees: ''

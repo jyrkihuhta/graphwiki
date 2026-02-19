@@ -11,7 +11,7 @@ priority: medium
 
 # Python Development
 
-Guide for local development of the GraphWiki Python application.
+Guide for local development of the MeshWiki Python application.
 
 ## Setup
 
@@ -22,7 +22,7 @@ Guide for local development of the GraphWiki Python application.
 # Without Rust engine
 cd src
 pip install -e ".[dev]"
-uvicorn graphwiki.main:app --reload
+uvicorn meshwiki.main:app --reload
 ```
 
 The app runs at **http://localhost:8000**.
@@ -30,9 +30,9 @@ The app runs at **http://localhost:8000**.
 ## Project Structure
 
 ```
-src/graphwiki/
+src/meshwiki/
 ├── main.py          # FastAPI routes, WebSocket
-├── config.py        # Settings (GRAPHWIKI_* env vars)
+├── config.py        # Settings (MESHWIKI_* env vars)
 ├── core/
 │   ├── storage.py   # FileStorage implementation
 │   ├── parser.py    # Markdown extensions
@@ -48,7 +48,7 @@ src/graphwiki/
 ```bash
 cd src
 pytest                          # All tests
-pytest --cov=graphwiki          # With coverage
+pytest --cov=meshwiki          # With coverage
 pytest -x                       # Stop on first failure
 pytest -k "test_storage"        # Run specific tests
 pytest tests/test_parser.py -v  # Single file, verbose
@@ -61,7 +61,7 @@ pytest tests/test_parser.py -v  # Single file, verbose
 | black | Formatting | `black src/` |
 | isort | Import sorting | `isort src/` |
 | ruff | Linting | `ruff check src/` |
-| mypy | Type checking | `mypy src/graphwiki/` |
+| mypy | Type checking | `mypy src/meshwiki/` |
 
 ## Key Patterns
 
@@ -76,11 +76,11 @@ await storage.save_page("PageName", content)
 
 ### Settings
 
-Environment variables with `GRAPHWIKI_` prefix:
+Environment variables with `MESHWIKI_` prefix:
 
 ```python
-from graphwiki.config import settings
-data_dir = settings.data_dir  # GRAPHWIKI_DATA_DIR
+from meshwiki.config import settings
+data_dir = settings.data_dir  # MESHWIKI_DATA_DIR
 ```
 
 ### Optional Graph Engine
@@ -88,7 +88,7 @@ data_dir = settings.data_dir  # GRAPHWIKI_DATA_DIR
 The Rust engine is imported with a try/except:
 
 ```python
-from graphwiki.core.graph import get_engine
+from meshwiki.core.graph import get_engine
 engine = get_engine()  # Returns None if not available
 ```
 

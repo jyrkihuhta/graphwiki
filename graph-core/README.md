@@ -1,6 +1,6 @@
 # graph-core
 
-Rust-based graph engine for GraphWiki.
+Rust-based graph engine for MeshWiki.
 
 Provides fast graph operations for wiki pages using petgraph, exposed to Python via PyO3.
 

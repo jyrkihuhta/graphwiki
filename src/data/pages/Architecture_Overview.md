@@ -12,7 +12,7 @@ title: Architecture Overview
 
 # Architecture Overview
 
-GraphWiki is built with a layered architecture combining Python and Rust.
+MeshWiki is built with a layered architecture combining Python and Rust.
 
 ## Components
 

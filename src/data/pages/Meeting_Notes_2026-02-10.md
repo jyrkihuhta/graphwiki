@@ -1,10 +1,12 @@
 ---
-title: Meeting Notes 2026-02-10
-tags:
-  - meetings
-  - planning
-status: complete
 author: alice
+created: '2026-02-18T10:16:34.206749'
+modified: '2026-02-18T10:16:34.206749'
+status: failed
+tags:
+- meetings
+- planning
+title: Meeting Notes 2026-02-10
 ---
 
 # Meeting Notes - February 10, 2026

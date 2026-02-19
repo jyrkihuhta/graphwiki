@@ -7,7 +7,7 @@ from pathlib import Path
 
 import yaml
 
-from graphwiki.core.models import Page, PageMetadata
+from meshwiki.core.models import Page, PageMetadata
 
 
 class Storage(ABC):

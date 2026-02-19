@@ -1,4 +1,4 @@
-# GraphWiki Development Roadmap
+# MeshWiki Development Roadmap
 
 ## Milestones
 

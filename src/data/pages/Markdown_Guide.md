@@ -10,7 +10,7 @@ author: admin
 
 # Markdown Guide
 
-GraphWiki uses standard Markdown with several extensions. This page covers all supported syntax.
+MeshWiki uses standard Markdown with several extensions. This page covers all supported syntax.
 
 ## Basic Formatting
 

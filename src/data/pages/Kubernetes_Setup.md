@@ -11,7 +11,7 @@ priority: medium
 
 # Kubernetes Setup
 
-GraphWiki runs on a local k3d Kubernetes cluster with Istio service mesh and Flux GitOps.
+MeshWiki runs on a local k3d Kubernetes cluster with Istio service mesh and Flux GitOps.
 
 ## Components
 
@@ -29,19 +29,19 @@ GraphWiki runs on a local k3d Kubernetes cluster with Istio service mesh and Flu
 cd infra/local && terraform apply
 
 # Build and deploy
-docker build -t graphwiki:latest .
-k3d image import graphwiki:latest -c graphwiki
-kubectl rollout restart deployment/graphwiki -n graphwiki
+docker build -t meshwiki:latest .
+k3d image import meshwiki:latest -c meshwiki
+kubectl rollout restart deployment/meshwiki -n meshwiki
 ```
 
 ## Cluster Architecture
 
 ```
-k3d Cluster "graphwiki"
+k3d Cluster "meshwiki"
 ├── 1 Server Node (control plane)
 ├── 2 Agent Nodes (workers)
 ├── Istio Ingress Gateway
-│   ├── wiki.localhost:8080 → GraphWiki
+│   ├── wiki.localhost:8080 → MeshWiki
 │   ├── rancher.localhost:8443 → Rancher
 │   └── test.localhost:8080 → Test App
 └── Flux Controllers
@@ -50,9 +50,9 @@ k3d Cluster "graphwiki"
 
 ## Deployment Manifests
 
-Located in `deploy/apps/graphwiki/`:
+Located in `deploy/apps/meshwiki/`:
 
-- `namespace.yaml` - graphwiki namespace
+- `namespace.yaml` - meshwiki namespace
 - `deployment.yaml` - Pod spec with data volume
 - `service.yaml` - ClusterIP on port 80
 - `pvc.yaml` - PersistentVolumeClaim for wiki data
@@ -70,9 +70,9 @@ Multi-stage build at repo root:
 ### Pods not starting
 
 ```bash
-kubectl get pods -n graphwiki
-kubectl describe pod <pod-name> -n graphwiki
-kubectl logs -f deployment/graphwiki -n graphwiki
+kubectl get pods -n meshwiki
+kubectl describe pod <pod-name> -n meshwiki
+kubectl logs -f deployment/meshwiki -n meshwiki
 ```
 
 ### Force Flux sync
@@ -86,7 +86,7 @@ flux reconcile kustomization apps --with-source
 Remember: local images must be imported to k3d:
 
 ```bash
-k3d image import graphwiki:latest -c graphwiki
+k3d image import meshwiki:latest -c meshwiki
 ```
 
 ## Related

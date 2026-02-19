@@ -1,6 +1,6 @@
-//! GraphWiki Graph Engine
+//! MeshWiki Graph Engine
 //!
-//! A Rust-based graph engine for the GraphWiki application.
+//! A Rust-based graph engine for the MeshWiki application.
 //! Provides efficient graph storage, querying, and file watching capabilities
 //! through PyO3 bindings for Python integration.
 //!

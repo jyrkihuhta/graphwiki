@@ -156,8 +156,8 @@ async def test_protected_route_requires_auth(client):
 import pytest
 from pathlib import Path
 from httpx import AsyncClient
-from graphwiki.main import app
-from graphwiki.core.storage import FileStorage
+from meshwiki.main import app
+from meshwiki.core.storage import FileStorage
 
 @pytest.fixture
 def tmp_storage(tmp_path: Path) -> FileStorage:
@@ -209,7 +209,7 @@ jobs:
         with:
           python-version: '3.12'
       - run: pip install -e ".[dev]"
-      - run: pytest --cov=graphwiki --cov-report=xml
+      - run: pytest --cov=meshwiki --cov-report=xml
       - uses: codecov/codecov-action@v4
 
   rust-tests:
@@ -236,7 +236,7 @@ jobs:
 cd src && pytest
 
 # With coverage
-pytest --cov=graphwiki --cov-report=html
+pytest --cov=meshwiki --cov-report=html
 
 # Run specific tests
 pytest -k "test_parser"

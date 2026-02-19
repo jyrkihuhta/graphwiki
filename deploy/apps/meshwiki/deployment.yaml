@@ -1,28 +1,28 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: graphwiki
-  namespace: graphwiki
+  name: meshwiki
+  namespace: meshwiki
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: graphwiki
+      app: meshwiki
   template:
     metadata:
       labels:
-        app: graphwiki
+        app: meshwiki
     spec:
       containers:
-      - name: graphwiki
-        image: graphwiki:latest
+      - name: meshwiki
+        image: meshwiki:latest
         imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 8000
         env:
-        - name: GRAPHWIKI_DATA_DIR
+        - name: MESHWIKI_DATA_DIR
           value: /data/pages
-        - name: GRAPHWIKI_DEBUG
+        - name: MESHWIKI_DEBUG
           value: "false"
         volumeMounts:
         - name: data
@@ -49,4 +49,4 @@ spec:
       volumes:
       - name: data
         persistentVolumeClaim:
-          claimName: graphwiki-data
+          claimName: meshwiki-data

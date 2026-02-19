@@ -1,7 +1,7 @@
-# Multi-stage Dockerfile for GraphWiki with Rust graph engine
+# Multi-stage Dockerfile for MeshWiki with Rust graph engine
 #
 # Build from repo root:
-#   docker build -t graphwiki:latest .
+#   docker build -t meshwiki:latest .
 
 # ── Stage 1: Build Rust graph engine ────────────────────────
 FROM python:3.12-slim AS rust-builder
@@ -38,14 +38,14 @@ COPY --from=rust-builder /wheels/*.whl /tmp/
 RUN pip install --no-cache-dir /tmp/*.whl && rm -rf /tmp/*.whl
 
 # Copy application code
-COPY src/graphwiki/ ./graphwiki/
+COPY src/meshwiki/ ./meshwiki/
 
 # Create data directory
 RUN mkdir -p /data/pages
 
-ENV GRAPHWIKI_DATA_DIR=/data/pages
+ENV MESHWIKI_DATA_DIR=/data/pages
 ENV PYTHONUNBUFFERED=1
 
 EXPOSE 8000
 
-CMD ["uvicorn", "graphwiki.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "meshwiki.main:app", "--host", "0.0.0.0", "--port", "8000"]

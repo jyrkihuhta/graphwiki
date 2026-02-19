@@ -9,7 +9,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-DATA_DIR="${GRAPHWIKI_DATA_DIR:-$REPO_ROOT/data/pages}"
+DATA_DIR="${MESHWIKI_DATA_DIR:-$REPO_ROOT/data/pages}"
 EXAMPLE_DIR="$REPO_ROOT/src/data/pages"
 
 if [ ! -d "$EXAMPLE_DIR" ]; then

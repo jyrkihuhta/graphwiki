@@ -1,6 +1,6 @@
-# GraphWiki Architecture
+# MeshWiki Architecture
 
-This document describes the architecture of GraphWiki and its deployment infrastructure.
+This document describes the architecture of MeshWiki and its deployment infrastructure.
 
 ## System Overview
 
@@ -39,10 +39,10 @@ This document describes the architecture of GraphWiki and its deployment infrast
 
 ### FastAPI Application
 
-**Source:** `src/graphwiki/`
+**Source:** `src/meshwiki/`
 
 ```
-graphwiki/
+meshwiki/
 ├── main.py             # FastAPI app, routes, WebSocket endpoint
 ├── config.py           # pydantic-settings configuration
 ├── core/
@@ -210,7 +210,7 @@ deploy/
 └── apps/
     ├── kustomization.yaml        # All applications
     ├── test-app/                 # Test application
-    └── graphwiki/                # GraphWiki application
+    └── meshwiki/                # MeshWiki application
 ```
 
 Push to `main` branch triggers automatic deployment.
@@ -225,16 +225,16 @@ Push to `main` branch triggers automatic deployment.
 - **Stage 2 (runtime):** Installs Python deps + graph_core wheel, copies application code
 
 ```bash
-docker build -t graphwiki:latest .
+docker build -t meshwiki:latest .
 ```
 
 ### Kubernetes Resources
 
-**Manifests:** `deploy/apps/graphwiki/`
+**Manifests:** `deploy/apps/meshwiki/`
 
 | Resource | Description |
 |----------|-------------|
-| `namespace.yaml` | `graphwiki` namespace |
+| `namespace.yaml` | `meshwiki` namespace |
 | `deployment.yaml` | Pod spec with volume mount |
 | `service.yaml` | ClusterIP service on port 80 |
 | `pvc.yaml` | PersistentVolumeClaim for wiki data |
@@ -244,13 +244,13 @@ docker build -t graphwiki:latest .
 
 ```bash
 # Build image (from repo root)
-docker build -t graphwiki:latest .
+docker build -t meshwiki:latest .
 
 # Import to k3d
-k3d image import graphwiki:latest -c graphwiki
+k3d image import meshwiki:latest -c meshwiki
 
 # Restart deployment (picks up new image)
-kubectl rollout restart deployment/graphwiki -n graphwiki
+kubectl rollout restart deployment/meshwiki -n meshwiki
 ```
 
 Or push to Git and let Flux handle it (requires image registry).
@@ -261,10 +261,10 @@ Or push to Git and let Flux handle it (requires image registry).
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `GRAPHWIKI_DATA_DIR` | `data/pages` | Storage directory |
-| `GRAPHWIKI_DEBUG` | `false` | Debug mode |
-| `GRAPHWIKI_APP_TITLE` | `GraphWiki` | App title |
-| `GRAPHWIKI_GRAPH_WATCH` | `true` | Enable file watching for live updates |
+| `MESHWIKI_DATA_DIR` | `data/pages` | Storage directory |
+| `MESHWIKI_DEBUG` | `false` | Debug mode |
+| `MESHWIKI_APP_TITLE` | `MeshWiki` | App title |
+| `MESHWIKI_GRAPH_WATCH` | `true` | Enable file watching for live updates |
 
 ## Architecture Decisions
 
@@ -281,7 +281,7 @@ Or push to Git and let Flux handle it (requires image registry).
 
 | URL | Service |
 |-----|---------|
-| http://wiki.localhost:8080 | GraphWiki |
+| http://wiki.localhost:8080 | MeshWiki |
 | https://rancher.localhost:8443 | Rancher |
 | http://test.localhost:8080 | Test application |
 

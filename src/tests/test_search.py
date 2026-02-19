@@ -4,22 +4,22 @@ import pytest
 
 from httpx import ASGITransport, AsyncClient
 
-import graphwiki.main
-from graphwiki.core.graph import init_engine, shutdown_engine
+import meshwiki.main
+from meshwiki.core.graph import init_engine, shutdown_engine
 
 
 @pytest.fixture(autouse=True)
 def _patch_storage(tmp_path):
     """Use a temporary directory for storage in all tests."""
-    original = graphwiki.main.storage.base_path
-    graphwiki.main.storage.base_path = tmp_path
+    original = meshwiki.main.storage.base_path
+    meshwiki.main.storage.base_path = tmp_path
     yield
-    graphwiki.main.storage.base_path = original
+    meshwiki.main.storage.base_path = original
 
 
 @pytest.fixture
 async def client():
-    transport = ASGITransport(app=graphwiki.main.app)
+    transport = ASGITransport(app=meshwiki.main.app)
     async with AsyncClient(transport=transport, base_url="http://test") as c:
         yield c
 
@@ -38,7 +38,7 @@ class TestSearchRoute:
 
     @pytest.mark.asyncio
     async def test_search_by_query(self, client):
-        await graphwiki.main.storage.save_page("Python Guide", "Learn Python programming")
+        await meshwiki.main.storage.save_page("Python Guide", "Learn Python programming")
         resp = await client.get("/search?q=Python")
         assert resp.status_code == 200
         assert "Python Guide" in resp.text
@@ -51,7 +51,7 @@ class TestSearchRoute:
 
     @pytest.mark.asyncio
     async def test_search_by_tag(self, client):
-        await graphwiki.main.storage.save_page(
+        await meshwiki.main.storage.save_page(
             "TaggedPage", "---\ntags:\n  - python\n---\n\n# Tagged"
         )
         resp = await client.get("/search?tag=python")
@@ -60,7 +60,7 @@ class TestSearchRoute:
 
     @pytest.mark.asyncio
     async def test_search_htmx_returns_partial(self, client):
-        await graphwiki.main.storage.save_page("HtmxPage", "content")
+        await meshwiki.main.storage.save_page("HtmxPage", "content")
         resp = await client.get(
             "/search?q=Htmx",
             headers={"HX-Request": "true"},
@@ -91,10 +91,10 @@ class TestTagsRoute:
 
     @pytest.mark.asyncio
     async def test_tags_page_shows_tags(self, client):
-        await graphwiki.main.storage.save_page(
+        await meshwiki.main.storage.save_page(
             "Page1", "---\ntags:\n  - python\n  - wiki\n---\n\ncontent"
         )
-        await graphwiki.main.storage.save_page(
+        await meshwiki.main.storage.save_page(
             "Page2", "---\ntags:\n  - python\n---\n\ncontent"
         )
         resp = await client.get("/tags")
@@ -104,10 +104,10 @@ class TestTagsRoute:
 
     @pytest.mark.asyncio
     async def test_tags_page_shows_counts(self, client):
-        await graphwiki.main.storage.save_page(
+        await meshwiki.main.storage.save_page(
             "Page1", "---\ntags:\n  - python\n---\n\ncontent"
         )
-        await graphwiki.main.storage.save_page(
+        await meshwiki.main.storage.save_page(
             "Page2", "---\ntags:\n  - python\n---\n\ncontent"
         )
         resp = await client.get("/tags")
@@ -123,7 +123,7 @@ class TestTagsRoute:
 
     @pytest.mark.asyncio
     async def test_tags_link_to_search(self, client):
-        await graphwiki.main.storage.save_page(
+        await meshwiki.main.storage.save_page(
             "Page1", "---\ntags:\n  - python\n---\n\ncontent"
         )
         resp = await client.get("/tags")
@@ -138,7 +138,7 @@ class TestTagsRoute:
 class TestTocSidebar:
     @pytest.mark.asyncio
     async def test_page_with_headings_has_toc(self, client):
-        await graphwiki.main.storage.save_page(
+        await meshwiki.main.storage.save_page(
             "TocPage", "# Main\n\n## Section 1\n\n## Section 2"
         )
         resp = await client.get("/page/TocPage")
@@ -148,14 +148,14 @@ class TestTocSidebar:
 
     @pytest.mark.asyncio
     async def test_page_without_headings_no_toc(self, client):
-        await graphwiki.main.storage.save_page("NoTocPage", "Just a paragraph of text.")
+        await meshwiki.main.storage.save_page("NoTocPage", "Just a paragraph of text.")
         resp = await client.get("/page/NoTocPage")
         assert resp.status_code == 200
         assert "toc-sidebar" not in resp.text
 
     @pytest.mark.asyncio
     async def test_toc_contains_heading_text(self, client):
-        await graphwiki.main.storage.save_page(
+        await meshwiki.main.storage.save_page(
             "TocPage", "# Main Title\n\n## Getting Started\n\n## Advanced"
         )
         resp = await client.get("/page/TocPage")
@@ -171,7 +171,7 @@ class TestTocSidebar:
 class TestBreadcrumb:
     @pytest.mark.asyncio
     async def test_breadcrumb_on_page_view(self, client):
-        await graphwiki.main.storage.save_page("MyPage", "content")
+        await meshwiki.main.storage.save_page("MyPage", "content")
         resp = await client.get("/page/MyPage")
         assert resp.status_code == 200
         assert "breadcrumb" in resp.text
@@ -179,7 +179,7 @@ class TestBreadcrumb:
 
     @pytest.mark.asyncio
     async def test_breadcrumb_shows_page_title(self, client):
-        await graphwiki.main.storage.save_page("MyPage", "content")
+        await meshwiki.main.storage.save_page("MyPage", "content")
         resp = await client.get("/page/MyPage")
         assert "MyPage" in resp.text
 
@@ -192,7 +192,7 @@ class TestBreadcrumb:
 class TestClickableTags:
     @pytest.mark.asyncio
     async def test_tags_are_links(self, client):
-        await graphwiki.main.storage.save_page(
+        await meshwiki.main.storage.save_page(
             "TaggedPage", "---\ntags:\n  - python\n---\n\ncontent"
         )
         resp = await client.get("/page/TaggedPage")
@@ -209,8 +209,8 @@ class TestClickableTags:
 class TestRecentPages:
     @pytest.mark.asyncio
     async def test_home_shows_recent_pages(self, client):
-        await graphwiki.main.storage.save_page("Page1", "content 1")
-        await graphwiki.main.storage.save_page("Page2", "content 2")
+        await meshwiki.main.storage.save_page("Page1", "content 1")
+        await meshwiki.main.storage.save_page("Page2", "content 2")
         resp = await client.get("/")
         assert resp.status_code == 200
         assert "Recently Modified" in resp.text

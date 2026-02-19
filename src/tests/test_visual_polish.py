@@ -4,21 +4,21 @@ import pytest
 
 from httpx import ASGITransport, AsyncClient
 
-import graphwiki.main
+import meshwiki.main
 
 
 @pytest.fixture(autouse=True)
 def _patch_storage(tmp_path):
     """Use a temporary directory for storage in all tests."""
-    original = graphwiki.main.storage.base_path
-    graphwiki.main.storage.base_path = tmp_path
+    original = meshwiki.main.storage.base_path
+    meshwiki.main.storage.base_path = tmp_path
     yield
-    graphwiki.main.storage.base_path = original
+    meshwiki.main.storage.base_path = original
 
 
 @pytest.fixture
 async def client():
-    transport = ASGITransport(app=graphwiki.main.app)
+    transport = ASGITransport(app=meshwiki.main.app)
     async with AsyncClient(transport=transport, base_url="http://test") as c:
         yield c
 
@@ -38,7 +38,7 @@ class TestDarkMode:
     @pytest.mark.asyncio
     async def test_base_has_theme_script(self, client):
         resp = await client.get("/")
-        assert "graphwiki-theme" in resp.text
+        assert "meshwiki-theme" in resp.text
 
     @pytest.mark.asyncio
     async def test_theme_toggle_in_nav(self, client):
@@ -81,7 +81,7 @@ class TestToastNotifications:
 
     @pytest.mark.asyncio
     async def test_save_redirect_includes_toast(self, client):
-        await graphwiki.main.storage.save_page("TestPage", "content")
+        await meshwiki.main.storage.save_page("TestPage", "content")
         resp = await client.post(
             "/page/TestPage",
             data={"content": "updated"},
@@ -92,7 +92,7 @@ class TestToastNotifications:
 
     @pytest.mark.asyncio
     async def test_delete_redirect_includes_toast(self, client):
-        await graphwiki.main.storage.save_page("ToDelete", "content")
+        await meshwiki.main.storage.save_page("ToDelete", "content")
         resp = await client.post(
             "/page/ToDelete/delete",
             follow_redirects=False,
@@ -102,7 +102,7 @@ class TestToastNotifications:
 
     @pytest.mark.asyncio
     async def test_htmx_save_has_toast_trigger(self, client):
-        await graphwiki.main.storage.save_page("HtmxPage", "content")
+        await meshwiki.main.storage.save_page("HtmxPage", "content")
         resp = await client.post(
             "/page/HtmxPage",
             data={"content": "updated via htmx"},
@@ -126,13 +126,13 @@ class TestToastNotifications:
 class TestPageListMetadata:
     @pytest.mark.asyncio
     async def test_page_list_has_table(self, client):
-        await graphwiki.main.storage.save_page("MyPage", "Hello world content")
+        await meshwiki.main.storage.save_page("MyPage", "Hello world content")
         resp = await client.get("/")
         assert "page-list-table" in resp.text
 
     @pytest.mark.asyncio
     async def test_page_list_shows_word_count(self, client):
-        await graphwiki.main.storage.save_page("WordPage", "one two three four five")
+        await meshwiki.main.storage.save_page("WordPage", "one two three four five")
         resp = await client.get("/")
         assert resp.status_code == 200
         # Word count of 5 should appear in the table
@@ -141,20 +141,20 @@ class TestPageListMetadata:
     @pytest.mark.asyncio
     async def test_page_list_shows_tags(self, client):
         content = "---\ntags:\n  - python\n  - wiki\n---\n\nTagged content"
-        await graphwiki.main.storage.save_page("TagPage", content)
+        await meshwiki.main.storage.save_page("TagPage", content)
         resp = await client.get("/")
         assert "python" in resp.text
         assert 'tag-link' in resp.text
 
     @pytest.mark.asyncio
     async def test_page_list_shows_modified_date(self, client):
-        await graphwiki.main.storage.save_page("DatePage", "some content")
+        await meshwiki.main.storage.save_page("DatePage", "some content")
         resp = await client.get("/")
         assert "page-list-date" in resp.text
 
     @pytest.mark.asyncio
     async def test_page_list_table_headers(self, client):
-        await graphwiki.main.storage.save_page("AnyPage", "content")
+        await meshwiki.main.storage.save_page("AnyPage", "content")
         resp = await client.get("/")
         assert "<th>Page</th>" in resp.text
         assert "<th>Modified</th>" in resp.text
@@ -168,14 +168,14 @@ class TestPageListMetadata:
 
     @pytest.mark.asyncio
     async def test_word_count_property(self):
-        from graphwiki.core.models import Page
+        from meshwiki.core.models import Page
 
         page = Page(name="Test", content="one two three")
         assert page.word_count == 3
 
     @pytest.mark.asyncio
     async def test_word_count_empty(self):
-        from graphwiki.core.models import Page
+        from meshwiki.core.models import Page
 
         page = Page(name="Test", content="")
         assert page.word_count == 0
@@ -188,14 +188,14 @@ class TestPageListMetadata:
 
 class TestTimeagoFilter:
     def test_none_returns_empty(self):
-        from graphwiki.main import timeago_filter
+        from meshwiki.main import timeago_filter
 
         assert timeago_filter(None) == ""
 
     def test_recent_returns_just_now(self):
         from datetime import datetime
 
-        from graphwiki.main import timeago_filter
+        from meshwiki.main import timeago_filter
 
         result = timeago_filter(datetime.now())
         assert result == "just now"
@@ -203,7 +203,7 @@ class TestTimeagoFilter:
     def test_old_date_returns_formatted(self):
         from datetime import datetime
 
-        from graphwiki.main import timeago_filter
+        from meshwiki.main import timeago_filter
 
         old = datetime(2020, 1, 1)
         result = timeago_filter(old)
@@ -246,7 +246,7 @@ class TestLoadingStates:
 
     @pytest.mark.asyncio
     async def test_editor_has_spinner_indicator(self, client):
-        await graphwiki.main.storage.save_page("SpinPage", "content")
+        await meshwiki.main.storage.save_page("SpinPage", "content")
         resp = await client.get("/page/SpinPage/edit")
         assert "htmx-indicator" in resp.text
         assert "spinner" in resp.text

@@ -34,7 +34,7 @@ kubectl get pods -A
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| cluster_name | graphwiki | Name of the k3d cluster |
+| cluster_name | meshwiki | Name of the k3d cluster |
 | servers | 1 | Control plane nodes |
 | agents | 2 | Worker nodes |
 | http_port | 8080 | Host port for HTTP |

@@ -4,22 +4,22 @@ import pytest
 
 from httpx import ASGITransport, AsyncClient
 
-import graphwiki.main
-from graphwiki.core.graph import init_engine, shutdown_engine
+import meshwiki.main
+from meshwiki.core.graph import init_engine, shutdown_engine
 
 
 @pytest.fixture(autouse=True)
 def _patch_storage(tmp_path):
     """Use a temporary directory for storage in all tests."""
-    original = graphwiki.main.storage.base_path
-    graphwiki.main.storage.base_path = tmp_path
+    original = meshwiki.main.storage.base_path
+    meshwiki.main.storage.base_path = tmp_path
     yield
-    graphwiki.main.storage.base_path = original
+    meshwiki.main.storage.base_path = original
 
 
 @pytest.fixture
 async def client():
-    transport = ASGITransport(app=graphwiki.main.app)
+    transport = ASGITransport(app=meshwiki.main.app)
     async with AsyncClient(transport=transport, base_url="http://test") as c:
         yield c
 
@@ -81,16 +81,16 @@ class TestAutocompleteEndpoint:
 
     @pytest.mark.asyncio
     async def test_autocomplete_no_match(self, client):
-        await graphwiki.main.storage.save_page("Alpha", "content")
+        await meshwiki.main.storage.save_page("Alpha", "content")
         resp = await client.get("/api/autocomplete?q=zzz")
         assert resp.status_code == 200
         assert resp.text == ""
 
     @pytest.mark.asyncio
     async def test_autocomplete_matches(self, client):
-        await graphwiki.main.storage.save_page("Python Guide", "content")
-        await graphwiki.main.storage.save_page("Python Tips", "content")
-        await graphwiki.main.storage.save_page("Rust Guide", "content")
+        await meshwiki.main.storage.save_page("Python Guide", "content")
+        await meshwiki.main.storage.save_page("Python Tips", "content")
+        await meshwiki.main.storage.save_page("Rust Guide", "content")
         resp = await client.get("/api/autocomplete?q=Python")
         assert resp.status_code == 200
         assert "Python Guide" in resp.text
@@ -99,7 +99,7 @@ class TestAutocompleteEndpoint:
 
     @pytest.mark.asyncio
     async def test_autocomplete_case_insensitive(self, client):
-        await graphwiki.main.storage.save_page("TestPage", "content")
+        await meshwiki.main.storage.save_page("TestPage", "content")
         resp = await client.get("/api/autocomplete?q=test")
         assert resp.status_code == 200
         assert "TestPage" in resp.text
@@ -107,14 +107,14 @@ class TestAutocompleteEndpoint:
     @pytest.mark.asyncio
     async def test_autocomplete_max_10(self, client):
         for i in range(15):
-            await graphwiki.main.storage.save_page(f"Page{i:02d}", "content")
+            await meshwiki.main.storage.save_page(f"Page{i:02d}", "content")
         resp = await client.get("/api/autocomplete?q=Page")
         assert resp.status_code == 200
         assert resp.text.count("autocomplete-item") <= 10
 
     @pytest.mark.asyncio
     async def test_autocomplete_returns_html_list(self, client):
-        await graphwiki.main.storage.save_page("WikiPage", "content")
+        await meshwiki.main.storage.save_page("WikiPage", "content")
         resp = await client.get("/api/autocomplete?q=Wiki")
         assert "autocomplete-list" in resp.text
         assert "autocomplete-item" in resp.text
@@ -129,28 +129,28 @@ class TestAutocompleteEndpoint:
 class TestEditorTemplate:
     @pytest.mark.asyncio
     async def test_edit_page_has_toolbar(self, client):
-        await graphwiki.main.storage.save_page("EditMe", "# Content")
+        await meshwiki.main.storage.save_page("EditMe", "# Content")
         resp = await client.get("/page/EditMe/edit")
         assert resp.status_code == 200
         assert "editor-toolbar" in resp.text
 
     @pytest.mark.asyncio
     async def test_edit_page_has_split_pane(self, client):
-        await graphwiki.main.storage.save_page("EditMe", "# Content")
+        await meshwiki.main.storage.save_page("EditMe", "# Content")
         resp = await client.get("/page/EditMe/edit")
         assert "editor-split" in resp.text
         assert "preview-pane" in resp.text
 
     @pytest.mark.asyncio
     async def test_edit_page_has_preview_toggle(self, client):
-        await graphwiki.main.storage.save_page("EditMe", "# Content")
+        await meshwiki.main.storage.save_page("EditMe", "# Content")
         resp = await client.get("/page/EditMe/edit")
         assert "toggle-preview" in resp.text
         assert "preview-pane" in resp.text
 
     @pytest.mark.asyncio
     async def test_edit_page_loads_editor_js(self, client):
-        await graphwiki.main.storage.save_page("EditMe", "# Content")
+        await meshwiki.main.storage.save_page("EditMe", "# Content")
         resp = await client.get("/page/EditMe/edit")
         assert "editor.js" in resp.text
 
@@ -173,7 +173,7 @@ class TestEditorTemplate:
     async def test_edit_shows_frontmatter(self, client):
         """Edit page should show raw content including frontmatter."""
         content = "---\ntitle: My Page\ntags:\n  - test\n---\n\n# Content"
-        await graphwiki.main.storage.save_page("FMPage", content)
+        await meshwiki.main.storage.save_page("FMPage", content)
         resp = await client.get("/page/FMPage/edit")
         assert resp.status_code == 200
         assert "title: My Page" in resp.text

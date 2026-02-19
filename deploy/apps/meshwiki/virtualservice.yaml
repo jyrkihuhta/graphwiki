@@ -1,8 +1,8 @@
 apiVersion: networking.istio.io/v1beta1
 kind: VirtualService
 metadata:
-  name: graphwiki
-  namespace: graphwiki
+  name: meshwiki
+  namespace: meshwiki
 spec:
   hosts:
   - "wiki.localhost"
@@ -11,6 +11,6 @@ spec:
   http:
   - route:
     - destination:
-        host: graphwiki
+        host: meshwiki
         port:
           number: 80

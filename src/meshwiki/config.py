@@ -10,11 +10,11 @@ class Settings(BaseSettings):
 
     data_dir: Path = Path("data/pages")
     debug: bool = False
-    app_title: str = "GraphWiki"
+    app_title: str = "MeshWiki"
     graph_watch: bool = True
 
     model_config = SettingsConfigDict(
-        env_prefix="GRAPHWIKI_",
+        env_prefix="MESHWIKI_",
         env_file=".env",
         env_file_encoding="utf-8",
     )

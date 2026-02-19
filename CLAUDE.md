@@ -1,8 +1,8 @@
-# Claude Code Guidelines for GraphWiki
+# Claude Code Guidelines for MeshWiki
 
 ## Project Overview
 
-GraphWiki is a modern wiki platform inspired by MoinMoin, Graphingwiki, and Obsidian. It combines:
+MeshWiki is a modern wiki platform inspired by MoinMoin, Graphingwiki, and Obsidian. It combines:
 - File-based Markdown storage
 - Wiki links (`[[PageName]]` syntax)
 - Kubernetes-native deployment with GitOps
@@ -16,7 +16,8 @@ Read these for full context:
 - `CONTRIBUTING.md` - Contributor guide (dev setup, coding standards, PR process)
 - `docs/getting-started.md` - Setup and deployment guide
 - `docs/architecture.md` - System design and components
-- `docs/prd/002-graphwiki-mvp.md` - Application requirements and status
+- `docs/prd/002-meshwiki-mvp.md` - Application requirements and status
+
 - `docs/prd/001-infrastructure.md` - Infrastructure requirements
 - `docs/custom-macros.md` - How to create custom `<<Macro>>` extensions
 - `docs/domains/*.md` - Domain-specific design docs (for subagents)
@@ -35,9 +36,9 @@ graph-core/             # Rust graph engine (Phase 3)
   src/watcher.rs        # FileWatcher with notify crate
   tests/                # Python integration tests (70 tests)
 
-src/graphwiki/          # Python application
+src/meshwiki/          # Python application
   main.py               # FastAPI routes + WebSocket endpoint
-  config.py             # Settings (GRAPHWIKI_* env vars)
+  config.py             # Settings (MESHWIKI_* env vars)
   core/storage.py       # FileStorage implementation (incl. search, tag filter)
   core/parser.py        # Markdown + wiki link + MetaTable + TOC parsing
   core/graph.py         # Graph engine wrapper (optional import)
@@ -63,7 +64,7 @@ infra/local/            # Terraform for local k8s
   istio.tf              # Istio service mesh
   rancher.tf            # Rancher installation
 
-deploy/apps/graphwiki/  # K8s manifests (Flux deploys these)
+deploy/apps/meshwiki/  # K8s manifests (Flux deploys these)
 deploy/flux/            # Flux GitOps configuration
 ```
 
@@ -76,16 +77,16 @@ deploy/flux/            # Flux GitOps configuration
 ./dev.sh --build-only       # Build Rust engine only
 
 # Local development without Rust engine
-cd src && uvicorn graphwiki.main:app --reload
+cd src && uvicorn meshwiki.main:app --reload
 
 # Build and deploy to k8s (Dockerfile at repo root)
-docker build -t graphwiki:latest .
-k3d image import graphwiki:latest -c graphwiki
-kubectl rollout restart deployment/graphwiki -n graphwiki
+docker build -t meshwiki:latest .
+k3d image import meshwiki:latest -c meshwiki
+kubectl rollout restart deployment/meshwiki -n meshwiki
 
 # Check deployment
-kubectl get pods -n graphwiki
-kubectl logs -f deployment/graphwiki -n graphwiki
+kubectl get pods -n meshwiki
+kubectl logs -f deployment/meshwiki -n meshwiki
 
 # Terraform (infrastructure)
 cd infra/local && terraform apply
@@ -96,7 +97,7 @@ flux reconcile kustomization apps --with-source
 
 ## URLs (local k8s)
 
-- http://wiki.localhost:8080 - GraphWiki
+- http://wiki.localhost:8080 - MeshWiki
 - https://rancher.localhost:8443 - Rancher
 - http://test.localhost:8080 - Test app
 
@@ -138,7 +139,7 @@ Example test structure:
 ```python
 # tests/test_storage.py
 import pytest
-from graphwiki.core.storage import FileStorage
+from meshwiki.core.storage import FileStorage
 
 @pytest.fixture
 def storage(tmp_path):
@@ -176,7 +177,7 @@ Before committing:
 
 ### Python Application
 - Use async/await for all storage operations
-- Settings via pydantic-settings with `GRAPHWIKI_` prefix
+- Settings via pydantic-settings with `MESHWIKI_` prefix
 - Storage layer is abstract - `FileStorage` implements `Storage` ABC
 
 ### Markdown Parser
@@ -190,7 +191,7 @@ Before committing:
 - Base template: `templates/base.html` (search box, theme toggle, hamburger nav, toast container, loading bar, highlight.js, `{% block extra_scripts %}`)
 - Partials in `templates/partials/` for HTMX fragment responses
 - HTMX for dynamic updates (check `HX-Request` header)
-- Dark mode via `[data-theme="dark"]` CSS custom properties + localStorage (`graphwiki-theme`)
+- Dark mode via `[data-theme="dark"]` CSS custom properties + localStorage (`meshwiki-theme`)
 - highlight.js for syntax highlighting (CDN, light/dark theme switching)
 - Minimal custom CSS, no framework
 
@@ -243,14 +244,14 @@ Before committing:
 6. **ASGITransport skips lifespan** - In tests, manually call `init_engine()`/`shutdown_engine()` instead of relying on FastAPI lifespan
 7. **graph_core is optional** - `core/graph.py` uses `try/except ImportError`; app works without it
 8. **Form fields default** - Use `Form("")` not `Form(...)` for optional/empty-allowed form fields; `Form(...)` rejects empty strings with 422
-9. **Test fixture after reload** - `test_app_smoke.py` uses `importlib.reload(graphwiki.main)` which replaces `storage`. New test files must access `graphwiki.main.storage` dynamically (not via `from graphwiki.main import storage`) to survive reloads
+9. **Test fixture after reload** - `test_app_smoke.py` uses `importlib.reload(meshwiki.main)` which replaces `storage`. New test files must access `meshwiki.main.storage` dynamically (not via `from meshwiki.main import storage`) to survive reloads
 10. **TOC guard** - Use `{% if toc_html and '<li>' in toc_html %}` to avoid showing empty TOC sidebar
 11. **PageMetadata allows extras** - `model_config = ConfigDict(extra="allow")` so custom frontmatter fields (status, author, priority, etc.) survive the parse/save round-trip
 12. **Editor shows raw content** - The edit template uses `{{ raw_content }}` (includes frontmatter) not `{{ page.content }}` (body only). The `get_raw_content()` method returns the full file.
 13. **Preview toggle is JS-driven** - The editor textarea has no `hx-*` attributes in the template; `editor.js` adds them dynamically based on localStorage preference. Tests should not assert `hx-post` in server-rendered HTML.
 14. **MetaTable uses htmlStash** - The `MetaTablePreprocessor` stashes rendered HTML via `self.md.htmlStash.store()` to prevent the Markdown block parser from wrapping tables in `<p>` tags
 15. **MetaTable skips code blocks** - The preprocessor strips out fenced code blocks (`` ``` `` and `~~~`) before replacing macros, then restores them. MetaTable syntax inside code blocks renders as literal text.
-16. **Dark mode flash prevention** - An inline `<script>` in `<head>` reads `localStorage('graphwiki-theme')` and sets `data-theme` on `<html>` before the stylesheet loads. This prevents a flash of wrong theme.
+16. **Dark mode flash prevention** - An inline `<script>` in `<head>` reads `localStorage('meshwiki-theme')` and sets `data-theme` on `<html>` before the stylesheet loads. This prevents a flash of wrong theme.
 17. **Toast two-path approach** - Redirect flows use `?toast=saved`/`?toast=deleted` query params (JS reads and removes). HTMX flows use `HX-Trigger` response header with `showToast` event.
 18. **highlight.js re-highlight on HTMX swap** - After HTMX content swaps (editor preview), code blocks must be re-highlighted via `htmx:afterSwap` event listener calling `hljs.highlightElement()`.
 19. **Page list uses all_pages not pages** - The index route passes `all_pages` (list of `Page` objects from `list_pages_with_metadata()`) to the template for the metadata table. The old `pages` (list of names) is no longer used.
@@ -324,7 +325,7 @@ The agent reads the domain doc for context, works autonomously, and reports back
 cd src
 pip install -e ".[dev]"
 pytest
-pytest --cov=graphwiki          # With coverage
+pytest --cov=meshwiki          # With coverage
 pytest -x                        # Stop on first failure
 pytest -k "test_storage"         # Run specific tests
 ```
@@ -346,7 +347,7 @@ ruff check src/
 
 # Type checking (optional)
 pip install mypy
-mypy src/graphwiki/
+mypy src/meshwiki/
 ```
 
 Add to `pyproject.toml` for consistent configuration:

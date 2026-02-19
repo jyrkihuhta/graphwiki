@@ -1,4 +1,4 @@
-"""GraphWiki FastAPI application."""
+"""MeshWiki FastAPI application."""
 
 import json
 from contextlib import asynccontextmanager
@@ -10,12 +10,12 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from graphwiki.config import settings
-from graphwiki.core.graph import get_engine, init_engine, shutdown_engine
-from graphwiki.core.ws_manager import manager
-from graphwiki.core.models import Page
-from graphwiki.core.parser import parse_wiki_content, parse_wiki_content_with_toc
-from graphwiki.core.storage import FileStorage
+from meshwiki.config import settings
+from meshwiki.core.graph import get_engine, init_engine, shutdown_engine
+from meshwiki.core.ws_manager import manager
+from meshwiki.core.models import Page
+from meshwiki.core.parser import parse_wiki_content, parse_wiki_content_with_toc
+from meshwiki.core.storage import FileStorage
 
 
 @asynccontextmanager

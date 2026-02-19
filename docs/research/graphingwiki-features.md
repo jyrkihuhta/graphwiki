@@ -1,6 +1,6 @@
 # Graphingwiki Features Research
 
-Reference material for features to potentially implement in GraphWiki.
+Reference material for features to potentially implement in MeshWiki.
 
 ## Core MoinMoin Features
 

@@ -1,4 +1,4 @@
-"""End-to-end smoke tests for the GraphWiki application.
+"""End-to-end smoke tests for the MeshWiki application.
 
 Tests the full page lifecycle by starting the app with a temp directory
 and exercising all routes: create, read, update, delete, list, graph.
@@ -20,17 +20,17 @@ def wiki_app(tmp_path):
     Reloads config and main modules so the app picks up the temp
     data_dir. Yields the FastAPI app object.
     """
-    os.environ["GRAPHWIKI_DATA_DIR"] = str(tmp_path)
+    os.environ["MESHWIKI_DATA_DIR"] = str(tmp_path)
 
-    import graphwiki.config
-    importlib.reload(graphwiki.config)
-    import graphwiki.main
-    importlib.reload(graphwiki.main)
+    import meshwiki.config
+    importlib.reload(meshwiki.config)
+    import meshwiki.main
+    importlib.reload(meshwiki.main)
 
-    yield graphwiki.main.app
+    yield meshwiki.main.app
 
     # Cleanup env
-    os.environ.pop("GRAPHWIKI_DATA_DIR", None)
+    os.environ.pop("MESHWIKI_DATA_DIR", None)
 
 
 @pytest_asyncio.fixture()

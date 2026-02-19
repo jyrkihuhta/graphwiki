@@ -4,7 +4,7 @@ import pytest
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 
-from graphwiki.core.graph import (
+from meshwiki.core.graph import (
     GRAPH_ENGINE_AVAILABLE,
     get_engine,
     init_engine,
@@ -54,7 +54,7 @@ class TestGraphModule:
 
     def test_init_engine_without_graph_core(self):
         """When graph_core is not importable, init returns None gracefully."""
-        with patch("graphwiki.core.graph.GRAPH_ENGINE_AVAILABLE", False):
+        with patch("meshwiki.core.graph.GRAPH_ENGINE_AVAILABLE", False):
             result = init_engine(Path("/nonexistent"))
             assert result is None
             assert get_engine() is None
@@ -115,19 +115,19 @@ class TestBacklinksRoute:
         from httpx import AsyncClient, ASGITransport
         import os
 
-        os.environ["GRAPHWIKI_DATA_DIR"] = str(wiki_dir)
+        os.environ["MESHWIKI_DATA_DIR"] = str(wiki_dir)
 
         # Re-import to pick up new settings
         import importlib
-        import graphwiki.config
-        importlib.reload(graphwiki.config)
-        import graphwiki.main
-        importlib.reload(graphwiki.main)
+        import meshwiki.config
+        importlib.reload(meshwiki.config)
+        import meshwiki.main
+        importlib.reload(meshwiki.main)
 
         # Manually init engine (ASGITransport doesn't trigger lifespan)
         init_engine(wiki_dir, watch=False)
 
-        transport = ASGITransport(app=graphwiki.main.app)
+        transport = ASGITransport(app=meshwiki.main.app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             response = await client.get("/page/HomePage")
             assert response.status_code == 200
@@ -142,19 +142,19 @@ class TestBacklinksRoute:
         """Page should render without backlinks when engine is unavailable."""
         import os
 
-        os.environ["GRAPHWIKI_DATA_DIR"] = str(wiki_dir)
+        os.environ["MESHWIKI_DATA_DIR"] = str(wiki_dir)
 
         import importlib
-        import graphwiki.config
-        importlib.reload(graphwiki.config)
-        import graphwiki.main
-        importlib.reload(graphwiki.main)
+        import meshwiki.config
+        importlib.reload(meshwiki.config)
+        import meshwiki.main
+        importlib.reload(meshwiki.main)
 
         # Ensure no engine
-        with patch("graphwiki.main.get_engine", return_value=None):
+        with patch("meshwiki.main.get_engine", return_value=None):
             from httpx import AsyncClient, ASGITransport
 
-            transport = ASGITransport(app=graphwiki.main.app)
+            transport = ASGITransport(app=meshwiki.main.app)
             async with AsyncClient(transport=transport, base_url="http://test") as client:
                 response = await client.get("/page/HomePage")
                 assert response.status_code == 200
@@ -176,17 +176,17 @@ class TestFrontmatterDisplay:
         from httpx import AsyncClient, ASGITransport
         import os
 
-        os.environ["GRAPHWIKI_DATA_DIR"] = str(wiki_dir)
+        os.environ["MESHWIKI_DATA_DIR"] = str(wiki_dir)
 
         import importlib
-        import graphwiki.config
-        importlib.reload(graphwiki.config)
-        import graphwiki.main
-        importlib.reload(graphwiki.main)
+        import meshwiki.config
+        importlib.reload(meshwiki.config)
+        import meshwiki.main
+        importlib.reload(meshwiki.main)
 
         init_engine(wiki_dir, watch=False)
 
-        transport = ASGITransport(app=graphwiki.main.app)
+        transport = ASGITransport(app=meshwiki.main.app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             response = await client.get("/page/HomePage")
             assert response.status_code == 200
@@ -207,17 +207,17 @@ class TestFrontmatterDisplay:
         # Create a page with no frontmatter
         (wiki_dir / "Plain.md").write_text("# Plain page\n\nNo metadata here.\n")
 
-        os.environ["GRAPHWIKI_DATA_DIR"] = str(wiki_dir)
+        os.environ["MESHWIKI_DATA_DIR"] = str(wiki_dir)
 
         import importlib
-        import graphwiki.config
-        importlib.reload(graphwiki.config)
-        import graphwiki.main
-        importlib.reload(graphwiki.main)
+        import meshwiki.config
+        importlib.reload(meshwiki.config)
+        import meshwiki.main
+        importlib.reload(meshwiki.main)
 
         init_engine(wiki_dir, watch=False)
 
-        transport = ASGITransport(app=graphwiki.main.app)
+        transport = ASGITransport(app=meshwiki.main.app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             response = await client.get("/page/Plain")
             assert response.status_code == 200
@@ -228,18 +228,18 @@ class TestFrontmatterDisplay:
         """Frontmatter panel should not appear when engine is unavailable."""
         import os
 
-        os.environ["GRAPHWIKI_DATA_DIR"] = str(wiki_dir)
+        os.environ["MESHWIKI_DATA_DIR"] = str(wiki_dir)
 
         import importlib
-        import graphwiki.config
-        importlib.reload(graphwiki.config)
-        import graphwiki.main
-        importlib.reload(graphwiki.main)
+        import meshwiki.config
+        importlib.reload(meshwiki.config)
+        import meshwiki.main
+        importlib.reload(meshwiki.main)
 
-        with patch("graphwiki.main.get_engine", return_value=None):
+        with patch("meshwiki.main.get_engine", return_value=None):
             from httpx import AsyncClient, ASGITransport
 
-            transport = ASGITransport(app=graphwiki.main.app)
+            transport = ASGITransport(app=meshwiki.main.app)
             async with AsyncClient(transport=transport, base_url="http://test") as client:
                 response = await client.get("/page/HomePage")
                 assert response.status_code == 200
@@ -256,7 +256,7 @@ class TestMetaTableParser:
         not GRAPH_ENGINE_AVAILABLE, reason="graph_core not installed"
     )
     def test_parse_metatable_args_equals(self):
-        from graphwiki.core.parser import _parse_metatable_args
+        from meshwiki.core.parser import _parse_metatable_args
 
         filters, columns = _parse_metatable_args("status=draft, ||name||status||")
         assert len(filters) == 1
@@ -266,7 +266,7 @@ class TestMetaTableParser:
         not GRAPH_ENGINE_AVAILABLE, reason="graph_core not installed"
     )
     def test_parse_metatable_args_contains(self):
-        from graphwiki.core.parser import _parse_metatable_args
+        from meshwiki.core.parser import _parse_metatable_args
 
         filters, columns = _parse_metatable_args("tags~=rust, ||name||tags||")
         assert len(filters) == 1
@@ -276,7 +276,7 @@ class TestMetaTableParser:
         not GRAPH_ENGINE_AVAILABLE, reason="graph_core not installed"
     )
     def test_parse_metatable_args_matches(self):
-        from graphwiki.core.parser import _parse_metatable_args
+        from meshwiki.core.parser import _parse_metatable_args
 
         filters, columns = _parse_metatable_args(r"version/=v\d+, ||name||")
         assert len(filters) == 1
@@ -286,7 +286,7 @@ class TestMetaTableParser:
         not GRAPH_ENGINE_AVAILABLE, reason="graph_core not installed"
     )
     def test_parse_metatable_args_multiple_filters(self):
-        from graphwiki.core.parser import _parse_metatable_args
+        from meshwiki.core.parser import _parse_metatable_args
 
         filters, columns = _parse_metatable_args(
             "status=draft, tags~=rust, ||name||status||tags||"
@@ -298,7 +298,7 @@ class TestMetaTableParser:
         not GRAPH_ENGINE_AVAILABLE, reason="graph_core not installed"
     )
     def test_parse_metatable_args_columns_only(self):
-        from graphwiki.core.parser import _parse_metatable_args
+        from meshwiki.core.parser import _parse_metatable_args
 
         filters, columns = _parse_metatable_args("||name||status||")
         assert len(filters) == 0
@@ -308,7 +308,7 @@ class TestMetaTableParser:
         not GRAPH_ENGINE_AVAILABLE, reason="graph_core not installed"
     )
     def test_metatable_renders_html_table(self, wiki_dir):
-        from graphwiki.core.parser import _render_metatable
+        from meshwiki.core.parser import _render_metatable
         from graph_core import Filter
 
         init_engine(wiki_dir, watch=False)
@@ -323,7 +323,7 @@ class TestMetaTableParser:
         not GRAPH_ENGINE_AVAILABLE, reason="graph_core not installed"
     )
     def test_metatable_no_matches(self, wiki_dir):
-        from graphwiki.core.parser import _render_metatable
+        from meshwiki.core.parser import _render_metatable
         from graph_core import Filter
 
         init_engine(wiki_dir, watch=False)
@@ -333,7 +333,7 @@ class TestMetaTableParser:
         assert "No matching pages found" in html
 
     def test_metatable_without_engine(self):
-        from graphwiki.core.parser import _render_metatable
+        from meshwiki.core.parser import _render_metatable
 
         # No engine initialized
         html = _render_metatable([], ["name"])
@@ -343,7 +343,7 @@ class TestMetaTableParser:
         not GRAPH_ENGINE_AVAILABLE, reason="graph_core not installed"
     )
     def test_metatable_name_column_links(self, wiki_dir):
-        from graphwiki.core.parser import _render_metatable
+        from meshwiki.core.parser import _render_metatable
 
         init_engine(wiki_dir, watch=False)
         html = _render_metatable([], ["name", "status"])
@@ -355,7 +355,7 @@ class TestMetaTableParser:
         not GRAPH_ENGINE_AVAILABLE, reason="graph_core not installed"
     )
     def test_metatable_macro_in_content(self, wiki_dir):
-        from graphwiki.core.parser import parse_wiki_content
+        from meshwiki.core.parser import parse_wiki_content
 
         init_engine(wiki_dir, watch=False)
         content = "# My Page\n\n<<MetaTable(status=draft, ||name||status||)>>\n"
@@ -377,28 +377,28 @@ class TestPageExistsSync:
         init_engine(wiki_dir, watch=False)
 
         import os
-        os.environ["GRAPHWIKI_DATA_DIR"] = str(wiki_dir)
+        os.environ["MESHWIKI_DATA_DIR"] = str(wiki_dir)
 
         import importlib
-        import graphwiki.config
-        importlib.reload(graphwiki.config)
-        import graphwiki.main
-        importlib.reload(graphwiki.main)
+        import meshwiki.config
+        importlib.reload(meshwiki.config)
+        import meshwiki.main
+        importlib.reload(meshwiki.main)
 
-        assert graphwiki.main.page_exists_sync("HomePage") is True
-        assert graphwiki.main.page_exists_sync("NonExistent") is False
+        assert meshwiki.main.page_exists_sync("HomePage") is True
+        assert meshwiki.main.page_exists_sync("NonExistent") is False
 
     def test_page_exists_filesystem_fallback(self, wiki_dir):
         """Without engine, falls back to filesystem check."""
         import os
-        os.environ["GRAPHWIKI_DATA_DIR"] = str(wiki_dir)
+        os.environ["MESHWIKI_DATA_DIR"] = str(wiki_dir)
 
         import importlib
-        import graphwiki.config
-        importlib.reload(graphwiki.config)
-        import graphwiki.main
-        importlib.reload(graphwiki.main)
+        import meshwiki.config
+        importlib.reload(meshwiki.config)
+        import meshwiki.main
+        importlib.reload(meshwiki.main)
 
-        with patch("graphwiki.main.get_engine", return_value=None):
-            assert graphwiki.main.page_exists_sync("HomePage") is True
-            assert graphwiki.main.page_exists_sync("NonExistent") is False
+        with patch("meshwiki.main.get_engine", return_value=None):
+            assert meshwiki.main.page_exists_sync("HomePage") is True
+            assert meshwiki.main.page_exists_sync("NonExistent") is False

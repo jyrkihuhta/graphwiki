@@ -1,8 +1,8 @@
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: graphwiki-data
-  namespace: graphwiki
+  name: meshwiki-data
+  namespace: meshwiki
 spec:
   accessModes:
     - ReadWriteOnce

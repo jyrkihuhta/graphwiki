@@ -11,7 +11,7 @@ spec:
     branch: main
   secretRef:
     name: flux-system
-  url: ssh://git@github.com/jyrkihuhta/graphwiki
+  url: ssh://git@github.com/jyrkihuhta/meshwiki
 ---
 apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization

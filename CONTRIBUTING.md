@@ -1,6 +1,6 @@
-# Contributing to GraphWiki
+# Contributing to MeshWiki
 
-Thank you for your interest in contributing to GraphWiki! This guide will help you get started.
+Thank you for your interest in contributing to MeshWiki! This guide will help you get started.
 
 ## Getting Started
 
@@ -15,8 +15,8 @@ Thank you for your interest in contributing to GraphWiki! This guide will help y
 
 1. **Clone the repository:**
    ```bash
-   git clone https://github.com/jyrkihuhta/graphwiki.git
-   cd graphwiki
+   git clone https://github.com/jyrkihuhta/meshwiki.git
+   cd meshwiki
    ```
 
 2. **Start the development server (with Rust engine):**
@@ -29,7 +29,7 @@ Thank you for your interest in contributing to GraphWiki! This guide will help y
    ```bash
    cd src
    pip install -e ".[dev]"
-   uvicorn graphwiki.main:app --reload
+   uvicorn meshwiki.main:app --reload
    ```
 
 4. **Install dev tools:**
@@ -43,7 +43,7 @@ Thank you for your interest in contributing to GraphWiki! This guide will help y
 # Python tests (204 tests)
 cd src
 pytest tests/ -v
-pytest tests/ --cov=graphwiki    # With coverage
+pytest tests/ --cov=meshwiki    # With coverage
 
 # Rust graph engine tests (70 tests)
 cd graph-core
@@ -58,13 +58,13 @@ All tests must pass before submitting a PR. CI enforces 80% minimum coverage on 
 
 ### Reporting Bugs
 
-- Use the [Bug Report](https://github.com/jyrkihuhta/graphwiki/issues/new?template=bug_report.md) issue template
+- Use the [Bug Report](https://github.com/jyrkihuhta/meshwiki/issues/new?template=bug_report.md) issue template
 - Include steps to reproduce, expected vs actual behavior, and your environment details
 - Check existing issues first to avoid duplicates
 
 ### Suggesting Features
 
-- Use the [Feature Request](https://github.com/jyrkihuhta/graphwiki/issues/new?template=feature_request.md) issue template
+- Use the [Feature Request](https://github.com/jyrkihuhta/meshwiki/issues/new?template=feature_request.md) issue template
 - Describe the use case and why it would benefit users
 - Check the [roadmap](TODO.md) to see if it's already planned
 
@@ -142,12 +142,12 @@ All tests must pass before submitting a PR. CI enforces 80% minimum coverage on 
 ## Project Structure
 
 ```
-graphwiki/
+meshwiki/
 ├── dev.sh                  # Development startup script
 ├── graph-core/             # Rust graph engine (petgraph + PyO3)
 │   ├── src/                # Rust source
 │   └── tests/              # Integration tests (70 tests)
-├── src/graphwiki/          # Python application
+├── src/meshwiki/          # Python application
 │   ├── main.py             # FastAPI routes
 │   ├── core/               # Storage, parser, graph wrapper
 │   ├── templates/          # Jinja2 templates

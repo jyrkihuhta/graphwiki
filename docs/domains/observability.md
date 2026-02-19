@@ -6,7 +6,7 @@
 
 ## Scope
 
-Monitoring, logging, and tracing for GraphWiki:
+Monitoring, logging, and tracing for MeshWiki:
 - Structured logging
 - Metrics collection and dashboards
 - Distributed tracing
@@ -26,7 +26,7 @@ Minimal observability:
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                        GraphWiki App                             │
+│                        MeshWiki App                             │
 │  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐              │
 │  │   Logging   │  │   Metrics   │  │   Tracing   │              │
 │  │ (structlog) │  │ (prometheus)│  │(opentelemetry)│            │
@@ -105,13 +105,13 @@ Log structure:
 from prometheus_client import Counter, Histogram
 
 page_views = Counter(
-    "graphwiki_page_views_total",
+    "meshwiki_page_views_total",
     "Total page views",
     ["page", "status"]
 )
 
 request_latency = Histogram(
-    "graphwiki_request_latency_seconds",
+    "meshwiki_request_latency_seconds",
     "Request latency",
     ["method", "endpoint"]
 )

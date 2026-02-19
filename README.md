@@ -1,6 +1,6 @@
-# GraphWiki
+# MeshWiki
 
-A modern, self-hosted wiki platform inspired by [MoinMoin](https://moinmo.in/), [Graphingwiki](http://graphingwiki.python-hosting.com/), and [Obsidian](https://obsidian.md/). GraphWiki combines file-based Markdown storage with a Rust-powered graph engine for metadata queries, backlinks, and interactive graph visualization.
+A modern, self-hosted wiki platform inspired by [MoinMoin](https://moinmo.in/), [Graphingwiki](http://graphingwiki.python-hosting.com/), and [Obsidian](https://obsidian.md/). MeshWiki combines file-based Markdown storage with a Rust-powered graph engine for metadata queries, backlinks, and interactive graph visualization.
 
 ## Features
 
@@ -28,8 +28,8 @@ A modern, self-hosted wiki platform inspired by [MoinMoin](https://moinmo.in/), 
 ### With Rust graph engine (recommended)
 
 ```bash
-git clone https://github.com/jyrkihuhta/graphwiki.git
-cd graphwiki
+git clone https://github.com/jyrkihuhta/meshwiki.git
+cd meshwiki
 ./dev.sh
 ```
 
@@ -48,7 +48,7 @@ The app works without the graph engine — graph features (backlinks, MetaTable,
 ```bash
 cd src
 pip install -e .
-uvicorn graphwiki.main:app --reload
+uvicorn meshwiki.main:app --reload
 ```
 
 ### Example Pages
@@ -119,7 +119,7 @@ Visit `/graph` for an interactive force-directed graph of all pages and their li
 cd src
 pip install -e ".[dev]"
 pytest tests/ -v
-pytest tests/ --cov=graphwiki    # With coverage
+pytest tests/ --cov=meshwiki    # With coverage
 
 # Rust graph engine tests (70 tests)
 cd graph-core
@@ -133,7 +133,7 @@ python -m pytest tests/ -v
 ## Project Structure
 
 ```
-graphwiki/
+meshwiki/
 ├── dev.sh                      # Development startup script
 ├── graph-core/                 # Rust graph engine
 │   ├── Cargo.toml
@@ -144,9 +144,9 @@ graphwiki/
 ├── scripts/                    # Utility scripts (remove-example-data.sh)
 ├── src/                        # Python application
 │   ├── pyproject.toml
-│   ├── graphwiki/
+│   ├── meshwiki/
 │   │   ├── main.py             # FastAPI routes + WebSocket endpoint
-│   │   ├── config.py           # Settings (GRAPHWIKI_* env vars)
+│   │   ├── config.py           # Settings (MESHWIKI_* env vars)
 │   │   ├── core/
 │   │   │   ├── storage.py      # Abstract storage + FileStorage
 │   │   │   ├── parser.py       # Markdown + wiki links + MetaTable macro
@@ -166,7 +166,7 @@ graphwiki/
 │   ├── domains/                # Domain-specific design docs
 │   └── research/               # Background research
 ├── deploy/                     # Kubernetes deployment
-│   ├── apps/graphwiki/         # K8s manifests (Deployment, Service, VirtualService)
+│   ├── apps/meshwiki/         # K8s manifests (Deployment, Service, VirtualService)
 │   └── flux/                   # Flux GitOps configuration
 ├── infra/local/                # Terraform for local k3d cluster
 │   ├── main.tf                 # k3d cluster
@@ -177,14 +177,14 @@ graphwiki/
 
 ## Configuration
 
-Environment variables with `GRAPHWIKI_` prefix:
+Environment variables with `MESHWIKI_` prefix:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `GRAPHWIKI_DATA_DIR` | `data/pages` | Page storage directory |
-| `GRAPHWIKI_DEBUG` | `false` | Debug mode |
-| `GRAPHWIKI_APP_TITLE` | `GraphWiki` | Application title in header |
-| `GRAPHWIKI_GRAPH_WATCH` | `true` | Enable file watcher for live graph updates |
+| `MESHWIKI_DATA_DIR` | `data/pages` | Page storage directory |
+| `MESHWIKI_DEBUG` | `false` | Debug mode |
+| `MESHWIKI_APP_TITLE` | `MeshWiki` | Application title in header |
+| `MESHWIKI_GRAPH_WATCH` | `true` | Enable file watcher for live graph updates |
 
 ## Tech Stack
 
@@ -206,9 +206,9 @@ For deploying to a local k3d cluster with Istio and Flux GitOps, see the [Gettin
 ```bash
 # Quick overview
 cd infra/local && terraform apply     # Create k3d cluster + Istio + Rancher
-docker build -t graphwiki:latest .    # Build from repo root (multi-stage with Rust)
-k3d image import graphwiki:latest -c graphwiki
-kubectl rollout restart deployment/graphwiki -n graphwiki
+docker build -t meshwiki:latest .    # Build from repo root (multi-stage with Rust)
+k3d image import meshwiki:latest -c meshwiki
+kubectl rollout restart deployment/meshwiki -n meshwiki
 ```
 
 Access at **http://wiki.localhost:8080** (requires `/etc/hosts` entry).
@@ -222,7 +222,7 @@ Access at **http://wiki.localhost:8080** (requires `/etc/hosts` entry).
 | [Custom Macros](docs/custom-macros.md) | Developer guide for creating `<<Macro>>` extensions |
 | [TODO](TODO.md) | Milestones and roadmap |
 | [PRD: Infrastructure](docs/prd/001-infrastructure.md) | Infrastructure requirements |
-| [PRD: GraphWiki MVP](docs/prd/002-graphwiki-mvp.md) | Application requirements |
+| [PRD: MeshWiki MVP](docs/prd/002-meshwiki-mvp.md) | Application requirements |
 | [ADR-001: k3d Approach](docs/adr/001-k3d-terraform-approach.md) | k3d Terraform decision |
 | [Contributing](CONTRIBUTING.md) | Contributor guide |
 

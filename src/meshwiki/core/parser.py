@@ -90,7 +90,7 @@ def _parse_metatable_args(args_str: str) -> tuple[list, list[str]]:
     Returns:
         Tuple of (filter list, column names list).
     """
-    from graphwiki.core.graph import GRAPH_ENGINE_AVAILABLE
+    from meshwiki.core.graph import GRAPH_ENGINE_AVAILABLE
 
     if not GRAPH_ENGINE_AVAILABLE:
         return [], []
@@ -136,7 +136,7 @@ def _render_metatable(filters: list, columns: list[str]) -> str:
     Returns:
         HTML table string wrapped in a div.
     """
-    from graphwiki.core.graph import get_engine
+    from meshwiki.core.graph import get_engine
 
     engine = get_engine()
     if engine is None:
@@ -198,7 +198,7 @@ class MetaTablePreprocessor(Preprocessor):
 
     def run(self, lines: list[str]) -> list[str]:
         """Process lines, replacing MetaTable macros."""
-        from graphwiki.core.graph import GRAPH_ENGINE_AVAILABLE
+        from meshwiki.core.graph import GRAPH_ENGINE_AVAILABLE
 
         if not GRAPH_ENGINE_AVAILABLE:
             return lines

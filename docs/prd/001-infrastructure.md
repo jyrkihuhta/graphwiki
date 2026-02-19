@@ -20,7 +20,7 @@ Without this foundation, we risk building an application that's difficult to dep
 - Infrastructure as Code using Terraform
 - Rancher for cluster management (matching work environment)
 - Istio service mesh for traffic management and observability
-- Simple test application to validate the pipeline before building GraphWiki
+- Simple test application to validate the pipeline before building MeshWiki
 
 ## Non-Goals
 

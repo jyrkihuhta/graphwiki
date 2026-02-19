@@ -2,7 +2,7 @@
 name = "graph_core"
 version = "0.1.0"
 edition = "2021"
-description = "Rust graph engine for GraphWiki with PyO3 bindings"
+description = "Rust graph engine for MeshWiki with PyO3 bindings"
 license = "MIT"
 
 [lib]

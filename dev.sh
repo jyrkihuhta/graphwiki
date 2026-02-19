@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# GraphWiki local development startup script
+# MeshWiki local development startup script
 # Builds the Rust graph engine and starts the FastAPI server.
 #
 # Usage:
@@ -76,15 +76,15 @@ pip install -e "$SRC_DIR[dev]" --quiet
 
 # ── Ensure data directory exists ─────────────────────────────
 
-DATA_DIR="${GRAPHWIKI_DATA_DIR:-$SRC_DIR/data/pages}"
+DATA_DIR="${MESHWIKI_DATA_DIR:-$SRC_DIR/data/pages}"
 mkdir -p "$DATA_DIR"
 
 # ── Start the server ─────────────────────────────────────────
 
-echo "==> Starting GraphWiki at http://localhost:8000"
+echo "==> Starting MeshWiki at http://localhost:8000"
 echo "    Data directory: $DATA_DIR"
 echo "    Press Ctrl+C to stop"
 echo ""
 
 cd "$SRC_DIR"
-exec uvicorn graphwiki.main:app --reload --host 127.0.0.1 --port 8000
+exec uvicorn meshwiki.main:app --reload --host 127.0.0.1 --port 8000

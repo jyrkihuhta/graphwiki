@@ -1,10 +1,10 @@
 # Custom Macros Developer Guide
 
-GraphWiki's parser supports `<<MacroName(args)>>` macros that expand to HTML during Markdown rendering. This guide explains how the system works and how to add your own macros.
+MeshWiki's parser supports `<<MacroName(args)>>` macros that expand to HTML during Markdown rendering. This guide explains how the system works and how to add your own macros.
 
 ## Architecture Overview
 
-GraphWiki uses [Python-Markdown](https://python-markdown.github.io/) with a pipeline of extension points:
+MeshWiki uses [Python-Markdown](https://python-markdown.github.io/) with a pipeline of extension points:
 
 ```
 Raw Markdown lines
@@ -65,7 +65,7 @@ Returns an HTML string. Handles errors gracefully:
 
 ```python
 def _render_metatable(filters, columns) -> str:
-    from graphwiki.core.graph import get_engine
+    from meshwiki.core.graph import get_engine
 
     engine = get_engine()
     if engine is None:
@@ -139,7 +139,7 @@ PAGECOUNT_PATTERN = re.compile(r"<<PageCount>>")
 
 ```python
 def _render_pagecount() -> str:
-    from graphwiki.core.graph import get_engine
+    from meshwiki.core.graph import get_engine
 
     engine = get_engine()
     if engine is None:
@@ -203,7 +203,7 @@ For `<<PageList(tag=python)>>`, follow the same pattern but add argument parsing
 PAGELIST_PATTERN = re.compile(r"<<PageList\((.+?)\)>>", re.DOTALL)
 
 def _render_pagelist(args_str: str) -> str:
-    from graphwiki.core.graph import get_engine
+    from meshwiki.core.graph import get_engine
 
     engine = get_engine()
     if engine is None:
@@ -262,7 +262,7 @@ The graph engine is optional. Always use lazy imports and handle the missing cas
 
 ```python
 def _render_my_macro() -> str:
-    from graphwiki.core.graph import get_engine
+    from meshwiki.core.graph import get_engine
 
     engine = get_engine()
     if engine is None:
@@ -294,7 +294,7 @@ Filter.linked_from("PageName")
 Follow the existing test patterns in `tests/test_parser.py`:
 
 ```python
-from graphwiki.core.parser import parse_wiki_content
+from meshwiki.core.parser import parse_wiki_content
 
 class TestPageCountMacro:
     def test_renders_count(self):

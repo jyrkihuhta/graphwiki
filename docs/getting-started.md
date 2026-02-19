@@ -1,6 +1,6 @@
 # Getting Started
 
-This guide covers setting up GraphWiki for local development and deploying to Kubernetes.
+This guide covers setting up MeshWiki for local development and deploying to Kubernetes.
 
 ## Prerequisites
 
@@ -26,8 +26,8 @@ The `dev.sh` script builds the Rust graph engine, installs dependencies, and sta
 
 ```bash
 # Clone the repository
-git clone https://github.com/jyrkihuhta/graphwiki.git
-cd graphwiki
+git clone https://github.com/jyrkihuhta/meshwiki.git
+cd meshwiki
 
 # Build Rust engine + start server
 ./dev.sh
@@ -49,7 +49,7 @@ If you just want to work on the wiki without graph features (backlinks, MetaTabl
 ```bash
 cd src
 pip install -e .
-uvicorn graphwiki.main:app --reload
+uvicorn meshwiki.main:app --reload
 ```
 
 The app runs normally — graph features gracefully degrade to empty/unavailable.
@@ -82,7 +82,7 @@ source .venv/bin/activate
 python -m pytest tests/ -v
 
 # With coverage
-cd src && pytest --cov=graphwiki
+cd src && pytest --cov=meshwiki
 ```
 
 ## Full Kubernetes Deployment
@@ -132,7 +132,7 @@ export GITHUB_TOKEN=<your-token>
 # Bootstrap Flux
 flux bootstrap github \
   --owner=<your-github-username> \
-  --repository=graphwiki \
+  --repository=meshwiki \
   --branch=main \
   --path=deploy/flux \
   --personal
@@ -140,26 +140,26 @@ flux bootstrap github \
 
 Flux will now automatically deploy applications from `deploy/apps/`.
 
-### Step 4: Build and Deploy GraphWiki
+### Step 4: Build and Deploy MeshWiki
 
 ```bash
 # Build Docker image
 cd src
-docker build -t graphwiki:latest .
+docker build -t meshwiki:latest .
 
 # Import to k3d cluster
-k3d image import graphwiki:latest -c graphwiki
+k3d image import meshwiki:latest -c meshwiki
 
 # Restart deployment to pick up new image
-kubectl rollout restart deployment/graphwiki -n graphwiki
+kubectl rollout restart deployment/meshwiki -n meshwiki
 
 # Watch rollout
-kubectl rollout status deployment/graphwiki -n graphwiki
+kubectl rollout status deployment/meshwiki -n meshwiki
 ```
 
 ### Step 5: Verify
 
-- **GraphWiki:** http://wiki.localhost:8080
+- **MeshWiki:** http://wiki.localhost:8080
 - **Rancher:** https://rancher.localhost:8443
 - **Test App:** http://test.localhost:8080
 
@@ -167,35 +167,35 @@ kubectl rollout status deployment/graphwiki -n graphwiki
 
 ### Making Code Changes
 
-1. Edit code in `src/graphwiki/`
+1. Edit code in `src/meshwiki/`
 2. For local development: `./dev.sh --skip-build` (uvicorn auto-reloads)
 3. For Rust changes: `./dev.sh` (rebuilds engine and restarts)
 4. For k8s deployment:
 
 ```bash
 # Rebuild and redeploy
-cd src && docker build -t graphwiki:latest . && \
-k3d image import graphwiki:latest -c graphwiki && \
-kubectl rollout restart deployment/graphwiki -n graphwiki
+cd src && docker build -t meshwiki:latest . && \
+k3d image import meshwiki:latest -c meshwiki && \
+kubectl rollout restart deployment/meshwiki -n meshwiki
 ```
 
 ### Making Kubernetes Changes
 
-1. Edit manifests in `deploy/apps/graphwiki/`
+1. Edit manifests in `deploy/apps/meshwiki/`
 2. Commit and push to GitHub
 3. Flux automatically applies changes (within ~1 minute)
 
 Or apply manually:
 
 ```bash
-kubectl apply -k deploy/apps/graphwiki/
+kubectl apply -k deploy/apps/meshwiki/
 ```
 
 ### Viewing Logs
 
 ```bash
-# GraphWiki logs
-kubectl logs -f deployment/graphwiki -n graphwiki
+# MeshWiki logs
+kubectl logs -f deployment/meshwiki -n meshwiki
 
 # Istio ingress logs
 kubectl logs -f deployment/istio-ingress -n istio-ingress
@@ -207,14 +207,14 @@ kubectl logs -f deployment/source-controller -n flux-system
 ## Project Structure
 
 ```
-graphwiki/
+meshwiki/
 ├── dev.sh                      # Development startup script
 ├── graph-core/                 # Rust graph engine (petgraph + PyO3)
 │   ├── Cargo.toml
 │   ├── src/                    # Rust source
 │   └── tests/                  # PyO3 integration tests (70 tests)
 ├── src/
-│   ├── graphwiki/              # Python application
+│   ├── meshwiki/              # Python application
 │   │   ├── main.py             # FastAPI routes + WebSocket
 │   │   ├── core/               # Storage, parser, graph, WebSocket manager
 │   │   ├── templates/          # Jinja2 templates
@@ -230,7 +230,7 @@ graphwiki/
 ├── deploy/
 │   ├── flux/                   # Flux GitOps configuration
 │   └── apps/                   # Application manifests
-│       ├── graphwiki/          # GraphWiki k8s resources
+│       ├── meshwiki/          # MeshWiki k8s resources
 │       └── test-app/           # Test application
 ├── infra/local/                # Terraform (k3d + Istio + Rancher)
 └── data/pages/                 # Wiki content (gitignored)
@@ -245,7 +245,7 @@ graphwiki/
 docker ps
 
 # Delete and recreate cluster
-k3d cluster delete graphwiki
+k3d cluster delete meshwiki
 terraform apply
 ```
 
@@ -284,10 +284,10 @@ flux reconcile kustomization apps --with-source
 
 ```bash
 # Verify image is in k3d
-docker exec k3d-graphwiki-server-0 crictl images | grep graphwiki
+docker exec k3d-meshwiki-server-0 crictl images | grep meshwiki
 
 # Force pod recreation
-kubectl delete pod -l app=graphwiki -n graphwiki
+kubectl delete pod -l app=meshwiki -n meshwiki
 ```
 
 ### Rust Engine Build Fails
@@ -311,7 +311,7 @@ cd infra/local
 terraform destroy
 
 # Or just delete the cluster
-k3d cluster delete graphwiki
+k3d cluster delete meshwiki
 ```
 
 ## Next Steps

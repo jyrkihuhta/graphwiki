@@ -22,7 +22,7 @@ Infrastructure is complete:
 - [x] Istio ingress gateway
 - [x] Rancher management UI
 - [x] Flux GitOps deployment
-- [x] GraphWiki Kubernetes manifests
+- [x] MeshWiki Kubernetes manifests
 
 ## Architecture
 
@@ -41,14 +41,14 @@ Infrastructure is complete:
 ┌─────────────────────────────────────────────────────────────────┐
 │                  Istio Ingress Gateway                           │
 ├─────────────────────────────────────────────────────────────────┤
-│  wiki.localhost:8080  →  graphwiki service                       │
+│  wiki.localhost:8080  →  meshwiki service                       │
 │  rancher.localhost:8443  →  rancher service                      │
 └─────────────────────────┬───────────────────────────────────────┘
                           │
          ┌────────────────┼────────────────┐
          ▼                ▼                ▼
 ┌─────────────┐  ┌─────────────┐  ┌─────────────┐
-│  GraphWiki  │  │   Rancher   │  │  Test App   │
+│  MeshWiki  │  │   Rancher   │  │  Test App   │
 │   (Pod)     │  │   (Pods)    │  │   (Pod)     │
 └──────┬──────┘  └─────────────┘  └─────────────┘
        │
@@ -79,7 +79,7 @@ deploy/
 └── apps/
     ├── kustomization.yaml
     ├── test-app/
-    └── graphwiki/
+    └── meshwiki/
         ├── namespace.yaml
         ├── deployment.yaml
         ├── service.yaml
@@ -104,13 +104,13 @@ deploy/
 cd infra/local && terraform apply
 
 # Build and deploy
-cd src && docker build -t graphwiki:latest .
-k3d image import graphwiki:latest -c graphwiki
-kubectl rollout restart deployment/graphwiki -n graphwiki
+cd src && docker build -t meshwiki:latest .
+k3d image import meshwiki:latest -c meshwiki
+kubectl rollout restart deployment/meshwiki -n meshwiki
 
 # Check deployment
-kubectl get pods -n graphwiki
-kubectl logs -f deployment/graphwiki -n graphwiki
+kubectl get pods -n meshwiki
+kubectl logs -f deployment/meshwiki -n meshwiki
 
 # Flux (force sync)
 flux reconcile kustomization apps --with-source
@@ -120,7 +120,7 @@ flux reconcile kustomization apps --with-source
 
 | URL | Service |
 |-----|---------|
-| http://wiki.localhost:8080 | GraphWiki |
+| http://wiki.localhost:8080 | MeshWiki |
 | https://rancher.localhost:8443 | Rancher |
 | http://test.localhost:8080 | Test app |
 

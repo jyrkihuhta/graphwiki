@@ -2,8 +2,8 @@
 
 import pytest
 
-from graphwiki.core.models import PageMetadata
-from graphwiki.core.storage import FileStorage
+from meshwiki.core.models import PageMetadata
+from meshwiki.core.storage import FileStorage
 
 
 @pytest.fixture

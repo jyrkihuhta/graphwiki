@@ -45,7 +45,7 @@ MVP + editor + navigation complete:
 ## Architecture
 
 ```
-src/graphwiki/
+src/meshwiki/
 ├── main.py           # FastAPI routes + WebSocket endpoint
 ├── config.py         # Settings (pydantic-settings)
 ├── core/
@@ -141,10 +141,10 @@ Interactive D3.js force graph at `/graph` with WebSocket live updates.
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `GRAPHWIKI_DATA_DIR` | `data/pages` | Page storage directory |
-| `GRAPHWIKI_DEBUG` | `false` | Debug mode |
-| `GRAPHWIKI_APP_TITLE` | `GraphWiki` | Application title |
-| `GRAPHWIKI_GRAPH_WATCH` | `true` | Enable file watching for graph engine |
+| `MESHWIKI_DATA_DIR` | `data/pages` | Page storage directory |
+| `MESHWIKI_DEBUG` | `false` | Debug mode |
+| `MESHWIKI_APP_TITLE` | `MeshWiki` | Application title |
+| `MESHWIKI_GRAPH_WATCH` | `true` | Enable file watching for graph engine |
 
 ## Code Conventions
 

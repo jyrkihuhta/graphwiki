@@ -11,7 +11,7 @@ priority: high
 
 # Rust Graph Engine
 
-The `graph_core` crate provides high-performance graph operations for GraphWiki, compiled as a Python module via PyO3.
+The `graph_core` crate provides high-performance graph operations for MeshWiki, compiled as a Python module via PyO3.
 
 ## Architecture
 

@@ -5,12 +5,12 @@ import asyncio
 import pytest
 from unittest.mock import patch, MagicMock
 
-from graphwiki.core.graph import (
+from meshwiki.core.graph import (
     GRAPH_ENGINE_AVAILABLE,
     init_engine,
     shutdown_engine,
 )
-from graphwiki.core.ws_manager import ConnectionManager, _event_to_dict
+from meshwiki.core.ws_manager import ConnectionManager, _event_to_dict
 
 
 # ============================================================
@@ -128,7 +128,7 @@ class TestEventToDict:
     def test_page_event(self, wiki_dir):
         """Page events should serialize with type and page fields."""
         init_engine(wiki_dir, watch=True)
-        from graphwiki.core.graph import get_engine
+        from meshwiki.core.graph import get_engine
         import time
 
         engine = get_engine()
@@ -150,7 +150,7 @@ class TestEventToDict:
     def test_link_event(self, wiki_dir):
         """Link events should serialize with type, from, and to fields."""
         init_engine(wiki_dir, watch=True)
-        from graphwiki.core.graph import get_engine
+        from meshwiki.core.graph import get_engine
         import time
 
         engine = get_engine()
@@ -181,17 +181,17 @@ class TestGraphAPI:
         import os
         import importlib
 
-        os.environ["GRAPHWIKI_DATA_DIR"] = str(wiki_dir)
-        import graphwiki.config
-        importlib.reload(graphwiki.config)
-        import graphwiki.main
-        importlib.reload(graphwiki.main)
+        os.environ["MESHWIKI_DATA_DIR"] = str(wiki_dir)
+        import meshwiki.config
+        importlib.reload(meshwiki.config)
+        import meshwiki.main
+        importlib.reload(meshwiki.main)
 
         init_engine(wiki_dir, watch=False)
 
         from httpx import AsyncClient, ASGITransport
 
-        transport = ASGITransport(app=graphwiki.main.app)
+        transport = ASGITransport(app=meshwiki.main.app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             response = await client.get("/api/graph")
             assert response.status_code == 200
@@ -210,16 +210,16 @@ class TestGraphAPI:
         import os
         import importlib
 
-        os.environ["GRAPHWIKI_DATA_DIR"] = "/tmp/nonexistent"
-        import graphwiki.config
-        importlib.reload(graphwiki.config)
-        import graphwiki.main
-        importlib.reload(graphwiki.main)
+        os.environ["MESHWIKI_DATA_DIR"] = "/tmp/nonexistent"
+        import meshwiki.config
+        importlib.reload(meshwiki.config)
+        import meshwiki.main
+        importlib.reload(meshwiki.main)
 
-        with patch("graphwiki.main.get_engine", return_value=None):
+        with patch("meshwiki.main.get_engine", return_value=None):
             from httpx import AsyncClient, ASGITransport
 
-            transport = ASGITransport(app=graphwiki.main.app)
+            transport = ASGITransport(app=meshwiki.main.app)
             async with AsyncClient(transport=transport, base_url="http://test") as client:
                 response = await client.get("/api/graph")
                 assert response.status_code == 200
@@ -238,15 +238,15 @@ class TestGraphPage:
         import os
         import importlib
 
-        os.environ["GRAPHWIKI_DATA_DIR"] = "/tmp/nonexistent"
-        import graphwiki.config
-        importlib.reload(graphwiki.config)
-        import graphwiki.main
-        importlib.reload(graphwiki.main)
+        os.environ["MESHWIKI_DATA_DIR"] = "/tmp/nonexistent"
+        import meshwiki.config
+        importlib.reload(meshwiki.config)
+        import meshwiki.main
+        importlib.reload(meshwiki.main)
 
         from httpx import AsyncClient, ASGITransport
 
-        transport = ASGITransport(app=graphwiki.main.app)
+        transport = ASGITransport(app=meshwiki.main.app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             response = await client.get("/graph")
             assert response.status_code == 200
@@ -260,15 +260,15 @@ class TestGraphPage:
         import os
         import importlib
 
-        os.environ["GRAPHWIKI_DATA_DIR"] = "/tmp/nonexistent"
-        import graphwiki.config
-        importlib.reload(graphwiki.config)
-        import graphwiki.main
-        importlib.reload(graphwiki.main)
+        os.environ["MESHWIKI_DATA_DIR"] = "/tmp/nonexistent"
+        import meshwiki.config
+        importlib.reload(meshwiki.config)
+        import meshwiki.main
+        importlib.reload(meshwiki.main)
 
         from httpx import AsyncClient, ASGITransport
 
-        transport = ASGITransport(app=graphwiki.main.app)
+        transport = ASGITransport(app=meshwiki.main.app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             response = await client.get("/graph")
             assert response.status_code == 200

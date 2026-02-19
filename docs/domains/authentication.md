@@ -6,7 +6,7 @@
 
 ## Scope
 
-User authentication and authorization for GraphWiki:
+User authentication and authorization for MeshWiki:
 - User accounts and sessions
 - Login/logout flows
 - Protected routes
@@ -119,7 +119,7 @@ async def require_auth(request: Request):
 | Routes | Add `Depends(require_auth)` to protected endpoints |
 | Templates | Show login/logout in header, user info |
 | Storage | Need user storage backend |
-| Config | `GRAPHWIKI_AUTH_ENABLED`, `GRAPHWIKI_SECRET_KEY` |
+| Config | `MESHWIKI_AUTH_ENABLED`, `MESHWIKI_SECRET_KEY` |
 
 ## Security Considerations
 

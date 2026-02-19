@@ -9,7 +9,7 @@ author: admin
 
 # Getting Started
 
-Welcome to GraphWiki! This guide covers the basics of creating and navigating wiki pages.
+Welcome to MeshWiki! This guide covers the basics of creating and navigating wiki pages.
 
 ## Creating Pages
 

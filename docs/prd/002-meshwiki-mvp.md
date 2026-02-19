@@ -1,4 +1,4 @@
-# PRD: GraphWiki MVP
+# PRD: MeshWiki MVP
 
 **Status:** Complete
 **Date:** 2026-01-27
@@ -46,7 +46,7 @@ Build an MVP wiki platform with:
 ### Project Structure
 
 ```
-src/graphwiki/
+src/meshwiki/
 ├── __init__.py
 ├── main.py              # FastAPI app and routes
 ├── config.py            # Settings via pydantic-settings
@@ -109,14 +109,14 @@ Wiki links render with different styles for existing vs missing pages.
 
 ### Configuration
 
-Environment variables with `GRAPHWIKI_` prefix:
+Environment variables with `MESHWIKI_` prefix:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `GRAPHWIKI_DATA_DIR` | `data/pages` | Page storage directory |
-| `GRAPHWIKI_DEBUG` | `false` | Debug mode |
-| `GRAPHWIKI_APP_TITLE` | `GraphWiki` | Application title |
-| `GRAPHWIKI_GRAPH_WATCH` | `true` | Enable file watching for live graph updates |
+| `MESHWIKI_DATA_DIR` | `data/pages` | Page storage directory |
+| `MESHWIKI_DEBUG` | `false` | Debug mode |
+| `MESHWIKI_APP_TITLE` | `MeshWiki` | Application title |
+| `MESHWIKI_GRAPH_WATCH` | `true` | Enable file watching for live graph updates |
 
 ## Requirements
 
