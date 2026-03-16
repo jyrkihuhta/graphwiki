@@ -36,7 +36,7 @@ pub use watcher::{FileWatcher, WatcherHandle};
 ///
 /// This is the Python-facing page info struct that contains
 /// the page name, file path, and frontmatter metadata.
-#[pyclass]
+#[pyclass(from_py_object)]
 #[derive(Clone, Debug)]
 pub struct PageInfo {
     /// The page name (derived from filename without .md extension)

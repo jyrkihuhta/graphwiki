@@ -11,7 +11,7 @@ use std::sync::{Arc, Mutex};
 ///
 /// These events are produced by the file watcher and can be
 /// polled from Python for real-time UI updates.
-#[pyclass]
+#[pyclass(from_py_object)]
 #[derive(Clone, Debug, PartialEq)]
 pub enum GraphEvent {
     /// A new page was created (new .md file)
