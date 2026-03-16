@@ -96,7 +96,7 @@ pub fn matches_all_filters(page: &PageNode, filters: &[Filter], graph: &WikiGrap
 /// f5 = Filter.links_to("HomePage")
 /// f6 = Filter.linked_from("Index")
 /// ```
-#[pyclass(name = "Filter")]
+#[pyclass(name = "Filter", from_py_object)]
 #[derive(Clone)]
 pub struct PyFilter {
     pub(crate) inner: Filter,
@@ -226,7 +226,7 @@ impl PyFilter {
 }
 
 /// A row in a MetaTable result.
-#[pyclass]
+#[pyclass(from_py_object)]
 #[derive(Clone, Debug)]
 pub struct MetaTableRow {
     /// The page name (always included)
@@ -260,7 +260,7 @@ impl MetaTableRow {
 }
 
 /// Result of a metatable query.
-#[pyclass]
+#[pyclass(from_py_object)]
 #[derive(Clone, Debug)]
 pub struct MetaTableResult {
     /// The columns that were requested
