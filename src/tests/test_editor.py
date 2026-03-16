@@ -1,11 +1,9 @@
 """Tests for editor experience: preview endpoint, autocomplete, editor template."""
 
 import pytest
-
 from httpx import ASGITransport, AsyncClient
 
 import meshwiki.main
-from meshwiki.core.graph import init_engine, shutdown_engine
 
 
 @pytest.fixture(autouse=True)
@@ -44,25 +42,19 @@ class TestPreviewEndpoint:
 
     @pytest.mark.asyncio
     async def test_preview_with_wiki_link(self, client):
-        resp = await client.post(
-            "/api/preview", data={"content": "See [[TestPage]]"}
-        )
+        resp = await client.post("/api/preview", data={"content": "See [[TestPage]]"})
         assert resp.status_code == 200
         assert "wiki-link" in resp.text
 
     @pytest.mark.asyncio
     async def test_preview_with_bold(self, client):
-        resp = await client.post(
-            "/api/preview", data={"content": "**bold text**"}
-        )
+        resp = await client.post("/api/preview", data={"content": "**bold text**"})
         assert resp.status_code == 200
         assert "<strong>bold text</strong>" in resp.text
 
     @pytest.mark.asyncio
     async def test_preview_with_strikethrough(self, client):
-        resp = await client.post(
-            "/api/preview", data={"content": "~~deleted~~"}
-        )
+        resp = await client.post("/api/preview", data={"content": "~~deleted~~"})
         assert resp.status_code == 200
         assert "<del>deleted</del>" in resp.text
 

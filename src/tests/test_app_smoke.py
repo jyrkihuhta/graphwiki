@@ -6,7 +6,6 @@ and exercising all routes: create, read, update, delete, list, graph.
 
 import importlib
 import os
-from pathlib import Path
 
 import pytest
 import pytest_asyncio
@@ -23,8 +22,10 @@ def wiki_app(tmp_path):
     os.environ["MESHWIKI_DATA_DIR"] = str(tmp_path)
 
     import meshwiki.config
+
     importlib.reload(meshwiki.config)
     import meshwiki.main
+
     importlib.reload(meshwiki.main)
 
     yield meshwiki.main.app
@@ -222,9 +223,7 @@ class TestPageDelete:
     @pytest.mark.asyncio
     async def test_delete_existing_page(self, client_no_redirect):
         # Create first (follow redirect manually)
-        await client_no_redirect.post(
-            "/page/DeleteMe", data={"content": "bye"}
-        )
+        await client_no_redirect.post("/page/DeleteMe", data={"content": "bye"})
 
         resp = await client_no_redirect.post("/page/DeleteMe/delete")
         assert resp.status_code == 302

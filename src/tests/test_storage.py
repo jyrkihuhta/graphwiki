@@ -133,7 +133,7 @@ class TestCrudOperations:
     @pytest.mark.asyncio
     async def test_save_preserves_created(self, storage):
         page1 = await storage.save_page("TimePage", "# V1")
-        created = page1.metadata.created
+        _ = page1.metadata.created
 
         page2 = await storage.save_page("TimePage", "# V2")
         # created should stay the same since re-save preserves frontmatter
@@ -202,7 +202,7 @@ class TestCrudOperations:
 
     def test_init_creates_directory(self, tmp_path):
         new_dir = tmp_path / "subdir" / "deep"
-        storage = FileStorage(new_dir)
+        FileStorage(new_dir)
         assert new_dir.exists()
 
 
@@ -292,7 +292,9 @@ class TestListPagesWithMetadata:
 
     @pytest.mark.asyncio
     async def test_metadata_preserved(self, storage):
-        await storage.save_page("Tagged", "---\ntags:\n  - wiki\n  - python\n---\n\ncontent")
+        await storage.save_page(
+            "Tagged", "---\ntags:\n  - wiki\n  - python\n---\n\ncontent"
+        )
         pages = await storage.list_pages_with_metadata()
         assert len(pages) == 1
         assert "wiki" in pages[0].metadata.tags
@@ -304,7 +306,9 @@ class TestSearchByTag:
     async def test_filter_by_tag(self, storage):
         await storage.save_page("Page1", "---\ntags:\n  - python\n---\n\ncontent")
         await storage.save_page("Page2", "---\ntags:\n  - rust\n---\n\ncontent")
-        await storage.save_page("Page3", "---\ntags:\n  - python\n  - rust\n---\n\ncontent")
+        await storage.save_page(
+            "Page3", "---\ntags:\n  - python\n  - rust\n---\n\ncontent"
+        )
         results = await storage.search_by_tag("python")
         names = [p.name for p in results]
         assert "Page1" in names

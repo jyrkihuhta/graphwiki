@@ -242,9 +242,7 @@ class FileStorage(Storage):
             name = self._filename_to_name(path.name)
             raw = path.read_text(encoding="utf-8")
             metadata, body = self._parse_frontmatter(raw)
-            pages.append(
-                Page(name=name, content=body, metadata=metadata, exists=True)
-            )
+            pages.append(Page(name=name, content=body, metadata=metadata, exists=True))
         return sorted(pages, key=lambda p: p.name.lower())
 
     async def search_by_tag(self, tag: str) -> list[Page]:

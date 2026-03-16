@@ -7,7 +7,6 @@ from meshwiki.core.parser import (
     parse_wiki_content_with_toc,
 )
 
-
 # ============================================================
 # Strikethrough extension
 # ============================================================

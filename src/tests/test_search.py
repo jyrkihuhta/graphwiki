@@ -1,11 +1,9 @@
 """Tests for search, tags, TOC, breadcrumbs, and recent pages."""
 
 import pytest
-
 from httpx import ASGITransport, AsyncClient
 
 import meshwiki.main
-from meshwiki.core.graph import init_engine, shutdown_engine
 
 
 @pytest.fixture(autouse=True)
@@ -38,7 +36,9 @@ class TestSearchRoute:
 
     @pytest.mark.asyncio
     async def test_search_by_query(self, client):
-        await meshwiki.main.storage.save_page("Python Guide", "Learn Python programming")
+        await meshwiki.main.storage.save_page(
+            "Python Guide", "Learn Python programming"
+        )
         resp = await client.get("/search?q=Python")
         assert resp.status_code == 200
         assert "Python Guide" in resp.text
@@ -127,7 +127,7 @@ class TestTagsRoute:
             "Page1", "---\ntags:\n  - python\n---\n\ncontent"
         )
         resp = await client.get("/tags")
-        assert '/search?tag=python' in resp.text
+        assert "/search?tag=python" in resp.text
 
 
 # ============================================================
@@ -197,7 +197,7 @@ class TestClickableTags:
         )
         resp = await client.get("/page/TaggedPage")
         assert resp.status_code == 200
-        assert '/search?tag=python' in resp.text
+        assert "/search?tag=python" in resp.text
         assert "tag-link" in resp.text
 
 

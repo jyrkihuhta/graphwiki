@@ -9,7 +9,6 @@ from markdown.extensions import Extension
 from markdown.inlinepatterns import InlineProcessor, SimpleTagInlineProcessor
 from markdown.preprocessors import Preprocessor
 
-
 # Pattern for wiki links: [[PageName]] or [[PageName|Display Text]]
 WIKI_LINK_PATTERN = r"\[\[([^\]|]+)(?:\|([^\]]+))?\]\]"
 

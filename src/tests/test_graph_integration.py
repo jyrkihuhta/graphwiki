@@ -1,8 +1,9 @@
 """Tests for graph engine integration with the FastAPI application."""
 
-import pytest
 from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
+
+import pytest
 
 from meshwiki.core.graph import (
     GRAPH_ENGINE_AVAILABLE,
@@ -10,7 +11,6 @@ from meshwiki.core.graph import (
     init_engine,
     shutdown_engine,
 )
-
 
 # ============================================================
 # Fixtures
@@ -25,10 +25,7 @@ def wiki_dir(tmp_path):
             "---\nstatus: published\ntags:\n  - main\n---\n"
             "# Home\n\nWelcome to [[About]] and [[Contact]].\n"
         ),
-        "About.md": (
-            "---\nstatus: draft\n---\n"
-            "# About\n\nSee [[HomePage]].\n"
-        ),
+        "About.md": ("---\nstatus: draft\n---\n" "# About\n\nSee [[HomePage]].\n"),
         "Contact.md": "# Contact\n\nReturn to [[HomePage]].\n",
     }
     for name, content in pages.items():
@@ -63,18 +60,14 @@ class TestGraphModule:
         """Shutdown is a no-op when no engine is initialized."""
         shutdown_engine()  # Should not raise
 
-    @pytest.mark.skipif(
-        not GRAPH_ENGINE_AVAILABLE, reason="graph_core not installed"
-    )
+    @pytest.mark.skipif(not GRAPH_ENGINE_AVAILABLE, reason="graph_core not installed")
     def test_init_engine_with_files(self, wiki_dir):
         engine = init_engine(wiki_dir, watch=False)
         assert engine is not None
         assert get_engine() is engine
         assert engine.page_count() == 3
 
-    @pytest.mark.skipif(
-        not GRAPH_ENGINE_AVAILABLE, reason="graph_core not installed"
-    )
+    @pytest.mark.skipif(not GRAPH_ENGINE_AVAILABLE, reason="graph_core not installed")
     def test_init_engine_with_watching(self, wiki_dir):
         engine = init_engine(wiki_dir, watch=True)
         assert engine is not None
@@ -82,18 +75,14 @@ class TestGraphModule:
         shutdown_engine()
         assert get_engine() is None
 
-    @pytest.mark.skipif(
-        not GRAPH_ENGINE_AVAILABLE, reason="graph_core not installed"
-    )
+    @pytest.mark.skipif(not GRAPH_ENGINE_AVAILABLE, reason="graph_core not installed")
     def test_shutdown_stops_watching(self, wiki_dir):
         engine = init_engine(wiki_dir, watch=True)
         assert engine.is_watching()
         shutdown_engine()
         assert get_engine() is None
 
-    @pytest.mark.skipif(
-        not GRAPH_ENGINE_AVAILABLE, reason="graph_core not installed"
-    )
+    @pytest.mark.skipif(not GRAPH_ENGINE_AVAILABLE, reason="graph_core not installed")
     def test_init_engine_empty_dir(self, tmp_path):
         engine = init_engine(tmp_path, watch=False)
         assert engine is not None
@@ -106,22 +95,24 @@ class TestGraphModule:
 
 
 class TestBacklinksRoute:
-    @pytest.mark.skipif(
-        not GRAPH_ENGINE_AVAILABLE, reason="graph_core not installed"
-    )
+    @pytest.mark.skipif(not GRAPH_ENGINE_AVAILABLE, reason="graph_core not installed")
     @pytest.mark.asyncio
     async def test_view_page_with_backlinks(self, wiki_dir):
         """Backlinks should appear in the page view response."""
-        from httpx import AsyncClient, ASGITransport
         import os
+
+        from httpx import ASGITransport, AsyncClient
 
         os.environ["MESHWIKI_DATA_DIR"] = str(wiki_dir)
 
         # Re-import to pick up new settings
         import importlib
+
         import meshwiki.config
+
         importlib.reload(meshwiki.config)
         import meshwiki.main
+
         importlib.reload(meshwiki.main)
 
         # Manually init engine (ASGITransport doesn't trigger lifespan)
@@ -145,17 +136,22 @@ class TestBacklinksRoute:
         os.environ["MESHWIKI_DATA_DIR"] = str(wiki_dir)
 
         import importlib
+
         import meshwiki.config
+
         importlib.reload(meshwiki.config)
         import meshwiki.main
+
         importlib.reload(meshwiki.main)
 
         # Ensure no engine
         with patch("meshwiki.main.get_engine", return_value=None):
-            from httpx import AsyncClient, ASGITransport
+            from httpx import ASGITransport, AsyncClient
 
             transport = ASGITransport(app=meshwiki.main.app)
-            async with AsyncClient(transport=transport, base_url="http://test") as client:
+            async with AsyncClient(
+                transport=transport, base_url="http://test"
+            ) as client:
                 response = await client.get("/page/HomePage")
                 assert response.status_code == 200
                 assert "Pages linking here" not in response.text
@@ -167,21 +163,23 @@ class TestBacklinksRoute:
 
 
 class TestFrontmatterDisplay:
-    @pytest.mark.skipif(
-        not GRAPH_ENGINE_AVAILABLE, reason="graph_core not installed"
-    )
+    @pytest.mark.skipif(not GRAPH_ENGINE_AVAILABLE, reason="graph_core not installed")
     @pytest.mark.asyncio
     async def test_view_page_shows_frontmatter(self, wiki_dir):
         """Frontmatter metadata should appear in the page view."""
-        from httpx import AsyncClient, ASGITransport
         import os
+
+        from httpx import ASGITransport, AsyncClient
 
         os.environ["MESHWIKI_DATA_DIR"] = str(wiki_dir)
 
         import importlib
+
         import meshwiki.config
+
         importlib.reload(meshwiki.config)
         import meshwiki.main
+
         importlib.reload(meshwiki.main)
 
         init_engine(wiki_dir, watch=False)
@@ -195,14 +193,13 @@ class TestFrontmatterDisplay:
             assert "status" in body
             assert "published" in body
 
-    @pytest.mark.skipif(
-        not GRAPH_ENGINE_AVAILABLE, reason="graph_core not installed"
-    )
+    @pytest.mark.skipif(not GRAPH_ENGINE_AVAILABLE, reason="graph_core not installed")
     @pytest.mark.asyncio
     async def test_frontmatter_not_shown_when_empty(self, wiki_dir):
         """Pages without frontmatter should not show the panel."""
-        from httpx import AsyncClient, ASGITransport
         import os
+
+        from httpx import ASGITransport, AsyncClient
 
         # Create a page with no frontmatter
         (wiki_dir / "Plain.md").write_text("# Plain page\n\nNo metadata here.\n")
@@ -210,9 +207,12 @@ class TestFrontmatterDisplay:
         os.environ["MESHWIKI_DATA_DIR"] = str(wiki_dir)
 
         import importlib
+
         import meshwiki.config
+
         importlib.reload(meshwiki.config)
         import meshwiki.main
+
         importlib.reload(meshwiki.main)
 
         init_engine(wiki_dir, watch=False)
@@ -231,16 +231,21 @@ class TestFrontmatterDisplay:
         os.environ["MESHWIKI_DATA_DIR"] = str(wiki_dir)
 
         import importlib
+
         import meshwiki.config
+
         importlib.reload(meshwiki.config)
         import meshwiki.main
+
         importlib.reload(meshwiki.main)
 
         with patch("meshwiki.main.get_engine", return_value=None):
-            from httpx import AsyncClient, ASGITransport
+            from httpx import ASGITransport, AsyncClient
 
             transport = ASGITransport(app=meshwiki.main.app)
-            async with AsyncClient(transport=transport, base_url="http://test") as client:
+            async with AsyncClient(
+                transport=transport, base_url="http://test"
+            ) as client:
                 response = await client.get("/page/HomePage")
                 assert response.status_code == 200
                 assert "frontmatter-card" not in response.text
@@ -252,9 +257,7 @@ class TestFrontmatterDisplay:
 
 
 class TestMetaTableParser:
-    @pytest.mark.skipif(
-        not GRAPH_ENGINE_AVAILABLE, reason="graph_core not installed"
-    )
+    @pytest.mark.skipif(not GRAPH_ENGINE_AVAILABLE, reason="graph_core not installed")
     def test_parse_metatable_args_equals(self):
         from meshwiki.core.parser import _parse_metatable_args
 
@@ -262,9 +265,7 @@ class TestMetaTableParser:
         assert len(filters) == 1
         assert columns == ["name", "status"]
 
-    @pytest.mark.skipif(
-        not GRAPH_ENGINE_AVAILABLE, reason="graph_core not installed"
-    )
+    @pytest.mark.skipif(not GRAPH_ENGINE_AVAILABLE, reason="graph_core not installed")
     def test_parse_metatable_args_contains(self):
         from meshwiki.core.parser import _parse_metatable_args
 
@@ -272,9 +273,7 @@ class TestMetaTableParser:
         assert len(filters) == 1
         assert columns == ["name", "tags"]
 
-    @pytest.mark.skipif(
-        not GRAPH_ENGINE_AVAILABLE, reason="graph_core not installed"
-    )
+    @pytest.mark.skipif(not GRAPH_ENGINE_AVAILABLE, reason="graph_core not installed")
     def test_parse_metatable_args_matches(self):
         from meshwiki.core.parser import _parse_metatable_args
 
@@ -282,9 +281,7 @@ class TestMetaTableParser:
         assert len(filters) == 1
         assert columns == ["name"]
 
-    @pytest.mark.skipif(
-        not GRAPH_ENGINE_AVAILABLE, reason="graph_core not installed"
-    )
+    @pytest.mark.skipif(not GRAPH_ENGINE_AVAILABLE, reason="graph_core not installed")
     def test_parse_metatable_args_multiple_filters(self):
         from meshwiki.core.parser import _parse_metatable_args
 
@@ -294,9 +291,7 @@ class TestMetaTableParser:
         assert len(filters) == 2
         assert columns == ["name", "status", "tags"]
 
-    @pytest.mark.skipif(
-        not GRAPH_ENGINE_AVAILABLE, reason="graph_core not installed"
-    )
+    @pytest.mark.skipif(not GRAPH_ENGINE_AVAILABLE, reason="graph_core not installed")
     def test_parse_metatable_args_columns_only(self):
         from meshwiki.core.parser import _parse_metatable_args
 
@@ -304,32 +299,26 @@ class TestMetaTableParser:
         assert len(filters) == 0
         assert columns == ["name", "status"]
 
-    @pytest.mark.skipif(
-        not GRAPH_ENGINE_AVAILABLE, reason="graph_core not installed"
-    )
+    @pytest.mark.skipif(not GRAPH_ENGINE_AVAILABLE, reason="graph_core not installed")
     def test_metatable_renders_html_table(self, wiki_dir):
-        from meshwiki.core.parser import _render_metatable
         from graph_core import Filter
 
+        from meshwiki.core.parser import _render_metatable
+
         init_engine(wiki_dir, watch=False)
-        html = _render_metatable(
-            [Filter.equals("status", "draft")], ["name", "status"]
-        )
+        html = _render_metatable([Filter.equals("status", "draft")], ["name", "status"])
         assert "<table" in html
         assert "About" in html
         assert "draft" in html
 
-    @pytest.mark.skipif(
-        not GRAPH_ENGINE_AVAILABLE, reason="graph_core not installed"
-    )
+    @pytest.mark.skipif(not GRAPH_ENGINE_AVAILABLE, reason="graph_core not installed")
     def test_metatable_no_matches(self, wiki_dir):
-        from meshwiki.core.parser import _render_metatable
         from graph_core import Filter
 
+        from meshwiki.core.parser import _render_metatable
+
         init_engine(wiki_dir, watch=False)
-        html = _render_metatable(
-            [Filter.equals("status", "nonexistent")], ["name"]
-        )
+        html = _render_metatable([Filter.equals("status", "nonexistent")], ["name"])
         assert "No matching pages found" in html
 
     def test_metatable_without_engine(self):
@@ -339,9 +328,7 @@ class TestMetaTableParser:
         html = _render_metatable([], ["name"])
         assert "graph engine not available" in html
 
-    @pytest.mark.skipif(
-        not GRAPH_ENGINE_AVAILABLE, reason="graph_core not installed"
-    )
+    @pytest.mark.skipif(not GRAPH_ENGINE_AVAILABLE, reason="graph_core not installed")
     def test_metatable_name_column_links(self, wiki_dir):
         from meshwiki.core.parser import _render_metatable
 
@@ -351,9 +338,7 @@ class TestMetaTableParser:
         assert 'class="wiki-link"' in html
         assert 'href="/page/' in html
 
-    @pytest.mark.skipif(
-        not GRAPH_ENGINE_AVAILABLE, reason="graph_core not installed"
-    )
+    @pytest.mark.skipif(not GRAPH_ENGINE_AVAILABLE, reason="graph_core not installed")
     def test_metatable_macro_in_content(self, wiki_dir):
         from meshwiki.core.parser import parse_wiki_content
 
@@ -370,19 +355,21 @@ class TestMetaTableParser:
 
 
 class TestPageExistsSync:
-    @pytest.mark.skipif(
-        not GRAPH_ENGINE_AVAILABLE, reason="graph_core not installed"
-    )
+    @pytest.mark.skipif(not GRAPH_ENGINE_AVAILABLE, reason="graph_core not installed")
     def test_page_exists_via_engine(self, wiki_dir):
         init_engine(wiki_dir, watch=False)
 
         import os
+
         os.environ["MESHWIKI_DATA_DIR"] = str(wiki_dir)
 
         import importlib
+
         import meshwiki.config
+
         importlib.reload(meshwiki.config)
         import meshwiki.main
+
         importlib.reload(meshwiki.main)
 
         assert meshwiki.main.page_exists_sync("HomePage") is True
@@ -391,12 +378,16 @@ class TestPageExistsSync:
     def test_page_exists_filesystem_fallback(self, wiki_dir):
         """Without engine, falls back to filesystem check."""
         import os
+
         os.environ["MESHWIKI_DATA_DIR"] = str(wiki_dir)
 
         import importlib
+
         import meshwiki.config
+
         importlib.reload(meshwiki.config)
         import meshwiki.main
+
         importlib.reload(meshwiki.main)
 
         with patch("meshwiki.main.get_engine", return_value=None):

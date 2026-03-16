@@ -1,9 +1,9 @@
 """Tests for graph visualization (Milestone 6)."""
 
 import asyncio
+from unittest.mock import patch
 
 import pytest
-from unittest.mock import patch, MagicMock
 
 from meshwiki.core.graph import (
     GRAPH_ENGINE_AVAILABLE,
@@ -11,7 +11,6 @@ from meshwiki.core.graph import (
     shutdown_engine,
 )
 from meshwiki.core.ws_manager import ConnectionManager, _event_to_dict
-
 
 # ============================================================
 # Fixtures
@@ -26,10 +25,7 @@ def wiki_dir(tmp_path):
             "---\nstatus: published\ntags:\n  - main\n---\n"
             "# Home\n\nWelcome to [[About]] and [[Contact]].\n"
         ),
-        "About.md": (
-            "---\nstatus: draft\n---\n"
-            "# About\n\nSee [[HomePage]].\n"
-        ),
+        "About.md": ("---\nstatus: draft\n---\n" "# About\n\nSee [[HomePage]].\n"),
         "Contact.md": "# Contact\n\nReturn to [[HomePage]].\n",
     }
     for name, content in pages.items():
@@ -122,14 +118,13 @@ class TestConnectionManager:
 
 
 class TestEventToDict:
-    @pytest.mark.skipif(
-        not GRAPH_ENGINE_AVAILABLE, reason="graph_core not installed"
-    )
+    @pytest.mark.skipif(not GRAPH_ENGINE_AVAILABLE, reason="graph_core not installed")
     def test_page_event(self, wiki_dir):
         """Page events should serialize with type and page fields."""
         init_engine(wiki_dir, watch=True)
-        from meshwiki.core.graph import get_engine
         import time
+
+        from meshwiki.core.graph import get_engine
 
         engine = get_engine()
         # Create a new file to trigger a page_created event
@@ -144,14 +139,13 @@ class TestEventToDict:
             assert "page" in d
             assert "from" not in d
 
-    @pytest.mark.skipif(
-        not GRAPH_ENGINE_AVAILABLE, reason="graph_core not installed"
-    )
+    @pytest.mark.skipif(not GRAPH_ENGINE_AVAILABLE, reason="graph_core not installed")
     def test_link_event(self, wiki_dir):
         """Link events should serialize with type, from, and to fields."""
         init_engine(wiki_dir, watch=True)
-        from meshwiki.core.graph import get_engine
         import time
+
+        from meshwiki.core.graph import get_engine
 
         engine = get_engine()
         # Create a page with a link to trigger link_created event
@@ -173,23 +167,23 @@ class TestEventToDict:
 
 
 class TestGraphAPI:
-    @pytest.mark.skipif(
-        not GRAPH_ENGINE_AVAILABLE, reason="graph_core not installed"
-    )
+    @pytest.mark.skipif(not GRAPH_ENGINE_AVAILABLE, reason="graph_core not installed")
     @pytest.mark.asyncio
     async def test_api_graph_returns_nodes_and_links(self, wiki_dir):
-        import os
         import importlib
+        import os
 
         os.environ["MESHWIKI_DATA_DIR"] = str(wiki_dir)
         import meshwiki.config
+
         importlib.reload(meshwiki.config)
         import meshwiki.main
+
         importlib.reload(meshwiki.main)
 
         init_engine(wiki_dir, watch=False)
 
-        from httpx import AsyncClient, ASGITransport
+        from httpx import ASGITransport, AsyncClient
 
         transport = ASGITransport(app=meshwiki.main.app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
@@ -207,20 +201,24 @@ class TestGraphAPI:
 
     @pytest.mark.asyncio
     async def test_api_graph_without_engine(self):
-        import os
         import importlib
+        import os
 
         os.environ["MESHWIKI_DATA_DIR"] = "/tmp/nonexistent"
         import meshwiki.config
+
         importlib.reload(meshwiki.config)
         import meshwiki.main
+
         importlib.reload(meshwiki.main)
 
         with patch("meshwiki.main.get_engine", return_value=None):
-            from httpx import AsyncClient, ASGITransport
+            from httpx import ASGITransport, AsyncClient
 
             transport = ASGITransport(app=meshwiki.main.app)
-            async with AsyncClient(transport=transport, base_url="http://test") as client:
+            async with AsyncClient(
+                transport=transport, base_url="http://test"
+            ) as client:
                 response = await client.get("/api/graph")
                 assert response.status_code == 200
                 data = response.json()
@@ -235,16 +233,18 @@ class TestGraphAPI:
 class TestGraphPage:
     @pytest.mark.asyncio
     async def test_graph_page_renders(self):
-        import os
         import importlib
+        import os
 
         os.environ["MESHWIKI_DATA_DIR"] = "/tmp/nonexistent"
         import meshwiki.config
+
         importlib.reload(meshwiki.config)
         import meshwiki.main
+
         importlib.reload(meshwiki.main)
 
-        from httpx import AsyncClient, ASGITransport
+        from httpx import ASGITransport, AsyncClient
 
         transport = ASGITransport(app=meshwiki.main.app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
@@ -257,16 +257,18 @@ class TestGraphPage:
 
     @pytest.mark.asyncio
     async def test_nav_has_graph_link(self):
-        import os
         import importlib
+        import os
 
         os.environ["MESHWIKI_DATA_DIR"] = "/tmp/nonexistent"
         import meshwiki.config
+
         importlib.reload(meshwiki.config)
         import meshwiki.main
+
         importlib.reload(meshwiki.main)
 
-        from httpx import AsyncClient, ASGITransport
+        from httpx import ASGITransport, AsyncClient
 
         transport = ASGITransport(app=meshwiki.main.app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:

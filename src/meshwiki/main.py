@@ -5,17 +5,24 @@ from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
 
-from fastapi import FastAPI, Form, HTTPException, Request, WebSocket, WebSocketDisconnect
+from fastapi import (
+    FastAPI,
+    Form,
+    HTTPException,
+    Request,
+    WebSocket,
+    WebSocketDisconnect,
+)
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from meshwiki.config import settings
 from meshwiki.core.graph import get_engine, init_engine, shutdown_engine
-from meshwiki.core.ws_manager import manager
 from meshwiki.core.models import Page
 from meshwiki.core.parser import parse_wiki_content, parse_wiki_content_with_toc
 from meshwiki.core.storage import FileStorage
+from meshwiki.core.ws_manager import manager
 
 
 @asynccontextmanager
@@ -263,7 +270,12 @@ async def search_page(request: Request, q: str = "", tag: str = ""):
     if tag:
         pages = await storage.search_by_tag(tag)
         results = [
-            {"name": p.name, "title": p.title, "snippet": p.content[:150].replace("\n", " "), "match_type": "tag"}
+            {
+                "name": p.name,
+                "title": p.title,
+                "snippet": p.content[:150].replace("\n", " "),
+                "match_type": "tag",
+            }
             for p in pages
         ]
     elif q:

@@ -1,7 +1,6 @@
 """Tests for Milestone 9: Visual Polish & Responsiveness."""
 
 import pytest
-
 from httpx import ASGITransport, AsyncClient
 
 import meshwiki.main
@@ -144,7 +143,7 @@ class TestPageListMetadata:
         await meshwiki.main.storage.save_page("TagPage", content)
         resp = await client.get("/")
         assert "python" in resp.text
-        assert 'tag-link' in resp.text
+        assert "tag-link" in resp.text
 
     @pytest.mark.asyncio
     async def test_page_list_shows_modified_date(self, client):
