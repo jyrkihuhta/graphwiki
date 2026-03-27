@@ -59,12 +59,7 @@ def test_verify_password_wrong():
 
 
 def test_rate_limiter_lockout():
-    from meshwiki.auth import (
-        _login_attempts,
-        is_rate_limited,
-        record_failed_attempt,
-        reset_attempts,
-    )
+    from meshwiki.auth import is_rate_limited, record_failed_attempt, reset_attempts
 
     ip = "10.0.0.1"
     reset_attempts(ip)
