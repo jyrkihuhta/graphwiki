@@ -1,8 +1,10 @@
 """MeshWiki FastAPI application."""
 
 import json
+import re
+import time
 from contextlib import asynccontextmanager
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi import (
@@ -54,7 +56,10 @@ def timeago_filter(dt: datetime | None) -> str:
     """Convert datetime to relative time string."""
     if dt is None:
         return ""
-    now = datetime.now()
+    if dt.tzinfo is None:
+        now = datetime.now()
+    else:
+        now = datetime.now(timezone.utc)
     diff = now - dt
     seconds = diff.total_seconds()
     if seconds < 60:
@@ -245,6 +250,35 @@ async def api_preview(content: str = Form("")):
     return HTMLResponse(html)
 
 
+# Fields that cannot be edited inline
+_PROTECTED_FIELDS = {"created", "modified", "name"}
+_VALID_FIELD_RE = re.compile(r"^[a-zA-Z][a-zA-Z0-9_-]*$")
+
+
+@app.patch("/api/page/{name}/metadata")
+async def api_update_metadata(
+    name: str,
+    field: str = Form(...),
+    value: str = Form(""),
+):
+    """Update a single frontmatter field on a page."""
+    if "/" in name or "\\" in name or ".." in name:
+        raise HTTPException(status_code=400, detail="Invalid page name")
+    if not _VALID_FIELD_RE.match(field):
+        raise HTTPException(status_code=400, detail="Invalid field name")
+    if field in _PROTECTED_FIELDS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Field '{field}' cannot be edited inline",
+        )
+
+    page = await storage.update_frontmatter_field(name, field, value)
+    if page is None:
+        raise HTTPException(status_code=404, detail="Page not found")
+
+    return {"page": name, "field": field, "value": value, "success": True}
+
+
 @app.get("/api/autocomplete", response_class=HTMLResponse)
 async def api_autocomplete(request: Request, q: str = ""):
     """Return matching page names for wiki link autocomplete."""
@@ -350,3 +384,14 @@ async def ws_graph(websocket: WebSocket):
         pass
     finally:
         manager.disconnect(client_id)
+
+
+# ========== Health checks ==========
+
+_start_time = time.monotonic()
+
+
+@app.get("/health/live")
+async def health_live():
+    """Liveness probe — process is running."""
+    return {"status": "ok", "uptime_seconds": round(time.monotonic() - _start_time, 1)}
