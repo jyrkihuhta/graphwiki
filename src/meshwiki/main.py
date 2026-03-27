@@ -18,7 +18,15 @@ from fastapi import (
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from starlette.middleware.sessions import SessionMiddleware
 
+from meshwiki.auth import (
+    AuthMiddleware,
+    is_rate_limited,
+    record_failed_attempt,
+    reset_attempts,
+    verify_password,
+)
 from meshwiki.config import settings
 from meshwiki.core.graph import get_engine, init_engine, shutdown_engine
 from meshwiki.core.models import Page
@@ -50,6 +58,11 @@ static_path = Path(__file__).parent / "static"
 
 templates = Jinja2Templates(directory=str(templates_path))
 app.mount("/static", StaticFiles(directory=str(static_path)), name="static")
+
+# SessionMiddleware must be added last so it runs first (outermost)
+if settings.auth_enabled:
+    app.add_middleware(AuthMiddleware)
+app.add_middleware(SessionMiddleware, secret_key=settings.session_secret, https_only=False)
 
 
 def timeago_filter(dt: datetime | None) -> str:
@@ -389,6 +402,51 @@ async def ws_graph(websocket: WebSocket):
         pass
     finally:
         manager.disconnect(client_id)
+
+
+# ========== Auth ==========
+
+
+@app.get("/login", response_class=HTMLResponse)
+async def login_page(request: Request):
+    """Login page."""
+    if request.session.get("authenticated"):
+        return RedirectResponse(url="/", status_code=302)
+    return templates.TemplateResponse(request, "login.html", get_context())
+
+
+@app.post("/login")
+async def login(request: Request, password: str = Form("")):
+    """Verify password and create session."""
+    ip = request.client.host if request.client else "unknown"
+
+    if is_rate_limited(ip):
+        return templates.TemplateResponse(
+            request,
+            "login.html",
+            get_context(error="Too many failed attempts. Try again later."),
+            status_code=429,
+        )
+
+    if settings.auth_enabled and verify_password(password, settings.auth_password):
+        reset_attempts(ip)
+        request.session["authenticated"] = True
+        return RedirectResponse(url="/", status_code=302)
+
+    record_failed_attempt(ip)
+    return templates.TemplateResponse(
+        request,
+        "login.html",
+        get_context(error="Incorrect password."),
+        status_code=401,
+    )
+
+
+@app.post("/logout")
+async def logout(request: Request):
+    """Clear session and redirect to login."""
+    request.session.clear()
+    return RedirectResponse(url="/login", status_code=302)
 
 
 # ========== Health checks ==========
