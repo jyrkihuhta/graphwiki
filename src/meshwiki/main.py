@@ -84,10 +84,9 @@ storage = FileStorage(settings.data_dir)
 
 
 # Template context helper
-def get_context(request: Request, **kwargs) -> dict:
+def get_context(**kwargs) -> dict:
     """Create base context for templates."""
     return {
-        "request": request,
         "app_title": settings.app_title,
         **kwargs,
     }
@@ -118,8 +117,9 @@ async def index(request: Request):
         reverse=True,
     )[:10]
     return templates.TemplateResponse(
+        request,
         "page/list.html",
-        get_context(request, all_pages=all_pages, recent_pages=recent_pages),
+        get_context(all_pages=all_pages, recent_pages=recent_pages),
     )
 
 
@@ -152,9 +152,9 @@ async def view_page(request: Request, name: str):
             pass
 
     return templates.TemplateResponse(
+        request,
         "page/view.html",
         get_context(
-            request,
             page=page,
             html_content=html_content,
             toc_html=toc_html,
@@ -177,8 +177,9 @@ async def edit_page(request: Request, name: str):
         raw_content = await storage.get_raw_content(name) or ""
 
     return templates.TemplateResponse(
+        request,
         "page/edit.html",
-        get_context(request, page=page, raw_content=raw_content),
+        get_context(page=page, raw_content=raw_content),
     )
 
 
@@ -204,9 +205,9 @@ async def save_page(request: Request, name: str, content: str = Form("")):
             except Exception:
                 pass
         response = templates.TemplateResponse(
+            request,
             "page/view.html",
             get_context(
-                request,
                 page=page,
                 html_content=html_content,
                 backlinks=backlinks,
@@ -317,12 +318,14 @@ async def search_page(request: Request, q: str = "", tag: str = ""):
 
     if request.headers.get("HX-Request"):
         return templates.TemplateResponse(
+            request,
             "partials/search_results.html",
-            {"request": request, "results": results, "query": q, "tag": tag},
+            {"results": results, "query": q, "tag": tag},
         )
     return templates.TemplateResponse(
+        request,
         "search.html",
-        get_context(request, results=results, query=q, tag=tag),
+        get_context(results=results, query=q, tag=tag),
     )
 
 
@@ -336,8 +339,9 @@ async def tags_page(request: Request):
             tag_counts[tag] = tag_counts.get(tag, 0) + 1
     tags_sorted = sorted(tag_counts.items(), key=lambda x: x[0].lower())
     return templates.TemplateResponse(
+        request,
         "tags.html",
-        get_context(request, tags=tags_sorted),
+        get_context(tags=tags_sorted),
     )
 
 
@@ -348,8 +352,9 @@ async def tags_page(request: Request):
 async def graph_view(request: Request):
     """Graph visualization page."""
     return templates.TemplateResponse(
+        request,
         "graph.html",
-        get_context(request),
+        get_context(),
     )
 
 
