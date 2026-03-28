@@ -55,9 +55,6 @@
         <div class="main-column">
             <header class="header">
                 <a href="/" class="logo">{{ app_title }}</a>
-                {% if page_tree %}
-                <button type="button" class="sidebar-mobile-toggle" id="sidebar-mobile-toggle" aria-label="Toggle page tree">&#9776;</button>
-                {% endif %}
                 <button type="button" class="nav-toggle" aria-label="Toggle navigation">&#8801;</button>
                 <div class="header-search">
                     <input type="text" id="header-search-input" placeholder="Search..."
@@ -174,7 +171,6 @@
     (function(){
         var sidebar = document.getElementById('page-tree-sidebar');
         var toggle = document.getElementById('page-tree-toggle');
-        var mobileToggle = document.getElementById('sidebar-mobile-toggle');
         var overlay = document.getElementById('sidebar-overlay');
         if (!sidebar) return;
         var collapsed = localStorage.getItem('page-tree-collapsed') === 'true';
@@ -196,15 +192,6 @@
                 }
                 sidebar.classList.toggle('collapsed');
                 localStorage.setItem('page-tree-collapsed', sidebar.classList.contains('collapsed'));
-            });
-        }
-        if (mobileToggle) {
-            mobileToggle.addEventListener('click', function() {
-                if (sidebar.classList.contains('sidebar--open')) {
-                    closeSidebar();
-                } else {
-                    openSidebar();
-                }
             });
         }
         if (overlay) {
