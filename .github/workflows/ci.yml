@@ -240,6 +240,8 @@ jobs:
           ENDDEPLOY
 
       - name: Smoke tests
+        env:
+          VPS_DOMAIN: ${{ secrets.VPS_DOMAIN }}
         run: |
-          curl -sf --max-time 30 "https://wiki.penni.fi/health/live" > /dev/null
+          curl -sf --max-time 30 "https://${VPS_DOMAIN}/health/live" > /dev/null
           echo "Smoke tests passed"
