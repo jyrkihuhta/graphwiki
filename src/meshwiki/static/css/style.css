@@ -297,6 +297,12 @@ body {
     border-bottom: 2px solid var(--color-border);
 }
 
+.page-list-table th.page-list-tags-header {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+}
+
 .page-list-table td {
     padding: 0.5rem 0.75rem;
     border-bottom: 1px solid var(--color-border);
@@ -323,6 +329,12 @@ body {
 }
 
 .page-list-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+}
+
+.page-list-table th.page-list-tags-header {
     display: flex;
     flex-wrap: wrap;
     gap: 0.25rem;
