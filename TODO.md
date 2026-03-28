@@ -178,6 +178,42 @@ The current production setup is Docker Compose + Caddy on a single VPS — simpl
 - No control plane cost
 - Caddy handles HTTPS with zero config
 
+## CI/CD Improvements
+
+### Local PR Testing (Implemented)
+Run E2E tests locally against a PR branch before approving.
+
+```bash
+./scripts/test-pr.sh <PR_NUMBER>
+```
+
+**What it does:**
+1. Fetches the PR branch
+2. Spins up a local MeshWiki server
+3. Runs Playwright E2E tests against localhost
+4. Returns to original branch
+
+**Why it helps:** Catches CSS/layout bugs before they reach production.
+
+---
+
+### Remote Staging (Future)
+Deploy PR branches to a staging server for automated browser testing.
+
+**Approach:**
+1. Create a staging VPS (e.g., `staging.wiki.penni.fi`)
+2. Modify CI to deploy PR branches to staging on pull request
+3. Run E2E tests against staging before allowing merge
+4. Production deploy only happens after PR is merged to main
+
+**Files to create/modify:**
+- `deploy/vps/docker-compose.staging.yml` (new)
+- `deploy/vps/staging.Caddyfile` (new)
+- `.github/workflows/staging-deploy.yml` (new)
+- Update `ci.yml` to require staging E2E pass before merge
+
+---
+
 ## Notes
 
 - Start with in-memory graph, add persistence later

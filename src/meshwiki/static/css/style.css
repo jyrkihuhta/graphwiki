@@ -60,7 +60,6 @@ body {
 
 .layout--with-sidebar {
     flex-direction: row;
-    align-items: flex-start;
 }
 
 .layout--with-sidebar .main-column {
@@ -131,9 +130,6 @@ body {
     width: 260px;
     min-width: 260px;
     height: 100vh;
-    position: fixed;
-    top: 0;
-    left: 0;
     overflow-y: auto;
     border-right: 1px solid var(--color-border);
     background: var(--color-bg);
@@ -302,7 +298,7 @@ body {
 
 .page-list-table td {
     padding: 0.5rem 0.75rem;
-    border-bottom: 1px solid var(--color-border);
+    border-bottom: 2px solid var(--color-border);
     vertical-align: middle;
 }
 
@@ -323,12 +319,6 @@ body {
     font-size: 0.8125rem;
     color: var(--color-text-muted);
     white-space: nowrap;
-}
-
-.page-list-tags {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.25rem;
 }
 
 .tag--small {
@@ -1114,12 +1104,7 @@ body {
     color: var(--color-primary);
 }
 
-/* ========== Page Body (full-width view) ========== */
-.page > .page-body {
-    padding: 2rem 3rem;
-}
-
-/* ========== TOC Sidebar ========== */
+/* ========== TOC / Page Tree Sidebar ========== */
 .page--with-toc {
     display: grid;
     grid-template-columns: 220px 1fr;
@@ -1220,6 +1205,11 @@ body {
 
 .toc a:hover {
     color: var(--color-primary);
+}
+
+/* ========== Page Body (full-width view) ========== */
+.page > .page-body {
+    padding: 2rem 3rem;
 }
 
 /* ========== Clickable Tags ========== */
@@ -1513,6 +1503,24 @@ body {
         display: block;
     }
 
+/* TOC sidebar -> top accordion */
+    .page--with-toc {
+        grid-template-columns: 1fr;
+    }
+
+    .toc-sidebar {
+        position: static;
+        height: auto;
+        border-right: none;
+        border-bottom: 1px solid var(--color-border);
+        padding: 0.75rem 1rem;
+    }
+
+    /* Page body */
+    .page > .page-body,
+    .page--with-toc .page-body {
+        padding: 1rem;
+    }
     .header {
         flex-wrap: wrap;
         padding: 0.75rem 1rem;
@@ -1523,18 +1531,6 @@ body {
         display: block;
         order: 2;
         margin-left: auto;
-    }
-
-    .sidebar-mobile-toggle {
-        display: block;
-        background: none;
-        border: none;
-        font-size: 1.5rem;
-        cursor: pointer;
-        color: var(--color-text);
-        padding: 0.25rem;
-        line-height: 1;
-        order: 1;
     }
 
     .logo {
@@ -1572,22 +1568,8 @@ body {
         padding: 1rem;
     }
 
-    /* TOC sidebar -> top accordion */
-    .page--with-toc {
-        grid-template-columns: 1fr;
-    }
-
-    .toc-sidebar {
-        position: static;
-        height: auto;
-        border-right: none;
-        border-bottom: 1px solid var(--color-border);
-        padding: 0.75rem 1rem;
-    }
-
     /* Page body */
-    .page > .page-body,
-    .page--with-toc .page-body {
+    .page > .page-body {
         padding: 1rem;
     }
 

@@ -117,6 +117,23 @@ git rebase origin/main
 - This means you can commit freely without worrying about "perfect history"
 - Keep commits focused within a feature branch, but don't worry about rebasing to clean up commits before PR
 
+### Testing PRs Locally
+
+Before approving/merging a PR, test it locally to catch CSS/layout bugs that unit tests miss:
+
+```bash
+# Test PR #15 locally (fetches, checks out, runs E2E tests)
+./scripts/test-pr.sh 15
+
+# Or manually:
+git fetch origin pull/15/head:pr-15
+git checkout pr-15
+cd src && pytest e2e/ -v --browser chromium
+```
+
+This spins up a local MeshWiki server and runs Playwright E2E tests against it. If tests pass, the PR is safe to merge.
+
+**Why this matters:** CSS changes can look fine in unit tests but break the layout in a real browser. The E2E tests catch these issues before they reach production.
 ## Coding Standards
 
 ### Python

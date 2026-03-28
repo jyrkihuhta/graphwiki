@@ -1,7 +1,6 @@
 """Playwright E2E test fixtures for MeshWiki."""
 
 import os
-import signal
 import socket
 import subprocess
 import sys
@@ -80,19 +79,20 @@ def e2e_server(tmp_path_factory):
         ],
         cwd=str(Path(__file__).resolve().parent.parent),
         env=env,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
     )
 
     try:
         _wait_for_server(base_url)
         yield {"url": base_url, "data_dir": data_dir, "port": port}
     finally:
-        proc.send_signal(signal.SIGTERM)
+        proc.terminate()
         try:
             proc.wait(timeout=5)
         except subprocess.TimeoutExpired:
             proc.kill()
+            proc.wait()
 
 
 @pytest.fixture(scope="session")
