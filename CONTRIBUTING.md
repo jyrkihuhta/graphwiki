@@ -134,7 +134,6 @@ cd src && pytest e2e/ -v --browser chromium
 This spins up a local MeshWiki server and runs Playwright E2E tests against it. If tests pass, the PR is safe to merge.
 
 **Why this matters:** CSS changes can look fine in unit tests but break the layout in a real browser. The E2E tests catch these issues before they reach production.
-
 ## Coding Standards
 
 ### Python

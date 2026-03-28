@@ -1503,7 +1503,7 @@ body {
         display: block;
     }
 
-    /* TOC sidebar -> top accordion */
+/* TOC sidebar -> top accordion */
     .page--with-toc {
         grid-template-columns: 1fr;
     }
@@ -1521,7 +1521,6 @@ body {
     .page--with-toc .page-body {
         padding: 1rem;
     }
-
     .header {
         flex-wrap: wrap;
         padding: 0.75rem 1rem;
