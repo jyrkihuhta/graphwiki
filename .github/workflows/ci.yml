@@ -202,9 +202,10 @@ jobs:
         env:
           VPS_HOST: ${{ secrets.VPS_HOST }}
           VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_DOMAIN: ${{ secrets.VPS_DOMAIN }}
         run: |
           scp deploy/vps/docker-compose.prod.yml "${VPS_USER}@${VPS_HOST}:/opt/meshwiki/docker-compose.yml"
-          scp deploy/vps/Caddyfile "${VPS_USER}@${VPS_HOST}:/opt/meshwiki/Caddyfile"
+          envsubst '$VPS_DOMAIN' < deploy/vps/Caddyfile | ssh "${VPS_USER}@${VPS_HOST}" "cat > /opt/meshwiki/Caddyfile"
 
       - name: Deploy and health check
         env:
