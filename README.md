@@ -219,7 +219,7 @@ Environment variables with `MESHWIKI_` prefix:
 
 ## Self-Hosted Deployment
 
-MeshWiki runs at [wiki.penni.fi](https://wiki.penni.fi) using this setup. Deploy your own instance on any VPS:
+Deploy your own MeshWiki instance on any Linux VPS in a few minutes:
 
 ### Prerequisites
 
