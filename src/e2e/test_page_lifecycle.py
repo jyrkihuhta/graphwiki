@@ -52,9 +52,7 @@ class TestPageViewing:
         expect(page.locator("a.wiki-link-missing")).to_be_visible()
 
     def test_tags_displayed(self, page: Page, base_url: str, create_page):
-        name = create_page(
-            "Tagged", "---\ntags:\n  - python\n  - wiki\n---\n\ncontent"
-        )
+        name = create_page("Tagged", "---\ntags:\n  - python\n  - wiki\n---\n\ncontent")
         page.goto(f"{base_url}/page/{name}")
         expect(page.locator(".tag-link").first).to_be_visible()
 
