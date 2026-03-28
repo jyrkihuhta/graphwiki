@@ -178,6 +178,32 @@ The current production setup is Docker Compose + Caddy on a single VPS — simpl
 - No control plane cost
 - Caddy handles HTTPS with zero config
 
+## CI/CD Improvements (In Progress)
+
+### Staging Environment
+Deploy PR branches to a staging server for browser testing before merging to main.
+
+**Why:** CSS/layout bugs are hard to catch in unit tests. E2E tests run against production after deploy, so bugs affect real users.
+
+**Approach:**
+1. Create a staging VPS (e.g., `staging.wiki.penni.fi`)
+2. Modify CI to deploy PR branches to staging on pull request
+3. Run E2E tests against staging before allowing merge
+4. Production deploy only happens after PR is merged to main
+
+**Workflow:**
+```
+PR opened → Deploy to staging.wiki.penni.fi/pr-{number} → E2E tests on staging → Code review → Merge to main → Deploy to wiki.penni.fi
+```
+
+**Files to create/modify:**
+- `deploy/vps/docker-compose.staging.yml` (new)
+- `deploy/vps/staging.Caddyfile` (new)
+- `.github/workflows/staging-deploy.yml` (new)
+- Update `ci.yml` to require staging E2E pass before merge
+
+---
+
 ## Notes
 
 - Start with in-memory graph, add persistence later
