@@ -60,6 +60,12 @@ body {
 
 .layout--with-sidebar {
     flex-direction: row;
+    align-items: flex-start;
+}
+
+.layout--with-sidebar .main-column {
+    flex: 1;
+    min-width: 0;
 }
 
 .main-column {
@@ -124,22 +130,21 @@ body {
 .page-tree-sidebar {
     width: 260px;
     min-width: 260px;
-    height: calc(100vh - 60px);
-    position: sticky;
-    top: 60px;
+    height: 100vh;
+    position: fixed;
+    top: 0;
+    left: 0;
     overflow-y: auto;
     border-right: 1px solid var(--color-border);
     background: var(--color-bg);
     display: flex;
     flex-direction: column;
-    transition: width 0.2s ease, min-width 0.2s ease, margin-left 0.2s ease;
+    transition: transform 0.2s ease;
+    z-index: 100;
 }
 
 .page-tree-sidebar.collapsed {
-    width: 0;
-    min-width: 0;
-    overflow: hidden;
-    margin-left: -1px;
+    transform: translateX(-100%);
 }
 
 .page-tree-header {
@@ -151,7 +156,8 @@ body {
     position: sticky;
     top: 0;
     background: var(--color-bg);
-    z-index: 1;
+    z-index: 2;
+    flex-shrink: 0;
 }
 
 .page-tree-title {
@@ -1466,6 +1472,43 @@ body {
 
 /* ========== Responsive: Tablet / Mobile ========== */
 @media (max-width: 768px) {
+    .layout--with-sidebar {
+        flex-direction: column;
+    }
+
+    .layout--with-sidebar .main-column {
+        width: 100%;
+    }
+
+    .page-tree-sidebar {
+        transform: translateX(-100%);
+        box-shadow: none;
+    }
+
+    .page-tree-sidebar.sidebar--open {
+        transform: translateX(0);
+        box-shadow: 2px 0 8px var(--color-shadow);
+    }
+
+    .sidebar-overlay {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.5);
+        z-index: 99;
+    }
+
+    .sidebar-overlay.sidebar-overlay--visible {
+        display: block;
+    }
+
+    .page-tree-sidebar.collapsed {
+        transform: translateX(-100%);
+    }
+
     .header {
         flex-wrap: wrap;
         padding: 0.75rem 1rem;
@@ -1476,6 +1519,18 @@ body {
         display: block;
         order: 2;
         margin-left: auto;
+    }
+
+    .sidebar-mobile-toggle {
+        display: block;
+        background: none;
+        border: none;
+        font-size: 1.5rem;
+        cursor: pointer;
+        color: var(--color-text);
+        padding: 0.25rem;
+        line-height: 1;
+        order: 1;
     }
 
     .logo {
