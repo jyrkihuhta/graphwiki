@@ -5,9 +5,9 @@
 MeshWiki is a modern wiki platform inspired by MoinMoin, Graphingwiki, and Obsidian. It combines:
 - File-based Markdown storage
 - Wiki links (`[[PageName]]` syntax)
-- Kubernetes-native deployment with GitOps
+- VPS deployment via Docker Compose + Caddy (auto-HTTPS)
 
-**Tech Stack:** FastAPI, Jinja2, HTMX, Python 3.12+, Rust (graph engine), k3d, Istio, Rancher, Flux
+**Tech Stack:** FastAPI, Jinja2, HTMX, Python 3.12+, Rust (graph engine), Docker Compose, Caddy
 
 ## Key Documentation
 
@@ -65,6 +65,7 @@ infra/local/            # Terraform for local k8s
   istio.tf              # Istio service mesh
   rancher.tf            # Rancher installation
 
+deploy/vps/             # VPS deployment (Docker Compose + Caddy)
 deploy/apps/meshwiki/  # K8s manifests (Flux deploys these)
 deploy/flux/            # Flux GitOps configuration
 ```

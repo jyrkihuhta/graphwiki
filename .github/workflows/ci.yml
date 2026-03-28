@@ -203,8 +203,8 @@ jobs:
           VPS_HOST: ${{ secrets.VPS_HOST }}
           VPS_USER: ${{ secrets.VPS_USER }}
         run: |
-          scp docker-compose.prod.yml "${VPS_USER}@${VPS_HOST}:/opt/meshwiki/docker-compose.yml"
-          scp Caddyfile "${VPS_USER}@${VPS_HOST}:/opt/meshwiki/Caddyfile"
+          scp deploy/vps/docker-compose.prod.yml "${VPS_USER}@${VPS_HOST}:/opt/meshwiki/docker-compose.yml"
+          scp deploy/vps/Caddyfile "${VPS_USER}@${VPS_HOST}:/opt/meshwiki/Caddyfile"
 
       - name: Deploy and health check
         env:

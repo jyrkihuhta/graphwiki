@@ -21,7 +21,7 @@ A modern, self-hosted wiki platform inspired by [MoinMoin](https://moinmo.in/), 
 - **Toast notifications** - Save/delete feedback with auto-dismiss animations
 - **HTMX interactions** - Snappy server-rendered UI without heavy JavaScript
 - **CI pipeline** - GitHub Actions running both Python and Rust test suites with coverage enforcement
-- **Kubernetes-native** - Deployed via GitOps with Flux, Istio ingress, and Rancher management
+- **Easy self-hosting** - Docker Compose + Caddy on any VPS, with automatic HTTPS and CI/CD
 
 ## Quick Start
 
@@ -176,7 +176,11 @@ meshwiki/
 │   ├── adr/                    # Architecture decision records
 │   ├── domains/                # Domain-specific design docs
 │   └── research/               # Background research
-├── deploy/                     # Kubernetes deployment
+├── deploy/
+│   ├── vps/                    # VPS deployment (Docker Compose + Caddy)
+│   │   ├── docker-compose.prod.yml
+│   │   ├── Caddyfile
+│   │   └── .env.example
 │   ├── apps/meshwiki/         # K8s manifests (Deployment, Service, VirtualService)
 │   └── flux/                   # Flux GitOps configuration
 ├── infra/local/                # Terraform for local k3d cluster
@@ -196,6 +200,9 @@ Environment variables with `MESHWIKI_` prefix:
 | `MESHWIKI_DEBUG` | `false` | Debug mode |
 | `MESHWIKI_APP_TITLE` | `MeshWiki` | Application title in header |
 | `MESHWIKI_GRAPH_WATCH` | `true` | Enable file watcher for live graph updates |
+| `MESHWIKI_AUTH_ENABLED` | `false` | Enable password authentication |
+| `MESHWIKI_AUTH_PASSWORD` | | Login password (required if auth enabled) |
+| `MESHWIKI_SESSION_SECRET` | `dev-secret-...` | Session signing key (change in production) |
 
 ## Tech Stack
 
@@ -207,22 +214,52 @@ Environment variables with `MESHWIKI_` prefix:
 | Visualization | D3.js | Interactive force-directed graph |
 | Real-time | WebSocket + asyncio | Live graph updates |
 | Storage | Markdown files + YAML frontmatter | Plain-text, git-friendly |
-| Infrastructure | k3d + Istio + Rancher + Flux | Kubernetes-native GitOps deployment |
+| Infrastructure | Docker Compose + Caddy | Self-hosted VPS with automatic HTTPS |
 | IaC | Terraform | Local cluster provisioning |
 
-## Kubernetes Deployment
+## Self-Hosted Deployment
 
-For deploying to a local k3d cluster with Istio and Flux GitOps, see the [Getting Started](docs/getting-started.md) guide.
+MeshWiki runs at [wiki.penni.fi](https://wiki.penni.fi) using this setup. Deploy your own instance on any VPS:
 
-```bash
-# Quick overview
-cd infra/local && terraform apply     # Create k3d cluster + Istio + Rancher
-docker build -t meshwiki:latest .    # Build from repo root (multi-stage with Rust)
-k3d image import meshwiki:latest -c meshwiki
-kubectl rollout restart deployment/meshwiki -n meshwiki
-```
+### Prerequisites
 
-Access at **http://wiki.localhost:8080** (requires `/etc/hosts` entry).
+- A Linux VPS with Docker and Docker Compose installed
+- A domain name with DNS A record pointing to your VPS IP
+
+### Setup
+
+1. **Clone and configure:**
+
+   ```bash
+   git clone https://github.com/jyrkihuhta/meshwiki.git
+   cd meshwiki
+   sudo mkdir -p /opt/meshwiki/data/pages
+   cp deploy/vps/.env.example /opt/meshwiki/.env
+   # Edit /opt/meshwiki/.env — set MESHWIKI_AUTH_PASSWORD and MESHWIKI_SESSION_SECRET
+   ```
+
+2. **Edit `deploy/vps/Caddyfile`** — replace `wiki.penni.fi` with your domain.
+
+3. **Copy files and start:**
+
+   ```bash
+   cp deploy/vps/docker-compose.prod.yml /opt/meshwiki/docker-compose.yml
+   cp deploy/vps/Caddyfile /opt/meshwiki/Caddyfile
+   cd /opt/meshwiki
+   docker compose up -d
+   ```
+
+Caddy automatically provisions HTTPS certificates via Let's Encrypt. Your wiki is live at `https://yourdomain.example`.
+
+Open ports 80 and 443 in your firewall.
+
+### CI/CD (optional)
+
+The included GitHub Actions pipeline (`.github/workflows/ci.yml`) builds a multi-arch Docker image (amd64 + arm64), pushes to GHCR, and deploys to your VPS via SSH — with health checks and automatic rollback on failure. Add these GitHub environment secrets: `VPS_HOST`, `VPS_USER`, `VPS_SSH_KEY`.
+
+### Kubernetes (alternative)
+
+For local development with k3d, Istio, and Flux GitOps, see the [Getting Started](docs/getting-started.md) guide.
 
 ## Documentation
 
@@ -241,13 +278,11 @@ Access at **http://wiki.localhost:8080** (requires `/etc/hosts` entry).
 
 | Milestones | Description | Status |
 |------------|-------------|--------|
-| 1–6 | Infrastructure, Wiki MVP, Graph Engine, Visualization | ✅ Complete |
-| 7–8 | Editor Experience, Navigation & Discovery | ✅ Complete |
-| 9 | Visual Polish & Responsiveness | ✅ Complete |
-| 10–11 | Graph Enhancements, Macros | Planned |
-| 12–13 | Authentication, Observability | Planned |
+| 1–9 | Infrastructure, Wiki MVP, Graph Engine, Editor, Navigation, Polish | ✅ Complete |
+| M0 | Hardened CI/CD, VPS deployment, auth, structured logging, metrics | ✅ Complete |
+| 10–13 | Graph Enhancements, Macros, Auth improvements, Observability | Planned |
 
-**319 tests** (200 unit + 49 E2E + 70 Rust), CI active. See [TODO.md](TODO.md) for the full roadmap.
+**289 tests** (219 unit + 70 Rust), CI active. See [TODO.md](TODO.md) for the full roadmap.
 
 ## License
 
