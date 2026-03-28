@@ -267,7 +267,9 @@ async def index(request: Request):
     return templates.TemplateResponse(
         request,
         "page/list.html",
-        get_context(all_pages=all_pages, recent_pages=recent_pages, page_tree=page_tree),
+        get_context(
+            all_pages=all_pages, recent_pages=recent_pages, page_tree=page_tree
+        ),
     )
 
 
@@ -287,7 +289,9 @@ async def edit_page(request: Request, name: str):
     return templates.TemplateResponse(
         request,
         "page/edit.html",
-        get_context(page=page, raw_content=raw_content, page_tree=await get_page_tree()),
+        get_context(
+            page=page, raw_content=raw_content, page_tree=await get_page_tree()
+        ),
     )
 
 
@@ -561,7 +565,9 @@ async def login_page(request: Request):
     """Login page."""
     if request.session.get("authenticated"):
         return RedirectResponse(url="/", status_code=302)
-    return templates.TemplateResponse(request, "login.html", get_context(page_tree=await get_page_tree()))
+    return templates.TemplateResponse(
+        request, "login.html", get_context(page_tree=await get_page_tree())
+    )
 
 
 @app.post("/login")
