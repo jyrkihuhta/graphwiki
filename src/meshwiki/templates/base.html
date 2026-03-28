@@ -14,6 +14,7 @@
 <body>
     <div class="layout{% if page_tree %} layout--with-sidebar{% endif %}">
         {% if page_tree %}
+        <div class="sidebar-overlay" id="sidebar-overlay"></div>
         <aside class="page-tree-sidebar" id="page-tree-sidebar">
             <div class="page-tree-header">
                 <span class="page-tree-title">Pages</span>
@@ -54,6 +55,9 @@
         <div class="main-column">
             <header class="header">
                 <a href="/" class="logo">{{ app_title }}</a>
+                {% if page_tree %}
+                <button type="button" class="sidebar-mobile-toggle" id="sidebar-mobile-toggle" aria-label="Toggle page tree">&#9776;</button>
+                {% endif %}
                 <button type="button" class="nav-toggle" aria-label="Toggle navigation">&#8801;</button>
                 <div class="header-search">
                     <input type="text" id="header-search-input" placeholder="Search..."
@@ -170,13 +174,42 @@
     (function(){
         var sidebar = document.getElementById('page-tree-sidebar');
         var toggle = document.getElementById('page-tree-toggle');
-        if (!sidebar || !toggle) return;
+        var mobileToggle = document.getElementById('sidebar-mobile-toggle');
+        var overlay = document.getElementById('sidebar-overlay');
+        if (!sidebar) return;
         var collapsed = localStorage.getItem('page-tree-collapsed') === 'true';
         if (collapsed) sidebar.classList.add('collapsed');
-        toggle.addEventListener('click', function() {
-            sidebar.classList.toggle('collapsed');
-            localStorage.setItem('page-tree-collapsed', sidebar.classList.contains('collapsed'));
-        });
+        function closeSidebar() {
+            sidebar.classList.remove('sidebar--open');
+            if (overlay) overlay.classList.remove('sidebar-overlay--visible');
+        }
+        function openSidebar() {
+            sidebar.classList.add('sidebar--open');
+            if (overlay) overlay.classList.add('sidebar-overlay--visible');
+        }
+        if (toggle) {
+            toggle.addEventListener('click', function() {
+                if (sidebar.classList.contains('sidebar--open')) {
+                    closeSidebar();
+                } else {
+                    openSidebar();
+                }
+                sidebar.classList.toggle('collapsed');
+                localStorage.setItem('page-tree-collapsed', sidebar.classList.contains('collapsed'));
+            });
+        }
+        if (mobileToggle) {
+            mobileToggle.addEventListener('click', function() {
+                if (sidebar.classList.contains('sidebar--open')) {
+                    closeSidebar();
+                } else {
+                    openSidebar();
+                }
+            });
+        }
+        if (overlay) {
+            overlay.addEventListener('click', closeSidebar);
+        }
         // Highlight current page
         var currentPath = window.location.pathname.replace('/page/', '/');
         var links = sidebar.querySelectorAll('.page-tree-link');
