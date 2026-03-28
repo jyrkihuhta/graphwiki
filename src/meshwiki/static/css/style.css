@@ -1116,109 +1116,6 @@ body {
     padding: 2rem 3rem;
 }
 
-/* ========== TOC Sidebar ========== */
-.page--with-toc {
-    display: grid;
-    grid-template-columns: 220px 1fr;
-    gap: 0;
-    min-height: calc(100vh - 120px);
-    transition: grid-template-columns 0.2s ease;
-}
-
-.page--with-toc .page-body {
-    padding: 2rem 3rem;
-}
-
-.page--toc-collapsed {
-    grid-template-columns: 44px 1fr;
-}
-
-.toc-sidebar {
-    position: sticky;
-    top: 0;
-    align-self: start;
-    height: calc(100vh - 60px);
-    overflow-y: auto;
-    border-right: 1px solid var(--color-border);
-    padding: 1.25rem 1rem 1.25rem 1.25rem;
-    background: var(--color-bg);
-    transition: padding 0.2s ease;
-}
-
-.page--toc-collapsed .toc-sidebar {
-    padding: 1.25rem 0.625rem;
-    overflow: hidden;
-}
-
-.page--toc-collapsed .toc-details summary {
-    white-space: nowrap;
-    overflow: hidden;
-    font-size: 0;
-}
-
-.page--toc-collapsed .toc-details summary::before {
-    font-size: 0.75rem;
-}
-
-.toc-details summary {
-    font-size: 0.875rem;
-    font-weight: 600;
-    color: var(--color-text-muted);
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    cursor: pointer;
-    user-select: none;
-    padding: 0.25rem 0;
-    list-style: none;
-}
-
-.toc-details summary::-webkit-details-marker {
-    display: none;
-}
-
-.toc-details summary::before {
-    content: "\25BC";
-    display: inline-block;
-    font-size: 0.625rem;
-    margin-right: 0.375rem;
-    transition: transform 0.15s;
-}
-
-.toc-details[open] summary::before {
-    content: "\25B6";
-}
-
-.toc-details summary:hover {
-    color: var(--color-primary);
-}
-
-.toc-details .toc {
-    margin-top: 0.5rem;
-}
-
-.toc ul {
-    list-style: none;
-    padding-left: 0;
-    font-size: 0.8125rem;
-}
-
-.toc ul ul {
-    padding-left: 0.75rem;
-}
-
-.toc li {
-    padding: 0.125rem 0;
-}
-
-.toc a {
-    color: var(--color-text-muted);
-    text-decoration: none;
-}
-
-.toc a:hover {
-    color: var(--color-primary);
-}
-
 /* ========== Clickable Tags ========== */
 .tag-link {
     text-decoration: none;
@@ -1569,22 +1466,8 @@ body {
         padding: 1rem;
     }
 
-    /* TOC sidebar -> top accordion */
-    .page--with-toc {
-        grid-template-columns: 1fr;
-    }
-
-    .toc-sidebar {
-        position: static;
-        height: auto;
-        border-right: none;
-        border-bottom: 1px solid var(--color-border);
-        padding: 0.75rem 1rem;
-    }
-
     /* Page body */
-    .page > .page-body,
-    .page--with-toc .page-body {
+    .page > .page-body {
         padding: 1rem;
     }
 
