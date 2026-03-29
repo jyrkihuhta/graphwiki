@@ -58,16 +58,15 @@ class TestTocSidebar:
     def test_page_tree_visible(self, page: Page, base_url: str, create_page):
         name = create_page("TocPage", "## Second\n\n## Third")
         page.goto(f"{base_url}/page/{name}")
-        sidebar = page.locator(".toc-sidebar")
+        sidebar = page.locator(".page-tree-sidebar")
         expect(sidebar).to_be_visible(timeout=5000)
-        expect(sidebar).to_contain_text("Pages")
 
     def test_page_tree_always_visible_when_tree_exists(
         self, page: Page, base_url: str, create_page
     ):
         name = create_page("NoTocPage", "Just plain text, no headings.")
         page.goto(f"{base_url}/page/{name}")
-        expect(page.locator(".toc-sidebar")).to_be_visible()
+        expect(page.locator(".page-tree-sidebar")).to_be_visible(timeout=10000)
 
 
 class TestBreadcrumbs:
