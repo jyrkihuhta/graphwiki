@@ -29,12 +29,10 @@ jobs:
           PYO3_USE_ABI3_FORWARD_COMPATIBILITY=1 maturin develop
 
       - name: Install Python dependencies
-        run: pip install -e "src[dev]"
+        run: pip install -e ".[dev]"
 
       - name: Run tests with coverage
-        run: |
-          cd src
-          pytest tests/ -v --cov=meshwiki --cov-report=term-missing --cov-fail-under=80
+        run: pytest tests/ -v --cov=meshwiki --cov-report=term-missing --cov-fail-under=80
 
   test-rust:
     name: Rust engine tests
