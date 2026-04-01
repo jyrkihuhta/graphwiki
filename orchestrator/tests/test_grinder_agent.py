@@ -13,6 +13,7 @@ from factory.agents.grinder_agent import (
     GRINDER_TOOLS,
     GrinderToolExecutor,
     grind_subtask,
+    grind_subtask_e2b,
 )
 from factory.state import FactoryState, SubTask
 
@@ -466,3 +467,196 @@ def test_grinder_tools_list() -> None:
         "meshwiki_update_task",
     }
     assert names == expected
+
+
+# ---------------------------------------------------------------------------
+# grind_subtask: E2B routing and integration tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_grind_subtask_routes_to_e2b() -> None:
+    """grind_subtask calls grind_subtask_e2b when grinder_provider == 'e2b'."""
+    state = _make_state()
+    subtask = _make_subtask()
+    meshwiki_client = AsyncMock()
+
+    mock_settings = MagicMock(
+        grinder_provider="e2b",
+        grinder_model="MiniMax-M2.7",
+        e2b_api_key="e2b-test",
+        github_token="ghp_test",
+        github_repo="owner/repo",
+        minimax_api_key="mm-test",
+    )
+
+    expected_result = _make_subtask(
+        status="review", pr_url="https://github.com/owner/repo/pull/1"
+    )
+
+    with patch(
+        "factory.agents.grinder_agent.get_settings",
+        return_value=mock_settings,
+    ):
+        with patch(
+            "factory.agents.grinder_agent.grind_subtask_e2b",
+            new=AsyncMock(return_value=expected_result),
+        ) as mock_e2b:
+            result = await grind_subtask(state, subtask, meshwiki_client)
+
+    mock_e2b.assert_called_once_with(state, subtask, meshwiki_client)
+    assert result["status"] == "review"
+
+
+@pytest.mark.asyncio
+async def test_grind_subtask_e2b_extracts_pr_url() -> None:
+    """grind_subtask_e2b sets status='review' and pr_url when output contains a PR URL."""
+    state = _make_state()
+    subtask = _make_subtask()
+    meshwiki_client = AsyncMock()
+    meshwiki_client.get_page = AsyncMock(return_value={"content": "# Task spec"})
+    meshwiki_client.transition_task = AsyncMock(return_value={})
+
+    pr_url = "https://github.com/owner/repo/pull/42"
+    fake_output = f"Running kilo...\nDone!\n{pr_url}"
+
+    # Build mock Sandbox
+    mock_cmd_result = MagicMock()
+    mock_cmd_result.exit_code = 0
+    mock_cmd_result.stdout = fake_output
+    mock_cmd_result.stderr = ""
+
+    mock_clone_result = MagicMock()
+    mock_clone_result.exit_code = 0
+    mock_clone_result.stdout = ""
+    mock_clone_result.stderr = ""
+
+    mock_commands = MagicMock()
+    mock_commands.run = MagicMock(
+        side_effect=[
+            MagicMock(exit_code=0, stdout="", stderr=""),  # npm install
+            MagicMock(exit_code=0, stdout="", stderr=""),  # git config email
+            MagicMock(exit_code=0, stdout="", stderr=""),  # git config name
+            mock_clone_result,  # git clone
+            MagicMock(exit_code=0, stdout="", stderr=""),  # pip install
+            mock_cmd_result,  # kilo run
+        ]
+    )
+    mock_files = MagicMock()
+    mock_sandbox = MagicMock()
+    mock_sandbox.commands = mock_commands
+    mock_sandbox.files = mock_files
+    mock_sandbox.kill = MagicMock()
+
+    mock_settings = MagicMock(
+        e2b_api_key="e2b-test",
+        github_token="ghp_test",
+        github_repo="owner/repo",
+        minimax_api_key="mm-test",
+        grinder_model="MiniMax-M2.7",
+    )
+
+    with patch(
+        "factory.agents.grinder_agent.get_settings",
+        return_value=mock_settings,
+    ):
+        with patch(
+            "e2b_code_interpreter.Sandbox",
+            return_value=mock_sandbox,
+        ):
+            result = await grind_subtask_e2b(state, subtask, meshwiki_client)
+
+    assert result["status"] == "review"
+    assert result["pr_url"] == pr_url
+    mock_sandbox.kill.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_grind_subtask_e2b_no_pr_url_fails() -> None:
+    """grind_subtask_e2b sets status='failed' when output has no PR URL."""
+    state = _make_state()
+    subtask = _make_subtask()
+    meshwiki_client = AsyncMock()
+    meshwiki_client.get_page = AsyncMock(return_value={"content": "# Task spec"})
+    meshwiki_client.transition_task = AsyncMock(return_value={})
+
+    fake_output = "Running kilo...\nSomething went wrong.\nNo PR was created."
+
+    mock_cmd_result = MagicMock()
+    mock_cmd_result.exit_code = 0
+    mock_cmd_result.stdout = fake_output
+    mock_cmd_result.stderr = ""
+
+    mock_clone_result = MagicMock()
+    mock_clone_result.exit_code = 0
+    mock_clone_result.stdout = ""
+    mock_clone_result.stderr = ""
+
+    mock_commands = MagicMock()
+    mock_commands.run = MagicMock(
+        side_effect=[
+            MagicMock(exit_code=0, stdout="", stderr=""),  # npm install
+            MagicMock(exit_code=0, stdout="", stderr=""),  # git config email
+            MagicMock(exit_code=0, stdout="", stderr=""),  # git config name
+            mock_clone_result,  # git clone
+            MagicMock(exit_code=0, stdout="", stderr=""),  # pip install
+            mock_cmd_result,  # kilo run
+        ]
+    )
+    mock_files = MagicMock()
+    mock_sandbox = MagicMock()
+    mock_sandbox.commands = mock_commands
+    mock_sandbox.files = mock_files
+    mock_sandbox.kill = MagicMock()
+
+    mock_settings = MagicMock(
+        e2b_api_key="e2b-test",
+        github_token="ghp_test",
+        github_repo="owner/repo",
+        minimax_api_key="mm-test",
+        grinder_model="MiniMax-M2.7",
+    )
+
+    with patch(
+        "factory.agents.grinder_agent.get_settings",
+        return_value=mock_settings,
+    ):
+        with patch(
+            "e2b_code_interpreter.Sandbox",
+            return_value=mock_sandbox,
+        ):
+            result = await grind_subtask_e2b(state, subtask, meshwiki_client)
+
+    assert result["status"] == "failed"
+    assert result["pr_url"] is None
+
+
+@pytest.mark.asyncio
+async def test_grind_subtask_e2b_sandbox_error() -> None:
+    """grind_subtask_e2b handles Sandbox constructor raising an exception gracefully."""
+    state = _make_state()
+    subtask = _make_subtask()
+    meshwiki_client = AsyncMock()
+    meshwiki_client.get_page = AsyncMock(return_value={"content": "# Task spec"})
+    meshwiki_client.transition_task = AsyncMock(return_value={})
+
+    mock_settings = MagicMock(
+        e2b_api_key="e2b-invalid",
+        github_token="ghp_test",
+        github_repo="owner/repo",
+        minimax_api_key="mm-test",
+        grinder_model="MiniMax-M2.7",
+    )
+
+    with patch(
+        "factory.agents.grinder_agent.get_settings",
+        return_value=mock_settings,
+    ):
+        with patch(
+            "e2b_code_interpreter.Sandbox",
+            side_effect=RuntimeError("sandbox auth failed"),
+        ):
+            result = await grind_subtask_e2b(state, subtask, meshwiki_client)
+
+    assert result["status"] == "failed"
+    assert result["pr_url"] is None

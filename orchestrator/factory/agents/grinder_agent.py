@@ -449,6 +449,149 @@ class GrinderToolExecutor:
         return f"Task {page_name} transitioned to {status}"
 
 
+async def grind_subtask_e2b(
+    state: FactoryState,
+    subtask: SubTask,
+    meshwiki_client: "MeshWikiClient",
+) -> SubTask:
+    """Run grinder using E2B sandbox + Kilo CLI with MiniMax.
+
+    Args:
+        state: Current FactoryState with parent task context.
+        subtask: The SubTask to implement.
+        meshwiki_client: Async HTTP client for MeshWiki.
+
+    Returns:
+        Updated SubTask with pr_url, branch_name, and status set.
+    """
+    import json
+
+    from e2b_code_interpreter import Sandbox
+
+    settings = get_settings()
+    subtask = dict(subtask)
+
+    # Transition to in_progress
+    try:
+        await meshwiki_client.transition_task(subtask["wiki_page"], "in_progress")
+    except Exception as exc:
+        logger.error(
+            "e2b grinder: failed to transition %s to in_progress: %s",
+            subtask["wiki_page"],
+            exc,
+        )
+
+    # Fetch task description
+    page_content = ""
+    try:
+        page = await meshwiki_client.get_page(subtask["wiki_page"])
+        if page:
+            page_content = page.get("content", "")
+    except Exception as exc:
+        logger.error("e2b grinder: failed to fetch wiki page: %s", exc)
+
+    task_prompt = (
+        f"You are working on the MeshWiki project. "
+        f"Implement the following task and open a GitHub PR when done.\n\n"
+        f"## Task: {subtask['title']}\n\n"
+        f"{page_content}\n\n"
+        f"## Instructions\n"
+        f"1. Explore the codebase to understand context\n"
+        f"2. Create a branch: factory/{subtask['id']}\n"
+        f"3. Implement the changes with tests\n"
+        f"4. Run: .venv/bin/black src/ && .venv/bin/isort --profile black src/ && .venv/bin/ruff check src/\n"
+        f"5. Run: python -m pytest src/tests/ -x -q\n"
+        f"6. Fix any lint/test failures\n"
+        f"7. Commit and push the branch\n"
+        f"8. Create a PR with gh pr create\n"
+        f"9. Print the PR URL on the last line of your output"
+    )
+
+    pr_url: str | None = None
+    branch_name = f"factory/{subtask['id']}"
+    status = "failed"
+
+    try:
+        sandbox = Sandbox(api_key=settings.e2b_api_key, timeout=2100)  # 35 min
+
+        # Install tools
+        sandbox.commands.run("npm install -g @kilocode/cli", timeout=120)
+
+        # Configure git identity
+        sandbox.commands.run(
+            'git config --global user.email "factory@meshwiki"', timeout=10
+        )
+        sandbox.commands.run(
+            'git config --global user.name "Factory Grinder"', timeout=10
+        )
+
+        # Write kilo.json config pointing at MiniMax
+        kilo_config = {
+            "apiProvider": "openai-compatible",
+            "openAiBaseUrl": "https://api.minimax.io/v1",
+            "openAiApiKey": settings.minimax_api_key,
+            "openAiModelId": settings.grinder_model,
+        }
+        sandbox.files.write("/root/kilo.json", json.dumps(kilo_config))
+
+        # Clone repo using GitHub token
+        repo = settings.github_repo  # e.g. "jyrkihuhta/meshwiki"
+        token = settings.github_token
+        clone_url = f"https://{token}@github.com/{repo}.git"
+        result = sandbox.commands.run(
+            f"git clone {clone_url} /workspace/repo",
+            timeout=120,
+        )
+        if result.exit_code != 0:
+            raise RuntimeError(f"git clone failed: {result.stderr}")
+
+        # Install Python deps
+        sandbox.commands.run(
+            "cd /workspace/repo && pip install -e '.[dev]' -q",
+            timeout=180,
+        )
+
+        # Write task file so Kilo can read it
+        sandbox.files.write("/workspace/task.md", task_prompt)
+
+        # Run Kilo
+        result = sandbox.commands.run(
+            "cd /workspace/repo && kilo run --auto --timeout 1800 --config /root/kilo.json "
+            '"$(cat /workspace/task.md)"',
+            timeout=1900,
+        )
+
+        output = (result.stdout or "") + (result.stderr or "")
+        logger.info("e2b grinder output tail: %s", output[-2000:])
+
+        # Extract PR URL (last https://github.com/... line)
+        for line in reversed(output.splitlines()):
+            line = line.strip()
+            if line.startswith("https://github.com/") and "/pull/" in line:
+                pr_url = line
+                break
+
+        if pr_url:
+            status = "review"
+            logger.info("e2b grinder: PR created %s", pr_url)
+        else:
+            logger.warning("e2b grinder: no PR URL found in output")
+
+        sandbox.kill()
+
+    except Exception as exc:
+        logger.exception("e2b grinder: sandbox error: %s", exc)
+
+    subtask.update(
+        {
+            "status": status,
+            "branch_name": branch_name,
+            "pr_url": pr_url,
+        }
+    )
+    return subtask  # type: ignore[return-value]
+
+
 async def grind_subtask(
     state: FactoryState,
     subtask: SubTask,
@@ -470,6 +613,9 @@ async def grind_subtask(
         Updated SubTask with pr_url, branch_name, tokens_used, and status set.
     """
     settings = get_settings()
+
+    if settings.grinder_provider == "e2b":
+        return await grind_subtask_e2b(state, subtask, meshwiki_client)
 
     if settings.grinder_provider == "minimax":
         # MiniMax supports the Anthropic Messages API format at a different base URL.
