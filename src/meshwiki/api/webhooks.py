@@ -14,11 +14,10 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 
+import meshwiki.config as cfg
 from meshwiki.core.dependencies import get_storage
 from meshwiki.core.storage import FileStorage
 from meshwiki.core.task_machine import InvalidTransitionError, transition_task
-
-import meshwiki.config as cfg
 
 logger = logging.getLogger(__name__)
 
@@ -65,7 +64,7 @@ async def _find_task_by_pr_number(
 
     # Try graph engine first (optional dependency)
     try:
-        from meshwiki.core.graph import get_engine, GRAPH_ENGINE_AVAILABLE
+        from meshwiki.core.graph import GRAPH_ENGINE_AVAILABLE, get_engine
 
         if GRAPH_ENGINE_AVAILABLE:
             engine = get_engine()
