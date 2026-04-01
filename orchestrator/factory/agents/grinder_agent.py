@@ -464,7 +464,7 @@ async def grind_subtask_e2b(
     Returns:
         Updated SubTask with pr_url, branch_name, and status set.
     """
-    import json
+    import os
 
     from e2b_code_interpreter import Sandbox
 
@@ -491,7 +491,7 @@ async def grind_subtask_e2b(
         logger.error("e2b grinder: failed to fetch wiki page: %s", exc)
 
     task_prompt = (
-        f"You are working on the MeshWiki project. "
+        f"You are working on the MeshWiki project (FastAPI + Python 3.12 + Rust graph engine). "
         f"Implement the following task and open a GitHub PR when done.\n\n"
         f"## Task: {subtask['title']}\n\n"
         f"{page_content}\n\n"
@@ -503,7 +503,7 @@ async def grind_subtask_e2b(
         f"5. Run: python -m pytest src/tests/ -x -q\n"
         f"6. Fix any lint/test failures\n"
         f"7. Commit and push the branch\n"
-        f"8. Create a PR with gh pr create\n"
+        f"8. Create a PR with: gh pr create --title '...' --body '...'\n"
         f"9. Print the PR URL on the last line of your output"
     )
 
@@ -511,73 +511,85 @@ async def grind_subtask_e2b(
     branch_name = f"factory/{subtask['id']}"
     status = "failed"
 
+    # Expose E2B_API_KEY so Sandbox.create() picks it up from the environment
+    os.environ["E2B_API_KEY"] = settings.e2b_api_key
+
+    # Model string: Kilo expects "provider/model" format
+    model_arg = f"minimax/{settings.grinder_model}"
+
     try:
-        sandbox = Sandbox(api_key=settings.e2b_api_key, timeout=2100)  # 35 min
+        with Sandbox.create(
+            envs={
+                "MINIMAX_API_KEY": settings.minimax_api_key,
+                # KILO_API_KEY is what Kilo reads for the minimax provider
+                "KILO_API_KEY": settings.minimax_api_key,
+                "GITHUB_TOKEN": settings.github_token,
+                "GH_TOKEN": settings.github_token,
+            }
+        ) as sbx:
+            logger.info("e2b grinder: sandbox created for subtask %s", subtask["id"])
 
-        # Install tools
-        sandbox.commands.run("npm install -g @kilocode/cli", timeout=120)
+            # Configure git identity and credential helper
+            sbx.commands.run(
+                'git config --global user.email "factory@meshwiki" && '
+                'git config --global user.name "Factory Grinder" && '
+                f'git config --global url."https://x-access-token:{settings.github_token}@github.com/".insteadOf "https://github.com/"',
+                timeout=0,
+            )
 
-        # Configure git identity
-        sandbox.commands.run(
-            'git config --global user.email "factory@meshwiki"', timeout=10
-        )
-        sandbox.commands.run(
-            'git config --global user.name "Factory Grinder"', timeout=10
-        )
+            # Bootstrap Node.js 20 + Kilo CLI (timeout=0 prevents premature kill)
+            logger.info("e2b grinder: bootstrapping Node.js + Kilo CLI...")
+            sbx.commands.run(
+                "curl -fsSL https://deb.nodesource.com/setup_20.x | sudo bash - && "
+                "sudo apt-get install -y nodejs && "
+                "sudo npm install -g @kilocode/cli",
+                timeout=0,
+            )
 
-        # Write kilo.json config pointing at MiniMax
-        kilo_config = {
-            "apiProvider": "openai-compatible",
-            "openAiBaseUrl": "https://api.minimax.io/v1",
-            "openAiApiKey": settings.minimax_api_key,
-            "openAiModelId": settings.grinder_model,
-        }
-        sandbox.files.write("/root/kilo.json", json.dumps(kilo_config))
+            # Clone repo
+            repo = settings.github_repo
+            clone_url = f"https://x-access-token:{settings.github_token}@github.com/{repo}.git"
+            result = sbx.commands.run(
+                f"git clone {clone_url} /workspace/repo",
+                timeout=0,
+            )
+            if result.exit_code != 0:
+                raise RuntimeError(f"git clone failed: {result.stderr}")
 
-        # Clone repo using GitHub token
-        repo = settings.github_repo  # e.g. "jyrkihuhta/meshwiki"
-        token = settings.github_token
-        clone_url = f"https://{token}@github.com/{repo}.git"
-        result = sandbox.commands.run(
-            f"git clone {clone_url} /workspace/repo",
-            timeout=120,
-        )
-        if result.exit_code != 0:
-            raise RuntimeError(f"git clone failed: {result.stderr}")
+            # Install Python deps
+            sbx.commands.run(
+                "cd /workspace/repo && pip install -e '.[dev]' -q",
+                timeout=0,
+            )
 
-        # Install Python deps
-        sandbox.commands.run(
-            "cd /workspace/repo && pip install -e '.[dev]' -q",
-            timeout=180,
-        )
+            # Write task file and run Kilo
+            sbx.files.write("/workspace/task.md", task_prompt)
 
-        # Write task file so Kilo can read it
-        sandbox.files.write("/workspace/task.md", task_prompt)
+            logger.info(
+                "e2b grinder: running Kilo (model=%s) for subtask %s...",
+                model_arg,
+                subtask["id"],
+            )
+            result = sbx.commands.run(
+                f'cd /workspace/repo && kilo run --auto --model {model_arg} "$(cat /workspace/task.md)"',
+                timeout=0,
+            )
 
-        # Run Kilo
-        result = sandbox.commands.run(
-            "cd /workspace/repo && kilo run --auto --timeout 1800 --config /root/kilo.json "
-            '"$(cat /workspace/task.md)"',
-            timeout=1900,
-        )
+            output = (result.stdout or "") + (result.stderr or "")
+            logger.info("e2b grinder output tail: %s", output[-2000:])
 
-        output = (result.stdout or "") + (result.stderr or "")
-        logger.info("e2b grinder output tail: %s", output[-2000:])
+            # Extract PR URL (last https://github.com/.../pull/... line)
+            for line in reversed(output.splitlines()):
+                line = line.strip()
+                if line.startswith("https://github.com/") and "/pull/" in line:
+                    pr_url = line
+                    break
 
-        # Extract PR URL (last https://github.com/... line)
-        for line in reversed(output.splitlines()):
-            line = line.strip()
-            if line.startswith("https://github.com/") and "/pull/" in line:
-                pr_url = line
-                break
-
-        if pr_url:
-            status = "review"
-            logger.info("e2b grinder: PR created %s", pr_url)
-        else:
-            logger.warning("e2b grinder: no PR URL found in output")
-
-        sandbox.kill()
+            if pr_url:
+                status = "review"
+                logger.info("e2b grinder: PR created %s", pr_url)
+            else:
+                logger.warning("e2b grinder: no PR URL found in output")
 
     except Exception as exc:
         logger.exception("e2b grinder: sandbox error: %s", exc)
