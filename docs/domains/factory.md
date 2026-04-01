@@ -1,7 +1,7 @@
 # Domain: Agent Factory
 
 **Owner:** TBD
-**Status:** Phase 1 complete, Phase 2 in progress
+**Status:** Phase 1 + 2 complete, Phase 3 next
 **Language:** Python (MeshWiki layer) + future Python (LangGraph orchestrator)
 **PRD:** `docs/prd/003-agent-factory.md`
 
@@ -28,11 +28,11 @@ The autonomous agent software development factory:
 - [x] `src/meshwiki/api/agents.py` — agent listing
 - [x] Config additions: `factory_api_key`, `factory_webhook_url`, `factory_webhook_secret`, `github_webhook_secret`, `factory_enabled`
 
-### Phase 2: GitHub Integration 🔧 (branch: `feature/phase-2-github-webhooks`)
-- [ ] `src/meshwiki/api/webhooks.py` — inbound GitHub webhook receiver
-- [ ] PR-to-task lookup via graph engine (find task page by `pr_number` or `pr_url` frontmatter)
-- [ ] On PR merge: auto-transition task `review → merged → done`
-- [ ] Factory Dashboard wiki page (manual `Factory_Dashboard.md`, no code)
+### Phase 2: GitHub Integration ✅ (merged #39)
+- [x] `src/meshwiki/api/webhooks.py` — inbound GitHub webhook receiver
+- [x] PR-to-task lookup via graph engine (find task page by `pr_number` or `pr_url` frontmatter)
+- [x] On PR merge: auto-transition task `review → merged → done`
+- [x] Factory Dashboard wiki page (`Factory_Dashboard.md`)
 
 ### Phase 3–7: Orchestrator (not started)
 - LangGraph orchestrator scaffold, PM agent, Grinder agent, PM chat interface, hardening
