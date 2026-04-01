@@ -26,7 +26,7 @@ class Settings(BaseSettings):
     log_level: str = "info"  # FACTORY_LOG_LEVEL
     repo_root: str = "/Users/jhuhta/meshwiki"  # FACTORY_REPO_ROOT
     grinder_provider: str = "minimax"  # FACTORY_GRINDER_PROVIDER
-    grinder_model: str = "MiniMax-M2.5"  # FACTORY_GRINDER_MODEL
+    grinder_model: str = "MiniMax-M2.7"  # FACTORY_GRINDER_MODEL
 
     model_config = SettingsConfigDict(env_prefix="FACTORY_")
 
