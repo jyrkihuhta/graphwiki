@@ -2,28 +2,79 @@
 
 import logging
 
+from ..config import get_settings
+from ..integrations.meshwiki_client import MeshWikiClient
 from ..state import FactoryState
 
 logger = logging.getLogger(__name__)
 
 
-def escalate_node(state: FactoryState) -> dict:
-    """
-    Handle failed or stuck subtasks by deciding to retry, redecompose, or abandon.
+async def escalate_node(state: FactoryState) -> dict:
+    """Handle failed or stuck subtasks by deciding to retry, redecompose, or abandon.
 
-    The routing function ``route_after_escalation`` reads ``escalation_decision``
-    from state to choose the next step:
+    Checks whether any failed subtask has retries remaining.  If so, the
+    decision is ``"retry"`` and the attempt counters are incremented so the
+    subtasks are re-dispatched by ``assign_grinders``.  If all retries are
+    exhausted the decision is ``"abandon"`` and the graph run ends.
+
+    Also appends an escalation note to the parent task wiki page.
+
+    The routing function ``route_after_escalation`` reads
+    ``escalation_decision`` from state to choose the next step:
       - ``"retry"``       → re-dispatch the failed subtasks via assign_grinders
       - ``"redecompose"`` → return to the decompose node for a fresh plan
       - ``"abandon"``     → end the graph run (default)
 
-    Stub: logs, sets graph_status to 'escalated', and defaults to 'abandon'.
-    Full implementation will notify the PM agent and potentially a human
-    operator before deciding.
+    Args:
+        state: Current FactoryState after collect_results detected failures.
+
+    Returns:
+        Partial state update with updated ``subtasks``, ``graph_status``, and
+        ``escalation_decision``.
     """
+    settings = get_settings()
+    client = MeshWikiClient(
+        base_url=settings.meshwiki_url, api_key=settings.meshwiki_api_key
+    )
+
+    failed_ids = state.get("failed_subtask_ids", [])
+    failed_subtasks = [s for s in state["subtasks"] if s["id"] in failed_ids]
+
     logger.warning(
         "escalate: escalating task %s (failed subtasks: %s)",
         state.get("task_wiki_page", "<unknown>"),
-        state.get("failed_subtask_ids", []),
+        failed_ids,
     )
-    return {"graph_status": "escalated", "escalation_decision": "abandon"}
+
+    # Check which failed subtasks still have retries remaining
+    retriable = [s for s in failed_subtasks if s["attempt"] < s["max_attempts"] - 1]
+
+    # Append escalation note to the task wiki page
+    try:
+        page = await client.get_page(state["task_wiki_page"])
+        if page:
+            content = page.get("content", "")
+            note = f"\n\n## Escalation\n\nFailed subtasks: {', '.join(failed_ids)}\n"
+            if retriable:
+                note += f"Retrying: {', '.join(s['id'] for s in retriable)}\n"
+            await client.create_page(state["task_wiki_page"], content + note)
+    except Exception as exc:
+        logger.error("escalate: failed to update task page: %s", exc)
+
+    # Increment attempt count on retriable failed subtasks and reset status
+    retriable_ids = {s["id"] for s in retriable}
+    subtasks = []
+    for s in state["subtasks"]:
+        if s["id"] in retriable_ids:
+            subtasks.append({**s, "attempt": s["attempt"] + 1, "status": "pending"})
+        else:
+            subtasks.append(s)
+
+    decision = "retry" if retriable else "abandon"
+    logger.info("escalate: decision=%s", decision)
+
+    return {
+        "subtasks": subtasks,
+        "graph_status": "escalated",
+        "escalation_decision": decision,
+    }

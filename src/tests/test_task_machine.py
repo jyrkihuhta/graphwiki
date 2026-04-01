@@ -4,6 +4,7 @@ import pytest
 
 from meshwiki.core.storage import FileStorage
 from meshwiki.core.task_machine import (
+    CANONICAL_EVENTS,
     TASK_TRANSITIONS,
     InvalidTransitionError,
     transition_task,
@@ -30,6 +31,16 @@ def test_all_states_have_entries():
     all_targets = {s for targets in TASK_TRANSITIONS.values() for s in targets}
     missing = all_targets - set(TASK_TRANSITIONS)
     assert not missing, f"States referenced as targets but not as sources: {missing}"
+
+
+def test_canonical_events_planned_to_in_progress():
+    """planned → in_progress fires task.assigned (direct grind, no decomposition)."""
+    assert CANONICAL_EVENTS[("planned", "in_progress")] == "task.assigned"
+
+
+def test_canonical_events_approved_to_in_progress():
+    """approved → in_progress fires task.assigned (standard flow)."""
+    assert CANONICAL_EVENTS[("approved", "in_progress")] == "task.assigned"
 
 
 def test_done_has_no_outgoing():

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from langgraph.checkpoint.memory import MemorySaver
 
-from factory.graph import build_graph
+from factory.graph import build_graph, route_after_intake
 
 EXPECTED_NODES = {
     "task_intake",
@@ -50,3 +50,21 @@ def test_graph_interrupt_nodes() -> None:
     interrupt_nodes = set(graph.interrupt_before_nodes)
     assert "human_review_plan" in interrupt_nodes
     assert "human_review_code" in interrupt_nodes
+
+
+# ---------------------------------------------------------------------------
+# route_after_intake
+# ---------------------------------------------------------------------------
+
+
+def test_graph_route_after_intake_direct() -> None:
+    """route_after_intake returns 'skip_decompose' when decomposition_approved is True."""
+    state = {"decomposition_approved": True}
+    assert route_after_intake(state) == "skip_decompose"
+
+
+def test_graph_route_after_intake_normal() -> None:
+    """route_after_intake returns 'decompose' when decomposition_approved is False/absent."""
+    assert route_after_intake({}) == "decompose"
+    assert route_after_intake({"decomposition_approved": False}) == "decompose"
+    assert route_after_intake({"decomposition_approved": None}) == "decompose"

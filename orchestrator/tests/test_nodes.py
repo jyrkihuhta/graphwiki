@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from factory.agents.pm_agent import _build_subtask
+from factory.nodes.collect import collect_results_node
 from factory.nodes.decompose import _build_subtask_page, decompose_node
+from factory.nodes.escalate import escalate_node
+from factory.nodes.finalize import finalize_node
 from factory.nodes.pm_review import pm_review_node
 from factory.nodes.task_intake import task_intake_node
 from factory.state import FactoryState, SubTask
@@ -307,3 +310,237 @@ def test_build_subtask_page_contains_expected_sections() -> None:
     assert "src/meshwiki/main.py" in page
     assert "## Agent Log" in page
     assert "<!-- Agents append progress notes below this line -->" in page
+
+
+# ---------------------------------------------------------------------------
+# task_intake_node — direct grind (skip_decomposition)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_task_intake_direct_grind() -> None:
+    """task_intake_node returns a single subtask and decomposition_approved=True when skip_decomposition is set."""
+    state = _make_state()
+
+    mock_page = {
+        "name": "Task_0042_test",
+        "content": "## Requirements\nDo the thing directly.",
+        "metadata": {
+            "title": "Direct Grind Task",
+            "status": "planned",
+            "skip_decomposition": "true",
+            "expected_files": ["src/meshwiki/main.py"],
+            "token_budget": "30000",
+        },
+    }
+
+    mock_client = AsyncMock()
+    mock_client.get_page = AsyncMock(return_value=mock_page)
+
+    with patch("factory.nodes.task_intake.MeshWikiClient", return_value=mock_client):
+        result = await task_intake_node(state)
+
+    assert result["decomposition_approved"] is True
+    assert result["graph_status"] == "grinding"
+    assert len(result["subtasks"]) == 1
+
+    subtask = result["subtasks"][0]
+    assert subtask["id"] == "Task_0042_test"
+    assert subtask["wiki_page"] == "Task_0042_test"
+    assert subtask["title"] == "Direct Grind Task"
+    assert subtask["description"] == "## Requirements\nDo the thing directly."
+    assert subtask["status"] == "pending"
+    assert subtask["attempt"] == 0
+    assert subtask["max_attempts"] == 3
+    assert subtask["error_log"] == []
+    assert subtask["files_touched"] == ["src/meshwiki/main.py"]
+    assert subtask["token_budget"] == 30000
+    assert subtask["tokens_used"] == 0
+    assert subtask["assigned_grinder"] is None
+    assert subtask["branch_name"] is None
+    assert subtask["pr_url"] is None
+    assert subtask["pr_number"] is None
+    assert subtask["review_feedback"] is None
+
+
+@pytest.mark.asyncio
+async def test_task_intake_direct_grind_boolean_flag() -> None:
+    """task_intake_node handles skip_decomposition as a boolean True (not just string)."""
+    state = _make_state()
+
+    mock_page = {
+        "name": "Task_0042_test",
+        "content": "Do it.",
+        "metadata": {
+            "title": "Bool Flag Task",
+            "status": "planned",
+            "skip_decomposition": True,
+        },
+    }
+
+    mock_client = AsyncMock()
+    mock_client.get_page = AsyncMock(return_value=mock_page)
+
+    with patch("factory.nodes.task_intake.MeshWikiClient", return_value=mock_client):
+        result = await task_intake_node(state)
+
+    assert result["decomposition_approved"] is True
+    assert result["graph_status"] == "grinding"
+    assert len(result["subtasks"]) == 1
+    assert result["subtasks"][0]["token_budget"] == 50000  # default
+    assert result["subtasks"][0]["files_touched"] == []  # default
+
+
+# ---------------------------------------------------------------------------
+# collect_results_node
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_collect_results_node() -> None:
+    """collect_results_node tallies completed and failed subtask IDs correctly."""
+    review_sub = _make_subtask(
+        wiki_page="Task_0042_Sub_01", title="Sub 01", status="review"
+    )
+    merged_sub = _make_subtask(
+        wiki_page="Task_0042_Sub_02", title="Sub 02", status="merged"
+    )
+    failed_sub = _make_subtask(
+        wiki_page="Task_0042_Sub_03", title="Sub 03", status="failed"
+    )
+    pending_sub = _make_subtask(
+        wiki_page="Task_0042_Sub_04", title="Sub 04", status="pending"
+    )
+
+    state = _make_state(subtasks=[review_sub, merged_sub, failed_sub, pending_sub])
+
+    result = await collect_results_node(state)
+
+    assert set(result["completed_subtask_ids"]) == {review_sub["id"], merged_sub["id"]}
+    assert result["failed_subtask_ids"] == [failed_sub["id"]]
+    assert result["graph_status"] == "reviewing"
+
+
+@pytest.mark.asyncio
+async def test_collect_results_node_all_succeeded() -> None:
+    """collect_results_node produces empty failed list when all subtasks passed."""
+    sub1 = _make_subtask(wiki_page="Task_0042_Sub_01", title="Sub 01", status="review")
+    sub2 = _make_subtask(wiki_page="Task_0042_Sub_02", title="Sub 02", status="merged")
+    state = _make_state(subtasks=[sub1, sub2])
+
+    result = await collect_results_node(state)
+
+    assert len(result["completed_subtask_ids"]) == 2
+    assert result["failed_subtask_ids"] == []
+    assert result["graph_status"] == "reviewing"
+
+
+# ---------------------------------------------------------------------------
+# finalize_node
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_finalize_node() -> None:
+    """finalize_node calls transition_task with 'done' and returns completed status."""
+    state = _make_state(cost_usd=0.0042)
+
+    mock_client_instance = AsyncMock()
+    mock_client_instance.transition_task = AsyncMock(return_value={})
+    mock_client_cls = MagicMock(return_value=mock_client_instance)
+
+    with patch("factory.nodes.finalize.MeshWikiClient", mock_client_cls):
+        with patch("factory.nodes.finalize.get_settings"):
+            result = await finalize_node(state)
+
+    assert result["graph_status"] == "completed"
+    mock_client_instance.transition_task.assert_awaited_once()
+    call_args = mock_client_instance.transition_task.call_args
+    assert call_args[0][0] == "Task_0042_test"
+    assert call_args[0][1] == "done"
+    assert "cost_usd" in call_args[1]["extra_fields"]
+
+
+@pytest.mark.asyncio
+async def test_finalize_node_handles_client_error() -> None:
+    """finalize_node logs and swallows MeshWiki client errors, still returns completed."""
+    state = _make_state()
+
+    mock_client_instance = AsyncMock()
+    mock_client_instance.transition_task = AsyncMock(
+        side_effect=RuntimeError("network error")
+    )
+    mock_client_cls = MagicMock(return_value=mock_client_instance)
+
+    with patch("factory.nodes.finalize.MeshWikiClient", mock_client_cls):
+        with patch("factory.nodes.finalize.get_settings"):
+            result = await finalize_node(state)
+
+    assert result["graph_status"] == "completed"
+
+
+# ---------------------------------------------------------------------------
+# escalate_node
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_escalate_retriable() -> None:
+    """escalate_node sets decision='retry' and increments attempt when retries remain."""
+    failed_sub = _make_subtask(
+        wiki_page="Task_0042_Sub_01",
+        title="Sub 01",
+        status="failed",
+        attempt=0,
+        max_attempts=3,
+    )
+    state = _make_state(
+        subtasks=[failed_sub],
+        failed_subtask_ids=[failed_sub["id"]],
+    )
+
+    mock_client_instance = AsyncMock()
+    mock_client_instance.get_page = AsyncMock(return_value={"content": "# Task"})
+    mock_client_instance.create_page = AsyncMock(return_value={})
+    mock_client_cls = MagicMock(return_value=mock_client_instance)
+
+    with patch("factory.nodes.escalate.MeshWikiClient", mock_client_cls):
+        with patch("factory.nodes.escalate.get_settings"):
+            result = await escalate_node(state)
+
+    assert result["escalation_decision"] == "retry"
+    assert result["graph_status"] == "escalated"
+    assert len(result["subtasks"]) == 1
+    assert result["subtasks"][0]["attempt"] == 1
+    assert result["subtasks"][0]["status"] == "pending"
+
+
+@pytest.mark.asyncio
+async def test_escalate_exhausted() -> None:
+    """escalate_node sets decision='abandon' when subtask has used all attempts."""
+    failed_sub = _make_subtask(
+        wiki_page="Task_0042_Sub_01",
+        title="Sub 01",
+        status="failed",
+        attempt=2,
+        max_attempts=3,
+    )
+    state = _make_state(
+        subtasks=[failed_sub],
+        failed_subtask_ids=[failed_sub["id"]],
+    )
+
+    mock_client_instance = AsyncMock()
+    mock_client_instance.get_page = AsyncMock(return_value={"content": "# Task"})
+    mock_client_instance.create_page = AsyncMock(return_value={})
+    mock_client_cls = MagicMock(return_value=mock_client_instance)
+
+    with patch("factory.nodes.escalate.MeshWikiClient", mock_client_cls):
+        with patch("factory.nodes.escalate.get_settings"):
+            result = await escalate_node(state)
+
+    assert result["escalation_decision"] == "abandon"
+    assert result["graph_status"] == "escalated"
+    # Status should remain "failed" when not retriable
+    assert result["subtasks"][0]["attempt"] == 2
+    assert result["subtasks"][0]["status"] == "failed"
