@@ -20,12 +20,13 @@ class Settings(BaseSettings):
     meshwiki_url: str = "http://localhost:8000"  # FACTORY_MESHWIKI_URL
     meshwiki_api_key: str = ""  # FACTORY_MESHWIKI_API_KEY
     anthropic_api_key: str = ""  # FACTORY_ANTHROPIC_API_KEY
+    minimax_api_key: str = ""  # FACTORY_MINIMAX_API_KEY
     host: str = "0.0.0.0"  # FACTORY_HOST
     port: int = 8001  # FACTORY_PORT
     log_level: str = "info"  # FACTORY_LOG_LEVEL
     repo_root: str = "/Users/jhuhta/meshwiki"  # FACTORY_REPO_ROOT
-    grinder_provider: str = "anthropic"  # FACTORY_GRINDER_PROVIDER
-    grinder_model: str = "claude-haiku-4-5-20251001"  # FACTORY_GRINDER_MODEL
+    grinder_provider: str = "minimax"  # FACTORY_GRINDER_PROVIDER
+    grinder_model: str = "MiniMax-M2.5"  # FACTORY_GRINDER_MODEL
 
     model_config = SettingsConfigDict(env_prefix="FACTORY_")
 

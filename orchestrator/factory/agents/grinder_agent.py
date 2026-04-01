@@ -471,12 +471,15 @@ async def grind_subtask(
     """
     settings = get_settings()
 
-    # TODO: Add MiniMax provider support when subscription is available.
-    # For now, always use Anthropic.
-    if settings.grinder_provider == "anthropic":
+    if settings.grinder_provider == "minimax":
+        # MiniMax supports the Anthropic Messages API format at a different base URL.
+        client = anthropic.AsyncAnthropic(
+            api_key=settings.minimax_api_key or None,
+            base_url="https://api.minimax.io/v1",
+        )
+    elif settings.grinder_provider == "anthropic":
         client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key or None)
     else:
-        # TODO: Implement OpenRouter fallback when MiniMax subscription is obtained.
         logger.warning(
             "grind_subtask: unknown grinder_provider %r, falling back to anthropic",
             settings.grinder_provider,
