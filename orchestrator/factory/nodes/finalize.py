@@ -2,22 +2,47 @@
 
 import logging
 
+from ..config import get_settings
+from ..integrations.meshwiki_client import MeshWikiClient
 from ..state import FactoryState
 
 logger = logging.getLogger(__name__)
 
 
-def finalize_node(state: FactoryState) -> dict:
-    """
-    Mark the parent task as 'done' and record cost/token metrics.
+async def finalize_node(state: FactoryState) -> dict:
+    """Mark the parent task as 'done' and record cost/token metrics.
 
-    Stub: logs and transitions graph_status to 'completed'.
-    Full implementation will call MeshWikiClient.transition_task() to move
-    the task page to 'done' state and persist cost_usd.
+    Calls ``MeshWikiClient.transition_task()`` to move the task page to
+    ``"done"`` state and persists ``cost_usd`` in the page frontmatter.
+
+    Args:
+        state: Current FactoryState after all PRs are confirmed merged.
+
+    Returns:
+        Partial state update setting ``graph_status`` to ``"completed"``.
     """
+    settings = get_settings()
+    client = MeshWikiClient(
+        base_url=settings.meshwiki_url, api_key=settings.meshwiki_api_key
+    )
+
     logger.info(
         "finalize: completing task %s (cost: $%.4f)",
         state.get("task_wiki_page", "<unknown>"),
         state.get("cost_usd", 0.0),
     )
+
+    try:
+        await client.transition_task(
+            state["task_wiki_page"],
+            "done",
+            extra_fields={"cost_usd": str(round(state.get("cost_usd", 0), 4))},
+        )
+    except Exception as exc:
+        logger.error(
+            "finalize: failed to transition %s to done: %s",
+            state["task_wiki_page"],
+            exc,
+        )
+
     return {"graph_status": "completed"}

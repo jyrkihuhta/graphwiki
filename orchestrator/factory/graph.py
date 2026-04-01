@@ -28,6 +28,13 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 
+def route_after_intake(state: FactoryState) -> str:
+    """Route after task intake: skip decompose if decomposition_approved is set."""
+    if state.get("decomposition_approved"):
+        return "skip_decompose"
+    return "decompose"
+
+
 def route_after_plan_review(state: FactoryState) -> str:
     """Route after human reviews the decomposition plan."""
     resp = state.get("human_approval_response")
@@ -112,7 +119,11 @@ def build_graph(checkpointer=None):
     # Edges
     # -----------------------------------------------------------------------
     graph.add_edge(START, "task_intake")
-    graph.add_edge("task_intake", "decompose")
+    graph.add_conditional_edges(
+        "task_intake",
+        route_after_intake,
+        {"decompose": "decompose", "skip_decompose": "assign_grinders"},
+    )
     graph.add_edge("decompose", "human_review_plan")
 
     graph.add_conditional_edges(

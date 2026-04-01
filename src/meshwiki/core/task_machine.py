@@ -38,6 +38,7 @@ CANONICAL_EVENTS: dict[tuple[str, str], str] = {
     ("review", "merged"): "task.pr_merged",
     ("review", "rejected"): "task.pr_rejected",
     ("merged", "done"): "task.completed",
+    ("planned", "in_progress"): "task.assigned",  # direct grind (no PM decomposition)
 }
 
 

@@ -78,3 +78,4 @@ class FactoryState(TypedDict):
         "escalated",
     ]
     error: str | None
+    escalation_decision: Literal["retry", "redecompose", "abandon"] | None
