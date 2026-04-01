@@ -1,7 +1,7 @@
 # Domain: Agent Factory
 
 **Owner:** TBD
-**Status:** Phase 1 + 2 complete, Phase 3 next
+**Status:** Phases 1–4 complete, Phase 5 next
 **Language:** Python (MeshWiki layer) + future Python (LangGraph orchestrator)
 **PRD:** `docs/prd/003-agent-factory.md`
 
@@ -34,8 +34,21 @@ The autonomous agent software development factory:
 - [x] On PR merge: auto-transition task `review → merged → done`
 - [x] Factory Dashboard wiki page (`Factory_Dashboard.md`)
 
-### Phase 3–7: Orchestrator (not started)
-- LangGraph orchestrator scaffold, PM agent, Grinder agent, PM chat interface, hardening
+### Phase 3: LangGraph Orchestrator Scaffold ✅ (merged #40)
+- [x] `orchestrator/` service structure with `pyproject.toml`
+- [x] `factory/webhook_server.py` — FastAPI webhook receiver with HMAC verification
+- [x] `factory/graph.py` — full StateGraph (11 nodes, all edges, conditional routing)
+- [x] `factory/state.py` — `FactoryState` + `SubTask` TypedDicts
+- [x] `factory/integrations/meshwiki_client.py` — async HTTP client
+
+### Phase 4: PM Agent ✅ (merged #41)
+- [x] `orchestrator/factory/agents/pm_agent.py` — `decompose_with_pm()` + `review_with_pm()` via Claude Opus 4
+- [x] `task_intake` node — fetches task page from MeshWiki
+- [x] `decompose` node — calls PM agent, writes subtask wiki pages, transitions state
+- [x] `pm_review` node — PM reviews grinder PRs, approves or requests changes
+- [x] `factory/integrations/github_client.py` — stub (implemented in Phase 5)
+
+### Phase 5–7: Grinder Agent + Chat + Hardening (not started)
 
 ## Architecture
 
