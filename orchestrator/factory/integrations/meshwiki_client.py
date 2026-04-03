@@ -43,14 +43,15 @@ class MeshWikiClient:
         """
         Create or update a wiki page.
 
+        Uses PUT /pages/{name} which creates or overwrites the page.
         Returns the saved page dict.
         """
         url = f"{self._base_url}/api/v1/pages/{name}"
         async with httpx.AsyncClient() as client:
-            resp = await client.post(
+            resp = await client.put(
                 url,
                 headers=self._headers(),
-                json={"content": content},
+                json={"name": name, "content": content},
             )
             resp.raise_for_status()
             return resp.json()

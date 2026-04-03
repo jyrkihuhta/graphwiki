@@ -519,6 +519,7 @@ async def grind_subtask_e2b(
 
     try:
         with Sandbox.create(
+            timeout=3600,  # sandbox lives up to 1 hour; default 5 min is too short
             envs={
                 "MINIMAX_API_KEY": settings.minimax_api_key,
                 # KILO_API_KEY is what Kilo reads for the minimax provider
