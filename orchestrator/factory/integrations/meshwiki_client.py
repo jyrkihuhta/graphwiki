@@ -21,7 +21,7 @@ class MeshWikiClient:
     def _headers(self) -> dict[str, str]:
         headers: dict[str, str] = {"Content-Type": "application/json"}
         if self._api_key:
-            headers["X-API-Key"] = self._api_key
+            headers["Authorization"] = f"Bearer {self._api_key}"
         return headers
 
     async def get_page(self, name: str) -> dict | None:
