@@ -199,6 +199,26 @@
     })();
     </script>
     <script src="/static/js/metatable.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+    <script>
+    (function(){
+        var savedTheme = localStorage.getItem('meshwiki-theme') || 'light';
+        mermaid.initialize({ startOnLoad: true, theme: savedTheme === 'dark' ? 'dark' : 'default' });
+        // Re-render diagrams when the user toggles dark/light mode.
+        var themeBtn = document.getElementById('theme-toggle');
+        if (themeBtn) {
+            themeBtn.addEventListener('click', function() {
+                // The click handler in the inline script above already toggled the attribute;
+                // read the new value after it settles.
+                setTimeout(function() {
+                    var t = document.documentElement.getAttribute('data-theme');
+                    mermaid.initialize({ startOnLoad: false, theme: t === 'dark' ? 'dark' : 'default' });
+                    mermaid.run();
+                }, 50);
+            });
+        }
+    })();
+    </script>
     {% block extra_scripts %}{% endblock %}
 </body>
 </html>

@@ -143,11 +143,11 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
             )
         response.headers["Content-Security-Policy"] = (
             "default-src 'self'; "
-            "script-src 'self' 'unsafe-inline' https://unpkg.com https://cdnjs.cloudflare.com; "
-            "style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; "
+            "script-src 'self' 'unsafe-inline' https://unpkg.com https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; "
+            "style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; "
             "img-src 'self' data:; "
             "connect-src 'self' wss:; "
-            "font-src 'self' https://cdnjs.cloudflare.com;"
+            "font-src 'self' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net;"
         )
         return response
 
@@ -366,12 +366,8 @@ async def view_page(request: Request, name: str):
     log.info("page_viewed", page=name)
     page_views_total.labels(page=name).inc()
 
-    # Parse content with wiki links and TOC
-    html_content, toc_html = parse_wiki_content_with_toc(
-        page.content, page_exists=page_exists_sync
-    )
-
-    # Get backlinks and frontmatter metadata from graph engine
+    # Get backlinks and frontmatter metadata from graph engine first so the
+    # TaskStatus macro can use them during parsing.
     backlinks: list[str] = []
     frontmatter: dict[str, list[str]] = {}
     engine = get_engine()
@@ -384,6 +380,14 @@ async def view_page(request: Request, name: str):
             frontmatter = engine.get_metadata(name) or {}
         except Exception:
             pass
+
+    # Parse content with wiki links, TOC, and page context for macros.
+    html_content, toc_html = parse_wiki_content_with_toc(
+        page.content,
+        page_exists=page_exists_sync,
+        page_name=name,
+        page_metadata=frontmatter,
+    )
 
     return templates.TemplateResponse(
         request,
@@ -603,6 +607,36 @@ async def ws_graph(websocket: WebSocket):
         pass
     finally:
         manager.disconnect(client_id)
+
+
+@app.websocket("/ws/terminal/{name:path}")
+async def ws_terminal(websocket: WebSocket, name: str):
+    """WebSocket endpoint that streams live PTY output for a running task.
+
+    The orchestrator pushes raw terminal chunks via POST /api/v1/tasks/{name}/terminal.
+    This endpoint drains the per-task queue and forwards chunks to the browser
+    xterm.js instance.  A ``None`` sentinel in the queue signals end-of-stream.
+    """
+    from meshwiki.core.terminal_sessions import get_session
+
+    await websocket.accept()
+    q = get_session(name)
+    if q is None:
+        await websocket.send_text(
+            "\r\n\x1b[2m[no active terminal session for this task]\x1b[0m\r\n"
+        )
+        await websocket.close()
+        return
+    try:
+        while True:
+            chunk = await q.get()
+            if chunk is None:  # sentinel — task finished
+                break
+            await websocket.send_text(chunk)
+    except WebSocketDisconnect:
+        pass
+    finally:
+        await websocket.close()
 
 
 # ========== Auth ==========

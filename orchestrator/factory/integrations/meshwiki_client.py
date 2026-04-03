@@ -86,6 +86,23 @@ class MeshWikiClient:
             resp.raise_for_status()
             return resp.json()
 
+    async def relay_terminal(self, task_name: str, data: str) -> None:
+        """Relay a raw PTY / stdout chunk to the MeshWiki live terminal stream.
+
+        Fire-and-forget: errors are logged at DEBUG level and never raised so
+        that a transient MeshWiki connectivity issue never aborts the grinder.
+
+        Args:
+            task_name: Wiki page name of the task (used as the stream key).
+            data: Raw text to push (may contain ANSI escape codes).
+        """
+        url = f"{self._base_url}/api/v1/tasks/{task_name}/terminal"
+        try:
+            async with httpx.AsyncClient() as client:
+                await client.post(url, headers=self._headers(), json={"data": data})
+        except Exception as exc:
+            logger.debug("terminal relay failed (non-critical): %s", exc)
+
     async def list_tasks(self, status: str | None = None) -> list[dict]:
         """
         List task pages, optionally filtered by status.
