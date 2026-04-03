@@ -7,6 +7,102 @@
     var wsStatusEl = document.getElementById("ws-status");
     var unavailableEl = document.getElementById("graph-unavailable");
 
+    // Tooltip element
+    var tooltip = document.createElement("div");
+    tooltip.className = "graph-tooltip";
+    tooltip.setAttribute("role", "tooltip");
+    tooltip.setAttribute("aria-hidden", "true");
+    document.body.appendChild(tooltip);
+
+    var tooltipVisible = false;
+    var tooltipFadeTimeout = null;
+
+    function formatTimestamp(ts) {
+        if (!ts || ts === 0) return "Unknown";
+        var date = new Date(ts * 1000);
+        var now = new Date();
+        var diffMs = now - date;
+        var diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+        if (diffDays === 0) return "Today";
+        if (diffDays === 1) return "Yesterday";
+        if (diffDays < 7) return diffDays + " days ago";
+        if (diffDays < 30) return Math.floor(diffDays / 7) + " weeks ago";
+        if (diffDays < 365) return Math.floor(diffDays / 30) + " months ago";
+        return Math.floor(diffDays / 365) + " years ago";
+    }
+
+    function showTooltip(node, event) {
+        if (tooltipFadeTimeout) {
+            clearTimeout(tooltipFadeTimeout);
+            tooltipFadeTimeout = null;
+        }
+
+        var tags = node.tags || [];
+        var tagsHtml = "";
+        if (tags.length > 0) {
+            tagsHtml = "<div class=\"graph-tooltip-tags\">";
+            tags.forEach(function (tag) {
+                tagsHtml += "<span class=\"graph-tooltip-tag\">" + escapeHtml(tag) + "</span>";
+            });
+            tagsHtml += "</div>";
+        }
+
+        tooltip.innerHTML = "<div class=\"graph-tooltip-title\">" + escapeHtml(node.id) + "</div>" +
+            "<div class=\"graph-tooltip-row\"><span class=\"graph-tooltip-label\">Backlinks</span><span class=\"graph-tooltip-value\">" + (node.backlinks_count || 0) + "</span></div>" +
+            "<div class=\"graph-tooltip-row\"><span class=\"graph-tooltip-label\">Modified</span><span class=\"graph-tooltip-modified\">" + formatTimestamp(node.modified) + "</span></div>" +
+            (tags.length > 0 ? "<div class=\"graph-tooltip-row\" style=\"flex-direction: column; align-items: flex-start;\"><span class=\"graph-tooltip-label\">Tags</span>" + tagsHtml + "</div>" : "");
+
+        positionTooltip(event);
+        tooltip.classList.remove("fade-out");
+        tooltip.classList.add("visible");
+        tooltip.setAttribute("aria-hidden", "false");
+        tooltipVisible = true;
+    }
+
+    function hideTooltip() {
+        if (tooltipFadeTimeout) {
+            clearTimeout(tooltipFadeTimeout);
+        }
+        tooltip.classList.remove("visible");
+        tooltip.classList.add("fade-out");
+        tooltip.setAttribute("aria-hidden", "true");
+        tooltipVisible = false;
+        tooltipFadeTimeout = setTimeout(function () {
+            tooltip.classList.remove("fade-out");
+            tooltipFadeTimeout = null;
+        }, 150);
+    }
+
+    function positionTooltip(event) {
+        var offsetX = 15;
+        var offsetY = 15;
+        var tooltipRect = tooltip.getBoundingClientRect();
+        var viewportWidth = window.innerWidth;
+        var viewportHeight = window.innerHeight;
+
+        var x = event.clientX + offsetX;
+        var y = event.clientY + offsetY;
+
+        if (x + tooltipRect.width > viewportWidth - 20) {
+            x = event.clientX - tooltipRect.width - offsetX;
+        }
+        if (y + tooltipRect.height > viewportHeight - 20) {
+            y = event.clientY - tooltipRect.height - offsetY;
+        }
+
+        if (x < 10) x = 10;
+        if (y < 10) y = 10;
+
+        tooltip.style.left = x + "px";
+        tooltip.style.top = y + "px";
+    }
+
+    function escapeHtml(text) {
+        var div = document.createElement("div");
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
     // Read theme colors from CSS variables
     function getThemeColor(varName, fallback) {
         return getComputedStyle(document.documentElement).getPropertyValue(varName).trim() || fallback;
@@ -116,6 +212,17 @@
             .call(drag(simulation))
             .on("click", function (event, d) {
                 window.location.href = "/page/" + encodeURIComponent(d.id);
+            })
+            .on("mouseover", function (event, d) {
+                showTooltip(d, event);
+            })
+            .on("mousemove", function (event, d) {
+                if (tooltipVisible) {
+                    positionTooltip(event);
+                }
+            })
+            .on("mouseout", function (event, d) {
+                hideTooltip();
             });
 
         nodeEnter.append("circle")

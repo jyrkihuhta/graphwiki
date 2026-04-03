@@ -617,7 +617,17 @@ async def api_graph():
         return {"nodes": [], "links": []}
 
     pages = engine.list_pages()
-    nodes = [{"id": p.name} for p in pages]
+    nodes = []
+    for p in pages:
+        backlinks = engine.get_backlinks(p.name)
+        tags = p.metadata.get("tags", [])
+        nodes.append(
+            {
+                "id": p.name,
+                "tags": tags,
+                "backlinks_count": len(backlinks),
+            }
+        )
 
     links = []
     for page in pages:
