@@ -7,7 +7,31 @@
     var wsStatusEl = document.getElementById("ws-status");
     var unavailableEl = document.getElementById("graph-unavailable");
 
-    // Tooltip element
+    var MIN_NODE_RADIUS = 5;
+    var MAX_NODE_RADIUS = 24;
+    var DEFAULT_NODE_RADIUS = 8;
+    var FOCUS_NODE_RADIUS = 12;
+    var NEIGHBOR_NODE_RADIUS = 6;
+    var FLASH_NODE_RADIUS = 14;
+
+    function getNodeRadius(backlinksCount, maxBacklinks) {
+        if (backlinksCount === undefined || backlinksCount === null || backlinksCount < 0) {
+            backlinksCount = 0;
+        }
+        if (!maxBacklinks || maxBacklinks <= 0) {
+            return DEFAULT_NODE_RADIUS;
+        }
+        var logScale = Math.log(1 + backlinksCount) / Math.log(1 + maxBacklinks);
+        return MIN_NODE_RADIUS + (MAX_NODE_RADIUS - MIN_NODE_RADIUS) * logScale;
+    }
+
+    function getMaxBacklinks() {
+        if (nodes.length === 0) return 0;
+        return Math.max.apply(Math, nodes.map(function (n) { return n.backlinks_count || 0; }));
+    }
+
+    var maxBacklinks = 0;
+
     var tooltip = document.createElement("div");
     tooltip.className = "graph-tooltip";
     tooltip.setAttribute("role", "tooltip");
@@ -185,6 +209,95 @@
                 searchResults.classList.remove("visible");
             }
         });
+    }
+
+    var legendContainer = null;
+    var legendCollapsed = false;
+    var legendDragStartX = 0;
+    var legendDragStartY = 0;
+    var legendStartLeft = 0;
+    var legendStartTop = 0;
+
+    function initLegendUI() {
+        legendContainer = document.createElement("div");
+        legendContainer.className = "graph-legend";
+        legendContainer.innerHTML =
+            '<div class="graph-legend-header">' +
+            '<span class="graph-legend-title">Node Size</span>' +
+            '<button class="graph-legend-toggle" type="button" aria-label="Toggle legend">&minus;</button>' +
+            "</div>" +
+            '<div class="graph-legend-content">' +
+            '<div class="graph-legend-item">' +
+            '<svg width="50" height="30" class="graph-legend-svg">' +
+            '<circle cx="15" cy="15" r="' + MIN_NODE_RADIUS + '" fill="var(--color-text-muted)" opacity="0.6"/>' +
+            "</svg>" +
+            '<span class="graph-legend-label">Few links</span>' +
+            "</div>" +
+            '<div class="graph-legend-item">' +
+            '<svg width="50" height="30" class="graph-legend-svg">' +
+            '<circle cx="15" cy="15" r="' + Math.round((MIN_NODE_RADIUS + MAX_NODE_RADIUS) / 2) + '" fill="var(--color-text-muted)" opacity="0.6"/>' +
+            "</svg>" +
+            '<span class="graph-legend-label">Medium</span>' +
+            "</div>" +
+            '<div class="graph-legend-item">' +
+            '<svg width="50" height="30" class="graph-legend-svg">' +
+            '<circle cx="15" cy="15" r="' + MAX_NODE_RADIUS + '" fill="var(--color-text-muted)" opacity="0.6"/>' +
+            "</svg>" +
+            '<span class="graph-legend-label">Many links</span>' +
+            "</div>" +
+            "</div>";
+        container.appendChild(legendContainer);
+
+        var legendToggle = legendContainer.querySelector(".graph-legend-toggle");
+        var legendContent = legendContainer.querySelector(".graph-legend-content");
+
+        legendToggle.addEventListener("click", function () {
+            legendCollapsed = !legendCollapsed;
+            legendContent.style.display = legendCollapsed ? "none" : "flex";
+            legendToggle.textContent = legendCollapsed ? "+" : "\u2212";
+        });
+
+        var legendHeader = legendContainer.querySelector(".graph-legend-header");
+        legendHeader.addEventListener("mousedown", function (e) {
+            if (e.target === legendToggle) return;
+            legendDragStartX = e.clientX;
+            legendDragStartY = e.clientY;
+            var rect = legendContainer.getBoundingClientRect();
+            legendStartLeft = rect.left;
+            legendStartTop = rect.top;
+
+            function onMouseMove(e) {
+                var dx = e.clientX - legendDragStartX;
+                var dy = e.clientY - legendDragStartY;
+                legendContainer.style.left = (legendStartLeft + dx) + "px";
+                legendContainer.style.top = (legendStartTop + dy) + "px";
+                legendContainer.style.right = "auto";
+            }
+
+            function onMouseUp() {
+                document.removeEventListener("mousemove", onMouseMove);
+                document.removeEventListener("mouseup", onMouseUp);
+            }
+
+            document.addEventListener("mousemove", onMouseMove);
+            document.addEventListener("mouseup", onMouseUp);
+        });
+    }
+
+    function updateLegendRadii() {
+        if (!legendContainer) return;
+        var smallCircle = legendContainer.querySelectorAll(".graph-legend-svg:nth-child(1) circle");
+        var medCircle = legendContainer.querySelectorAll(".graph-legend-svg:nth-child(2) circle");
+        var largeCircle = legendContainer.querySelectorAll(".graph-legend-svg:nth-child(3) circle");
+
+        if (maxBacklinks > 0) {
+            var smallR = getNodeRadius(Math.round(maxBacklinks * 0.15), maxBacklinks);
+            var medR = getNodeRadius(Math.round(maxBacklinks * 0.5), maxBacklinks);
+            var largeR = getNodeRadius(Math.round(maxBacklinks * 0.9), maxBacklinks);
+            legendContainer.querySelectorAll(".graph-legend-svg")[0].querySelector("circle").setAttribute("r", smallR);
+            legendContainer.querySelectorAll(".graph-legend-svg")[1].querySelector("circle").setAttribute("r", medR);
+            legendContainer.querySelectorAll(".graph-legend-svg")[2].querySelector("circle").setAttribute("r", largeR);
+        }
     }
 
     function handleSearchInput(e) {
@@ -424,7 +537,7 @@
                 .select("circle")
                 .transition().duration(200)
                 .attr("r", function (d) {
-                    return d.id === focusedNodeId ? 12 : 6;
+                    return d.id === focusedNodeId ? FOCUS_NODE_RADIUS : NEIGHBOR_NODE_RADIUS;
                 });
             linkGroup.selectAll("line")
                 .transition().duration(200)
@@ -446,7 +559,7 @@
             .style("opacity", 1)
             .select("circle")
             .transition().duration(200)
-            .attr("r", 8);
+            .attr("r", function (d) { return getNodeRadius(d.backlinks_count, maxBacklinks); });
         linkGroup.selectAll("line")
             .transition().duration(200)
             .style("opacity", 0.6);
@@ -492,6 +605,8 @@
     }
 
     function render() {
+        maxBacklinks = getMaxBacklinks();
+        updateLegendRadii();
         var linkColor = getThemeColor("--color-text-muted", "#999");
         var textColor = getThemeColor("--color-text", "#333");
         var nodeStroke = getThemeColor("--color-bg", "#fff");
@@ -537,7 +652,7 @@
             });
 
         nodeEnter.append("circle")
-            .attr("r", 8)
+            .attr("r", function (d) { return getNodeRadius(d.backlinks_count, maxBacklinks); })
             .attr("fill", function (d) { return color(d.id); })
             .attr("stroke", nodeStroke)
             .attr("stroke-width", 1.5);
@@ -595,11 +710,11 @@
             .filter(function (d) { return d.id === name; })
             .select("circle")
             .transition().duration(200)
-            .attr("r", 14)
+            .attr("r", FLASH_NODE_RADIUS)
             .attr("stroke", "#f59e0b")
             .attr("stroke-width", 3)
             .transition().duration(600)
-            .attr("r", 8)
+            .attr("r", function (d) { return getNodeRadius(d.backlinks_count, maxBacklinks); })
             .attr("stroke", nodeStroke)
             .attr("stroke-width", 1.5);
     }
@@ -626,6 +741,7 @@
             links.push.apply(links, data.links);
             render();
             initSearchUI();
+            initLegendUI();
         })
         .catch(function (err) {
             console.error("Failed to load graph:", err);
