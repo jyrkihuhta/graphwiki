@@ -112,7 +112,9 @@ class WebhookDispatcher:
                     await self._send(client, evt)
                 except Exception as exc:
                     log.warning(
-                        "webhook_dispatch_failed",
+                        "webhook_dispatch_failed event=%s error=%s",
+                        evt.event,
+                        exc,
                         extra={"event": evt.event, "error": str(exc)},
                     )
                 finally:
