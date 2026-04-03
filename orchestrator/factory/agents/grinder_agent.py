@@ -465,8 +465,9 @@ async def grind_subtask_e2b(
         Updated SubTask with pr_url, branch_name, and status set.
     """
     import os
+    import re as _re
 
-    from e2b_code_interpreter import Sandbox
+    from e2b_code_interpreter import AsyncSandbox
 
     settings = get_settings()
     subtask = dict(subtask)
@@ -511,14 +512,14 @@ async def grind_subtask_e2b(
     branch_name = f"factory/{subtask['id']}"
     status = "failed"
 
-    # Expose E2B_API_KEY so Sandbox.create() picks it up from the environment
+    # Expose E2B_API_KEY so AsyncSandbox.create() picks it up from the environment
     os.environ["E2B_API_KEY"] = settings.e2b_api_key
 
     # Model string: Kilo expects "provider/model" format
     model_arg = f"minimax/{settings.grinder_model}"
 
     try:
-        with Sandbox.create(
+        async with await AsyncSandbox.create(
             timeout=3600,  # sandbox lives up to 1 hour; default 5 min is too short
             envs={
                 "MINIMAX_API_KEY": settings.minimax_api_key,
@@ -531,7 +532,7 @@ async def grind_subtask_e2b(
             logger.info("e2b grinder: sandbox created for subtask %s", subtask["id"])
 
             # Configure git identity and credential helper
-            sbx.commands.run(
+            await sbx.commands.run(
                 'git config --global user.email "factory@meshwiki" && '
                 'git config --global user.name "Factory Grinder" && '
                 f'git config --global url."https://x-access-token:{settings.github_token}@github.com/".insteadOf "https://github.com/"',
@@ -540,7 +541,7 @@ async def grind_subtask_e2b(
 
             # Bootstrap Node.js 20 + Kilo CLI (timeout=0 prevents premature kill)
             logger.info("e2b grinder: bootstrapping Node.js + Kilo CLI...")
-            sbx.commands.run(
+            await sbx.commands.run(
                 "curl -fsSL https://deb.nodesource.com/setup_20.x | sudo bash - && "
                 "sudo apt-get install -y nodejs && "
                 "sudo npm install -g @kilocode/cli",
@@ -550,7 +551,7 @@ async def grind_subtask_e2b(
             # Clone repo
             repo = settings.github_repo
             clone_url = f"https://x-access-token:{settings.github_token}@github.com/{repo}.git"
-            result = sbx.commands.run(
+            result = await sbx.commands.run(
                 f"git clone {clone_url} /tmp/repo",
                 timeout=0,
             )
@@ -558,29 +559,26 @@ async def grind_subtask_e2b(
                 raise RuntimeError(f"git clone failed: {result.stderr}")
 
             # Install Python deps
-            sbx.commands.run(
+            await sbx.commands.run(
                 "cd /tmp/repo && pip install -e '.[dev]' -q",
                 timeout=0,
             )
 
             # Write task file and run Kilo
-            sbx.files.write("/tmp/task.md", task_prompt)
+            await sbx.files.write("/tmp/task.md", task_prompt)
 
             logger.info(
                 "e2b grinder: running Kilo (model=%s) for subtask %s...",
                 model_arg,
                 subtask["id"],
             )
-            result = sbx.commands.run(
+            result = await sbx.commands.run(
                 f'cd /tmp/repo && kilo run --auto --model {model_arg} "$(cat /tmp/task.md)"',
                 timeout=0,
             )
 
             output = (result.stdout or "") + (result.stderr or "")
             logger.info("e2b grinder output tail: %s", output[-2000:])
-
-            # Extract PR URL — search anywhere in output (Kilo may print raw JSON)
-            import re as _re
 
             match = _re.search(
                 r'https://github\.com/[^/\s"]+/[^/\s"]+/pull/\d+', output
