@@ -357,16 +357,24 @@ def _mermaid_diagram(status: str) -> str:
     return "\n".join(lines)
 
 
+def _get_meta_str(page_metadata: dict, key: str, default: str = "") -> str:
+    """Get a metadata value as a string, handling list values from the graph engine."""
+    val = page_metadata.get(key, default)
+    if isinstance(val, list):
+        return val[0] if val else default
+    return val or default
+
+
 def _render_task_status(page_name: str, page_metadata: dict) -> str:
     """Render the <<TaskStatus>> macro as an HTML string."""
-    if page_metadata.get("type") != "task":
+    if _get_meta_str(page_metadata, "type") != "task":
         return (
             '<p class="task-status-error">'
             "<code>&lt;&lt;TaskStatus&gt;&gt;</code> is only available on task pages."
             "</p>"
         )
 
-    status: str = page_metadata.get("status", "draft")
+    status: str = _get_meta_str(page_metadata, "status", "draft")
     badge_cls = _BADGE_CLASS.get(status, "gray")
 
     # ── Section A: status badge ───────────────────────────────────────────────
@@ -386,34 +394,34 @@ def _render_task_status(page_name: str, page_metadata: dict) -> str:
 
     # ── Section C: metadata row ───────────────────────────────────────────────
     meta_items: list[str] = []
-    if assignee := page_metadata.get("assignee"):
+    if assignee := _get_meta_str(page_metadata, "assignee"):
         meta_items.append(
             f'<span class="task-meta-item">'
-            f'<span class="task-meta-key">Assignee</span> {html_escape(str(assignee))}'
+            f'<span class="task-meta-key">Assignee</span> {html_escape(assignee)}'
             f"</span>"
         )
-    if branch := page_metadata.get("branch"):
+    if branch := _get_meta_str(page_metadata, "branch"):
         meta_items.append(
             f'<span class="task-meta-item">'
             f'<span class="task-meta-key">Branch</span> '
-            f"<code>{html_escape(str(branch))}</code>"
+            f"<code>{html_escape(branch)}</code>"
             f"</span>"
         )
-    if pr_url := page_metadata.get("pr_url"):
-        pr_num = page_metadata.get("pr_number", "PR")
+    if pr_url := _get_meta_str(page_metadata, "pr_url"):
+        pr_num = _get_meta_str(page_metadata, "pr_number", "PR")
         meta_items.append(
             f'<span class="task-meta-item">'
             f'<span class="task-meta-key">PR</span> '
-            f'<a href="{html_escape(str(pr_url))}" target="_blank" rel="noopener">'
-            f"#{html_escape(str(pr_num))}</a>"
+            f'<a href="{html_escape(pr_url)}" target="_blank" rel="noopener">'
+            f"#{html_escape(pr_num)}</a>"
             f"</span>"
         )
-    if parent := page_metadata.get("parent_task"):
-        url = str(parent).replace(" ", "_")
+    if parent := _get_meta_str(page_metadata, "parent_task"):
+        url = parent.replace(" ", "_")
         meta_items.append(
             f'<span class="task-meta-item">'
             f'<span class="task-meta-key">Parent</span> '
-            f'<a href="/page/{html_escape(url)}" class="wiki-link">{html_escape(str(parent))}</a>'
+            f'<a href="/page/{html_escape(url)}" class="wiki-link">{html_escape(parent)}</a>'
             f"</span>"
         )
     meta_html = (
