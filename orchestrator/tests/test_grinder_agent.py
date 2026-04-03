@@ -508,16 +508,16 @@ async def test_grind_subtask_routes_to_e2b() -> None:
     assert result["status"] == "review"
 
 
-def _make_sandbox_mock(commands_side_effect: list) -> MagicMock:
-    """Build a mock Sandbox usable as a context manager."""
-    mock_commands = MagicMock()
-    mock_commands.run = MagicMock(side_effect=commands_side_effect)
-    mock_sandbox = MagicMock()
+def _make_sandbox_mock(commands_side_effect: list) -> AsyncMock:
+    """Build a mock AsyncSandbox usable as an async context manager."""
+    mock_commands = AsyncMock()
+    mock_commands.run = AsyncMock(side_effect=commands_side_effect)
+    mock_sandbox = AsyncMock()
     mock_sandbox.commands = mock_commands
-    mock_sandbox.files = MagicMock()
-    # Context manager support
-    mock_sandbox.__enter__ = MagicMock(return_value=mock_sandbox)
-    mock_sandbox.__exit__ = MagicMock(return_value=False)
+    mock_sandbox.files = AsyncMock()
+    # Async context manager support
+    mock_sandbox.__aenter__ = AsyncMock(return_value=mock_sandbox)
+    mock_sandbox.__aexit__ = AsyncMock(return_value=False)
     return mock_sandbox
 
 
@@ -559,8 +559,8 @@ async def test_grind_subtask_e2b_extracts_pr_url() -> None:
     )
 
     with patch("factory.agents.grinder_agent.get_settings", return_value=mock_settings):
-        with patch("e2b_code_interpreter.Sandbox") as mock_cls:
-            mock_cls.create.return_value = mock_sandbox
+        with patch("e2b_code_interpreter.AsyncSandbox") as mock_cls:
+            mock_cls.create = AsyncMock(return_value=mock_sandbox)
             result = await grind_subtask_e2b(state, subtask, meshwiki_client)
 
     assert result["status"] == "review"
@@ -592,8 +592,8 @@ async def test_grind_subtask_e2b_no_pr_url_fails() -> None:
     )
 
     with patch("factory.agents.grinder_agent.get_settings", return_value=mock_settings):
-        with patch("e2b_code_interpreter.Sandbox") as mock_cls:
-            mock_cls.create.return_value = mock_sandbox
+        with patch("e2b_code_interpreter.AsyncSandbox") as mock_cls:
+            mock_cls.create = AsyncMock(return_value=mock_sandbox)
             result = await grind_subtask_e2b(state, subtask, meshwiki_client)
 
     assert result["status"] == "failed"
@@ -618,8 +618,8 @@ async def test_grind_subtask_e2b_sandbox_error() -> None:
     )
 
     with patch("factory.agents.grinder_agent.get_settings", return_value=mock_settings):
-        with patch("e2b_code_interpreter.Sandbox") as mock_cls:
-            mock_cls.create.side_effect = RuntimeError("sandbox auth failed")
+        with patch("e2b_code_interpreter.AsyncSandbox") as mock_cls:
+            mock_cls.create = AsyncMock(side_effect=RuntimeError("sandbox auth failed"))
             result = await grind_subtask_e2b(state, subtask, meshwiki_client)
 
     assert result["status"] == "failed"
