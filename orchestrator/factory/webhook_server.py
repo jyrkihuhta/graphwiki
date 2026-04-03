@@ -114,11 +114,14 @@ async def receive_webhook(
     _verify_signature(body, x_meshwiki_signature_256)
 
     payload = await request.json()
-    event: str = payload.get("event", "")
+    # MeshWiki sends a raw event like "task.planned_to_in_progress" in "event"
+    # and the semantic name (e.g. "task.assigned") in "canonical_event".
+    raw_event: str = payload.get("event", "")
+    event: str = payload.get("canonical_event") or raw_event
     page_name: str = payload.get("page", "")
     data: dict[str, Any] = payload.get("data", {})
 
-    logger.info("webhook: received event=%s page=%s", event, page_name)
+    logger.info("webhook: received event=%s (raw=%s) page=%s", event, raw_event, page_name)
 
     if event == "task.assigned":
         initial_state = _build_initial_state(page_name, data)
