@@ -245,7 +245,7 @@ async def decompose_with_pm(
 
     while tool_calls_remaining > 0:
         response = await client.messages.create(
-            model="claude-opus-4-20250514",
+            model="claude-sonnet-4-6",
             max_tokens=8192,
             system=PM_SYSTEM_PROMPT,
             tools=PM_TOOLS,
@@ -367,7 +367,7 @@ async def review_with_pm(
 
     while tool_calls_remaining > 0:
         response = await client.messages.create(
-            model="claude-opus-4-20250514",
+            model="claude-sonnet-4-6",
             max_tokens=4096,
             system=PM_SYSTEM_PROMPT,
             tools=PM_TOOLS,
