@@ -617,7 +617,26 @@ async def api_graph():
         return {"nodes": [], "links": []}
 
     pages = engine.list_pages()
-    nodes = [{"id": p.name} for p in pages]
+    nodes = []
+    for p in pages:
+        backlinks = engine.get_backlinks(p.name)
+        tags = p.metadata.get("tags", [])
+        import time
+
+        modified_ts = (
+            p.last_modified.duration_since(time.gmtime(0))
+            if hasattr(p.last_modified, "duration_since")
+            else 0
+        )
+        modified_ts = int(modified_ts.total_seconds()) if modified_ts else 0
+        nodes.append(
+            {
+                "id": p.name,
+                "tags": tags,
+                "backlinks_count": len(backlinks),
+                "modified": modified_ts,
+            }
+        )
 
     links = []
     for page in pages:
