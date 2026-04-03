@@ -504,7 +504,8 @@ async def grind_subtask_e2b(
         f"5. Run: python -m pytest src/tests/ -x -q\n"
         f"6. Fix any lint/test failures\n"
         f"7. Commit and push the branch\n"
-        f"8. Create a PR with: gh pr create --title '...' --body '...'\n"
+        f"8. Create a PR with: gh pr create --title '[Factory] ...' --body '...'\n"
+        f"   The PR title MUST start with '[Factory] ' so it is clearly identified as automated.\n"
         f"9. Print the PR URL on the last line of your output"
     )
 
