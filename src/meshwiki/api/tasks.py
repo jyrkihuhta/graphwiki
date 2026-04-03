@@ -9,6 +9,7 @@ from meshwiki.api.auth import require_api_key
 from meshwiki.core.dependencies import get_storage
 from meshwiki.core.storage import FileStorage
 from meshwiki.core.task_machine import InvalidTransitionError, transition_task
+from meshwiki.core.terminal_sessions import close_session, create_session, put_chunk
 
 router = APIRouter(dependencies=[Depends(require_api_key)])
 
@@ -16,6 +17,10 @@ router = APIRouter(dependencies=[Depends(require_api_key)])
 class TransitionRequest(BaseModel):
     status: str
     extra_fields: dict[str, str] | None = None
+
+
+class TerminalChunkRequest(BaseModel):
+    data: str
 
 
 @router.get("/tasks")
@@ -79,4 +84,22 @@ async def transition(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
         )
 
+    # Manage terminal session lifecycle.
+    if body.status == "in_progress":
+        create_session(name)
+    else:
+        await close_session(name)
+
     return {"success": True, "metadata": metadata}
+
+
+@router.post("/tasks/{name:path}/terminal")
+async def append_terminal_chunk(name: str, body: TerminalChunkRequest) -> dict:
+    """Receive a raw PTY chunk from the orchestrator and relay to browser.
+
+    The orchestrator calls this endpoint once per ``on_data`` callback from the
+    E2B PTY.  The chunk is dropped silently if no browser is connected or the
+    queue is full.
+    """
+    await put_chunk(name, body.data)
+    return {"ok": True}

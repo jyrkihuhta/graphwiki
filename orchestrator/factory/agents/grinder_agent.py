@@ -467,6 +467,7 @@ async def grind_subtask_e2b(
     import os
     import re as _re
 
+    from e2b.sandbox.commands.command_handle import PtySize
     from e2b_code_interpreter import AsyncSandbox
 
     settings = get_settings()
@@ -533,12 +534,40 @@ async def grind_subtask_e2b(
         )
         logger.info("e2b grinder: sandbox created for subtask %s", subtask["id"])
 
+        # ── Async relay helpers ───────────────────────────────────────────────
+        # Both helpers are async so E2B's event loop can await them directly.
+        # Bootstrap commands use on_stdout/on_stderr (plain-text lines).
+        # Kilo runs inside a PTY; on_data delivers raw terminal bytes (ANSI etc.).
+
+        wiki_page = subtask["wiki_page"]
+
+        async def _on_stdout(line: str) -> None:
+            await meshwiki_client.relay_terminal(wiki_page, line + "\r\n")
+
+        async def _on_stderr(line: str) -> None:
+            # Render stderr in yellow so it stands out in the terminal.
+            await meshwiki_client.relay_terminal(
+                wiki_page, f"\x1b[33m{line}\x1b[0m\r\n"
+            )
+
+        # Accumulate raw PTY output so we can extract the PR URL afterwards.
+        _pty_chunks: list[str] = []
+
+        async def _on_pty_data(data: bytes) -> None:
+            text = data.decode("utf-8", errors="replace")
+            _pty_chunks.append(text)
+            await meshwiki_client.relay_terminal(wiki_page, text)
+
+        # ── Bootstrap ─────────────────────────────────────────────────────────
+
         # Configure git identity and credential helper
         await sbx.commands.run(
             'git config --global user.email "factory@meshwiki" && '
             'git config --global user.name "Factory Grinder" && '
             f'git config --global url."https://x-access-token:{settings.github_token}@github.com/".insteadOf "https://github.com/"',
             timeout=0,
+            on_stdout=_on_stdout,
+            on_stderr=_on_stderr,
         )
 
         # Bootstrap Node.js 20 + Kilo CLI (timeout=0 prevents premature kill)
@@ -548,6 +577,8 @@ async def grind_subtask_e2b(
             "sudo apt-get install -y nodejs && "
             "sudo npm install -g @kilocode/cli",
             timeout=0,
+            on_stdout=_on_stdout,
+            on_stderr=_on_stderr,
         )
 
         # Clone repo
@@ -556,6 +587,8 @@ async def grind_subtask_e2b(
         result = await sbx.commands.run(
             f"git clone {clone_url} /tmp/repo",
             timeout=0,
+            on_stdout=_on_stdout,
+            on_stderr=_on_stderr,
         )
         if result.exit_code != 0:
             raise RuntimeError(f"git clone failed: {result.stderr}")
@@ -564,26 +597,52 @@ async def grind_subtask_e2b(
         await sbx.commands.run(
             "cd /tmp/repo && pip install -e '.[dev]' -q",
             timeout=0,
+            on_stdout=_on_stdout,
+            on_stderr=_on_stderr,
         )
 
-        # Write task file and run Kilo
+        # Write task file
         await sbx.files.write("/tmp/task.md", task_prompt)
 
+        # ── Kilo run via PTY ──────────────────────────────────────────────────
+        # PTY allocation makes Kilo render its full TUI (sidebars, progress
+        # bars, colours) exactly as it would in a real terminal.  The raw bytes
+        # flow through _on_pty_data → relay_terminal → WebSocket → xterm.js.
+
         logger.info(
-            "e2b grinder: running Kilo (model=%s) for subtask %s...",
+            "e2b grinder: running Kilo via PTY (model=%s) for subtask %s...",
             model_arg,
             subtask["id"],
         )
-        result = await sbx.commands.run(
-            f'cd /tmp/repo && kilo run --auto --model {model_arg} "$(cat /tmp/task.md)"',
-            timeout=0,
-        )
 
-        output = (result.stdout or "") + (result.stderr or "")
-        logger.info("e2b grinder output tail: %s", output[-2000:])
+        pty_handle = await sbx.pty.create(
+            size=PtySize(cols=220, rows=50),
+            on_data=_on_pty_data,
+            timeout=0,  # no timeout — sandbox 1-hour limit applies
+        )
+        pid = pty_handle.pid
+
+        # Run Kilo then exit bash so pty_handle.wait() returns.
+        kilo_cmd = (
+            f'cd /tmp/repo && kilo run --auto --model {model_arg}'
+            f' "$(cat /tmp/task.md)" ; exit\n'
+        )
+        await sbx.pty.send_stdin(pid, kilo_cmd.encode())
+
+        try:
+            await pty_handle.wait()
+        except Exception as pty_exc:
+            # Non-zero exit is normal if kilo fails; log but continue so we
+            # can still check whether a PR was opened.
+            logger.warning("e2b grinder: PTY exited with error: %s", pty_exc)
+
+        # ── PR URL extraction ─────────────────────────────────────────────────
+        # Search the accumulated PTY output for a GitHub PR URL.
+        pty_output = "".join(_pty_chunks)
+        logger.info("e2b grinder: PTY output tail: %s", pty_output[-2000:])
 
         match = _re.search(
-            r'https://github\.com/[^/\s"]+/[^/\s"]+/pull/\d+', output
+            r'https://github\.com/[^/\s"]+/[^/\s"]+/pull/\d+', pty_output
         )
         if match:
             pr_url = match.group(0)
@@ -592,7 +651,7 @@ async def grind_subtask_e2b(
             status = "review"
             logger.info("e2b grinder: PR created %s", pr_url)
         else:
-            logger.warning("e2b grinder: no PR URL found in output")
+            logger.warning("e2b grinder: no PR URL found in PTY output")
 
     except Exception as exc:
         logger.exception("e2b grinder: sandbox error: %s", exc)
