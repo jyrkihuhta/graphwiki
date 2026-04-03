@@ -14,14 +14,14 @@
 | 7 | **Editor Experience** — live preview, toolbar, shortcuts, autocomplete | ✅ Complete |
 | 8 | **Navigation & Discovery** — search, TOC sidebar, tags, recent changes | ✅ Complete |
 | 9 | **Visual Polish** — dark mode, mobile responsive, notifications, code highlighting | ✅ Complete |
-| 10 | **Graph Enhancements** — node search, focus mode, tooltips, sizing | Planned |
+| 10 | **Graph Enhancements** — node search, focus mode, tooltips, sizing | ✅ Complete |
 | 11 | **Macro System** — PageList, RecentChanges, BackLinks, PageCount macros | Planned |
 | 12 | **Authentication** — user accounts, login/logout, access control | Planned |
 | 13 | **Observability** — structured logging, metrics endpoint | Planned |
 
 **Priority:** 7 → 8 → 11 → 9 → 10 → 12 → 13
 
-**274 tests passing** (70 graph-core + 204 Python), CI pipeline active.
+**~390 tests passing** (70 graph-core + ~320 Python), CI pipeline active.
 
 ---
 
@@ -69,17 +69,19 @@ Elevate the visual design and make it work on all screen sizes.
 
 **Key files:** `static/css/style.css` (dark theme, responsive, toast, loading), `templates/base.html` (theme toggle, hamburger, toast, loading bar, highlight.js), `main.py` (timeago filter, toast redirects)
 
-### Milestone 10: Graph Visualization Enhancements
+### Milestone 10: Graph Visualization Enhancements ✅
 Make the graph view more useful for navigation and exploration.
 
-- [ ] Search/filter box on graph page (highlight matching nodes, fade others)
-- [ ] Legend explaining node colors
-- [ ] Node sizing by connection count (more links = larger node)
-- [ ] Selected node detail panel (shows metadata, backlinks, outlinks)
-- [ ] Hover tooltip on nodes (page name + tag preview)
-- [ ] "Focus mode" — click a node to show only its neighborhood (n-hop subgraph)
+- [x] Search/filter box on graph page (highlight matching nodes, fade others)
+- [x] Legend explaining node colors and size scale (draggable)
+- [x] Node sizing by backlink count (logarithmic scale, MIN_RADIUS=5, MAX_RADIUS=24)
+- [x] Hover tooltip on nodes (page name, tags, backlink count)
+- [x] "Focus mode" — double-click a node to show only its neighborhood; Escape/double-click bg to exit
+- [x] Subpage edges — implicit dashed parent→child edges for pages with `/` in name; subpages cluster near parent
+- [x] Short node labels — last path segment only; full name in tooltip
+- [x] Flash cooldown — page_updated WebSocket events throttled to once per 2s per node
 
-**Key files:** `static/js/graph.js`, `templates/graph.html`, `static/css/style.css`
+**Key files:** `static/js/graph.js`, `static/css/graph.css`, `templates/graph.html`, `main.py` (`/api/graph`)
 
 ### Milestone 11: Macro System & Documentation
 Document the extension system and add useful built-in macros.
@@ -219,9 +221,10 @@ Deploy PR branches to a staging server for automated browser testing.
 
 - [ ] **Signed grinder commits** — factory bot commits show as "unverified" on GitHub. Options: create a GitHub App and use its installation token (commits attributed to the app and signed), or configure GPG signing in the E2B sandbox with a dedicated factory key.
 - [ ] **PostgreSQL checkpointer** — replace MemorySaver so graph state survives orchestrator restarts
-- [ ] **Anthropic API key for PM decomposition** — currently requires `skip_decomposition: true`; wire in a key to enable full PM-driven task breakdown
+- [x] **PM uses Sonnet** — switched from Opus 4 to Sonnet 4.6 for decomposition and review (~$3 → much cheaper per job)
 - [ ] **Cost tracking** — aggregate token usage across grinder runs and write a cost summary to the task wiki page on completion
 - [ ] **Webhook handler decoupling** — `ainvoke` blocks the HTTP handler for the full pipeline duration; move graph execution to a background task so the webhook returns immediately
+- [x] **Grinder auto-transitions task** — after grind completes, grinder node calls `transition_task()` to set status to `review` (or `failed`) and records `pr_url` and `branch` on the wiki page
 - [ ] **Bookkeeper bot** — a periodic job (e.g. every 5 min) that scans all `type: task` pages and reconciles stale states: tasks stuck `in_progress` with no active terminal session and no recent PTY activity should be transitioned to `failed`; tasks in `review` where the PR has already been merged on GitHub should be transitioned to `merged`; tasks in `review` where the PR was closed without merging should be transitioned to `failed`. Prevents tasks from getting permanently stuck when the orchestrator crashes, restarts, or has a logic error mid-run.
 
 ---
