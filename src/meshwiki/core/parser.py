@@ -335,6 +335,11 @@ def _mermaid_diagram(status: str) -> str:
         done_nodes = _HAPPY_PATH[:idx]
         current_nodes = [status]
         pending_nodes = _HAPPY_PATH[idx + 1 :]
+        # merged is terminal for factory tasks — absorb "done" into done nodes
+        # so it renders green rather than as a pending white node.
+        if status == "merged" and "done" in pending_nodes:
+            pending_nodes = [n for n in pending_nodes if n != "done"]
+            done_nodes = done_nodes + ["done"]
     elif is_off_path:
         branch_from = _OFF_PATH_BRANCH[status]
         b_idx = _HAPPY_PATH.index(branch_from)
