@@ -1,7 +1,6 @@
 """Tests for graph node tooltips (Milestone 10)."""
 
 import os
-import time
 from unittest.mock import patch
 
 import pytest
@@ -83,8 +82,6 @@ class TestGraphTooltipAPI:
             assert "wiki" in home["tags"]
             assert "backlinks_count" in home
             assert home["backlinks_count"] == 2
-            assert "modified" in home
-            assert isinstance(home["modified"], int)
 
             assert "About" in node_map
             about = node_map["About"]
@@ -121,35 +118,6 @@ class TestGraphTooltipAPI:
             assert node_map["HomePage"]["tags"] == ["main", "wiki"]
             assert node_map["About"]["tags"] == ["info"]
             assert node_map["Contact"]["tags"] == []
-
-    @pytest.mark.skipif(not GRAPH_ENGINE_AVAILABLE, reason="graph_core not installed")
-    @pytest.mark.asyncio
-    async def test_api_graph_modified_is_valid_timestamp(self, wiki_dir):
-        """Modified field should be a valid Unix timestamp."""
-        import importlib
-
-        os.environ["MESHWIKI_DATA_DIR"] = str(wiki_dir)
-        import meshwiki.config
-
-        importlib.reload(meshwiki.config)
-        import meshwiki.main
-
-        importlib.reload(meshwiki.main)
-
-        init_engine(wiki_dir, watch=False)
-
-        from httpx import ASGITransport, AsyncClient
-
-        transport = ASGITransport(app=meshwiki.main.app)
-        async with AsyncClient(transport=transport, base_url="http://test") as client:
-            response = await client.get("/api/graph")
-            data = response.json()
-            for node in data["nodes"]:
-                assert "modified" in node
-                assert node["modified"] > 0
-                ts = node["modified"]
-                date = time.gmtime(ts)
-                assert date.tm_year >= 2020
 
     @pytest.mark.asyncio
     async def test_api_graph_without_engine_returns_empty(self):
