@@ -1,8 +1,8 @@
 # Domain: Agent Factory
 
 **Owner:** TBD
-**Status:** Phases 1–7 complete
-**Language:** Python (MeshWiki layer) + future Python (LangGraph orchestrator)
+**Status:** v1 complete (Phases 1–7), v2 in progress (Phases 8–11)
+**Language:** Python (MeshWiki layer) + Python (LangGraph orchestrator)
 **PRD:** `docs/prd/003-agent-factory.md`
 
 ## Scope
@@ -164,6 +164,98 @@ Mount the router in `src/meshwiki/api/__init__.py` (already mounts `/api/v1`).
 - Test that missing pages return 404
 
 Existing tests: `src/tests/test_task_machine.py`, `src/tests/test_api_*.py`
+
+---
+
+## Factory v2 Plan
+
+v2 addresses structural gaps in v1, adds a live D3.js factory visualization, resource management, and an initial bot ecosystem. Bots interact with the factory by **creating task wiki pages** (the existing `task.assigned` webhook flow) — no separate bot API.
+
+### Phase 8: v1 Gap Fixes (Orchestrator) 🔲
+Fix correctness and reliability issues discovered in v1.
+
+- [ ] **Cost tracking** — `cost_usd` is never incremented anywhere in v1. Add `factory/cost.py` with `estimate_cost(model, input_tokens, output_tokens)` price table. After each `client.messages.create()` call in `pm_agent.py` (lines 249, 370), read `response.usage` and accumulate cost. E2B path: track sandbox wall-clock time × configurable $/hr rate. Write to `state["cost_usd"]` from `grind_node` and `pm_review_node`.
+- [ ] **Concurrency control** — `active_grinders` dict in state is declared but never populated. Cap `route_grinders` at `FACTORY_MAX_CONCURRENT_SANDBOXES` (default 3). Populate `active_grinders` in `grind_node` on entry/exit.
+- [ ] **httpx client per call** — both `MeshWikiClient` and `GitHubClient` open a new `httpx.AsyncClient` for every call. Share a client instance per session with connection pooling.
+- [ ] **Configurable PM model** — `pm_agent.py` hardcodes `"claude-sonnet-4-6"` at lines 249 and 370. Add `FACTORY_PM_MODEL` config setting.
+- [ ] **Review feedback in rework prompt** — when PM requests changes, `subtask["review_feedback"]` is set but the grinder never reads it. Append it to `/tmp/task.md` in the E2B sandbox on rework iterations.
+- [ ] **Signed grinder commits** — factory bot commits show as "unverified" on GitHub. Create a GitHub App and use its installation token, or configure GPG signing in the E2B sandbox with a dedicated factory key.
+- [ ] **Bookkeeper bot** — periodic job (every 5 min) that scans task pages and reconciles stale states: tasks stuck `in_progress` with no active terminal session → `failed`; tasks in `review` where PR is already merged on GitHub → `merged`; tasks in `review` where PR was closed without merging → `failed`. Prevents tasks stuck when orchestrator crashes mid-run.
+- [ ] **Redecompose escalation path** — `escalate_node` never sets `"redecompose"` decision despite the routing supporting it. Implement the logic: when multiple subtasks fail, trigger re-planning.
+- [ ] **Tests for routing functions** — `route_after_grinding`, `route_after_pm_review`, `route_after_human_code_review`, `route_after_escalation`, and `route_grinders` file-overlap logic all lack unit tests.
+
+**New config keys:** `FACTORY_PM_MODEL`, `FACTORY_MAX_CONCURRENT_SANDBOXES` (default 3), `FACTORY_E2B_COST_PER_HOUR` (default 0.20)
+**New files:** `orchestrator/factory/cost.py`
+
+---
+
+### Phase 9: HBR Resource Manager + Scheduler (Orchestrator) 🔲
+Internal resource tracking and 24/7 heartbeat scheduler so the factory can operate autonomously.
+
+- [ ] **`factory/hbr.py`** — `HbrManager` tracking active sandboxes, daily cost vs budget, and per-model API usage. Methods: `can_allocate_sandbox()`, `sandbox_started/finished()`, `record_api_cost()`, `get_utilization()`. `route_grinders` checks `can_allocate_sandbox()` before dispatching.
+- [ ] **`factory/scheduler.py`** — asyncio heartbeat (60s tick) that: resets daily budget at midnight UTC, scans for `status=approved, assignee=factory` task pages that weren't picked up by webhook, triggers the graph for the highest-priority queued task if resources are available. Started/stopped in webhook server lifespan.
+- [ ] **`GET /hbr/status` endpoint** — returns current utilization: active sandboxes, daily cost, budget remaining, tasks queued.
+
+**New config keys:** `FACTORY_DAILY_BUDGET_USD` (default 50.0), `FACTORY_SCHEDULER_INTERVAL_SECONDS` (default 60)
+**New files:** `orchestrator/factory/hbr.py`, `orchestrator/factory/scheduler.py`
+
+---
+
+### Phase 10: Live D3.js Factory Visualization (MeshWiki) 🔲
+A real-time factory activity view using the same D3.js visual language as the wiki graph page.
+
+**New WebSocket channel:**
+- [ ] **`core/factory_ws_manager.py`** — `FactoryConnectionManager` singleton (same pattern as `ws_manager.py` but push-based, no polling loop). Has a 500-entry activity ring buffer for replay on late connect.
+- [ ] **`core/task_machine.py`** — after webhook emit (~line 121), also `await factory_manager.broadcast({type: "task_transition", page, from_status, to_status, canonical, metadata, timestamp})`.
+- [ ] **`core/terminal_sessions.py`** — debounced `terminal_activity` broadcast in `put_chunk()` (max 1/sec per task) so the factory graph shows a "working" indicator on in_progress nodes.
+- [ ] **`GET /ws/factory` WebSocket endpoint** in `main.py`.
+
+**New API endpoints** in `api/tasks.py`:
+- [ ] `GET /api/factory/graph?active_only=true` — graph snapshot: task nodes (status, title, assignee, parent_task, priority, has_terminal), agent nodes, parent_child and assignment links.
+- [ ] `GET /api/factory/activity?limit=50` — recent events from ring buffer.
+
+**New page: `/factory/live`** (`templates/factory_live.html`, full-width layout):
+```
++-------------------------------------------------------------+
+| Factory  |  3 active · 1 agent · $4.32 today  | [filters]  |
++-------------------------------------------------------------+
+|                                        |  Detail Panel      |
+|       D3 Force Graph                   |  (slides in right) |
+|       Task circles (color=status)      |  - Title + badge   |
+|       Agent diamonds                   |  - Terminal embed  |
+|       Parent edges dashed              |  - Metadata        |
++-------------------------------------------------------------+
+| Activity Feed (120px, scrolling log)                        |
++-------------------------------------------------------------+
+```
+
+**`static/js/factory.js`** (~500 lines):
+- Force sim: link distance 80px (assignment) / 120px (parent_child), `forceManyBody(-400)`, `forceCollide(radius+10)`
+- Task circles colored by status (same palette as `_BADGE_CLASS` in `parser.py`)
+- Agent nodes as diamonds (`d3.symbolDiamond`)
+- `task_transition` events: animate node color (600ms), flash (amber pulse), entrance/exit animations
+- `terminal_activity` events: pulsing dot on in_progress node (clears after 3s)
+- Click node → slide-in detail panel with xterm.js terminal embed for in_progress tasks (same pattern as `_render_task_status` in `parser.py` lines 567-611)
+- Double-click → focus mode (same as `graph.js`)
+- Race condition: connect WS first, buffer events, fetch REST snapshot, apply buffered events
+
+**`static/css/factory.css`** (~200 lines): layout, detail panel slide-in, activity feed strip, node animations, dark mode.
+
+**`templates/base.html`**: Add conditional "Factory" nav link when `factory_enabled`.
+
+---
+
+### Phase 11: Stale PR Fixer Bot 🔲
+First autonomous bot using the factory. Monitors CI failures on factory-created PRs and re-dispatches them for fixing.
+
+- [ ] **`factory/bots/stale_pr_bot.py`** — `StalePrBot.scan()` fetches open PRs (`factory/*` branch prefix only), checks check-run status via `GET /repos/{repo}/commits/{sha}/check-runs`. For PRs with failures > 30 min with no existing fix task: creates a MeshWiki task page (`type: task, status: planned, skip_decomposition: true, assignee: factory`) containing the failing check log + fix instructions, transitions to `approved` → factory picks it up via webhook.
+- [ ] **Scheduler integration** — heartbeat calls `stale_pr_bot.scan()` every `FACTORY_STALE_PR_BOT_INTERVAL_SECONDS` (default 300). Respects HBR budget limits.
+- [ ] **Safety guards** — only fixes `factory/*` branches; max 2 fix attempts per PR; respects concurrency limits.
+
+**New config keys:** `FACTORY_STALE_PR_BOT_ENABLED` (default false), `FACTORY_STALE_PR_BOT_INTERVAL_SECONDS` (default 300)
+**New files:** `orchestrator/factory/bots/__init__.py`, `orchestrator/factory/bots/stale_pr_bot.py`
+
+---
 
 ## Gotchas
 
