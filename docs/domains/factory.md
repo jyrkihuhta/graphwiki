@@ -1,7 +1,7 @@
 # Domain: Agent Factory
 
 **Owner:** TBD
-**Status:** v1 complete (Phases 1–7), v2 in progress (Phases 8–11)
+**Status:** v1 complete (Phases 1–7), staging integration in progress (S1), v2 planned (Phases 8–11)
 **Language:** Python (MeshWiki layer) + Python (LangGraph orchestrator)
 **PRD:** `docs/prd/003-agent-factory.md`
 
@@ -164,6 +164,64 @@ Mount the router in `src/meshwiki/api/__init__.py` (already mounts `/api/v1`).
 - Test that missing pages return 404
 
 Existing tests: `src/tests/test_task_machine.py`, `src/tests/test_api_*.py`
+
+---
+
+## Staging Integration (S1) — Highest Priority
+
+A staging server is live at `staging.wiki.penni.fi`. The remaining work wires the grinders into it.
+
+### Architecture
+
+```
+main (production, immutable Docker image)
+  └── staging (integration branch, always deployed via git checkout + --reload)
+        └── factory/task-001  ─┐
+        └── factory/task-002  ─┤  grinders PR here (not main)
+        └── factory/task-003  ─┘  auto-merged after PM approval
+
+Human reviews staging.wiki.penni.fi
+  → satisfied → PR: staging → main → CI builds Docker image → production
+```
+
+Grinders clone from `staging` so they build on each other's work. Git is the communication channel — grinder B starts with grinder A's merged changes already present. Same-file work is still serialized (file overlap detection); different-file work runs in parallel.
+
+### What's Done ✅
+
+- Staging container running (`meshwiki-meshwiki-staging-1`, healthy, `--reload` active)
+- Caddy routing `staging.wiki.penni.fi → meshwiki-staging:8000`
+- Separate data dir and env (`staging.env`, `data/staging-pages/`)
+- `/opt/meshwiki/staging/` git checkout on VPS
+
+### What's Left 🔲
+
+**DNS** (user action): `staging.wiki.penni.fi → 135.181.38.57`
+
+**Integration branch:**
+- Create `staging` branch in repo from `main`
+- CI: add `staging` to `on.push.branches`; dedicated staging deploy job that checks out `staging` on VPS + smoke tests
+- Remove the incorrect "update staging on every branch push" from the main deploy job (staging should track `staging` branch only)
+
+**Grinder changes:**
+- `grinder_agent.py`: clone from `staging` branch, PR targets `staging` as base
+- `github_client.py`: add `base: str = "main"` param to PR creation
+- After PM approval: auto-merge to `staging` via `GitHubClient` — no `human_review_code` interrupt for this step. Human gate is `staging → main` only.
+- Make `human_review_code` interrupt configurable (skip when `FACTORY_TARGET_BRANCH != "main"`)
+
+**E2B pre-built template** (5x speed improvement):
+- Current bootstrap: install Node.js + Kilo + clone repo + pip install = ~2.5 min per grinder
+- With template: only `git clone` needed = ~30 seconds
+- Create via `e2b template build` with Dockerfile (Node 20 + Kilo pre-installed)
+- Add `FACTORY_E2B_TEMPLATE_ID` config; grinder uses `AsyncSandbox.create(template=...)`
+
+**New config keys:** `FACTORY_TARGET_BRANCH` (default `staging`), `FACTORY_E2B_TEMPLATE_ID`
+
+**Key files:**
+- `.github/workflows/ci.yml`
+- `orchestrator/factory/agents/grinder_agent.py`
+- `orchestrator/factory/integrations/github_client.py`
+- `orchestrator/factory/graph.py`
+- `orchestrator/factory/config.py`
 
 ---
 

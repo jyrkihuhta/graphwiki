@@ -18,12 +18,13 @@
 | 11 | **Macro System** — PageList, RecentChanges, BackLinks, PageCount macros | Planned |
 | 12 | **Authentication** — user accounts, login/logout, access control | Planned |
 | 13 | **Observability** — structured logging, metrics endpoint | Planned |
+| S1 | **Staging Integration** — `staging` branch, grinders → staging, auto-merge, E2B template | 🔲 **NOW** |
 | F8 | **Factory v2: Gap Fixes** — cost tracking, concurrency control, bookkeeper bot | 🔲 Planned |
 | F9 | **Factory v2: HBR Manager** — resource tracking, daily budget, 24/7 scheduler | 🔲 Planned |
 | F10 | **Factory v2: Live Visualization** — D3.js factory graph, `/factory/live`, WebSocket | 🔲 Planned |
 | F11 | **Factory v2: Stale PR Bot** — autonomous CI failure fixer | 🔲 Planned |
 
-**Priority:** F8 → F9 → F10 → F11 → 11 → 12 → 13
+**Priority:** S1 → F8 → F9 → F10 → F11 → 11 → 12 → 13
 
 **~390 tests passing** (70 graph-core + ~320 Python), CI pipeline active.
 
@@ -86,6 +87,55 @@ Make the graph view more useful for navigation and exploration.
 - [x] Flash cooldown — page_updated WebSocket events throttled to once per 2s per node
 
 **Key files:** `static/js/graph.js`, `static/css/graph.css`, `templates/graph.html`, `main.py` (`/api/graph`)
+
+### Milestone S1: Staging Integration 🔲 **HIGHEST PRIORITY**
+
+Staging server is running at `staging.wiki.penni.fi` (container up, Caddy routing ready).
+The remaining work wires staging into the full grinder workflow so grinders build on each other.
+
+**Key insight:** Grinders should clone from and PR into a `staging` branch (not `main`).
+Git becomes the communication channel — grinder B clones `staging` and inherits grinder A's merged work.
+Grinders touching the same files are still serialized; those on different files run in parallel.
+The human gate moves to `staging → main` (promoting a batch of grinder work to production).
+
+**Infrastructure (done ✅)**
+- [x] Staging container running on VPS (`meshwiki-meshwiki-staging-1`, healthy)
+- [x] Caddy routing `staging.wiki.penni.fi → meshwiki-staging:8000`
+- [x] Separate data dir `/opt/meshwiki/data/staging-pages`
+- [x] `/opt/meshwiki/staging/` git checkout
+- [x] `staging.env` written on VPS
+
+**DNS (user action required)**
+- [ ] Add A record: `staging.wiki.penni.fi → 135.181.38.57`
+
+**Integration branch**
+- [ ] Create `staging` branch in repo (from `main`)
+- [ ] Add CI trigger: push to `staging` branch → update staging checkout on VPS + smoke test
+  - Currently CI only triggers on `main` — the "update staging" step we added won't fire yet
+  - Add `staging` to the `on.push.branches` list, with a separate job that only runs on `staging`
+- [ ] Remove the "update staging on every branch push" logic added to the `main` deploy job (it's wrong — staging should track the `staging` branch, not whatever was last pushed to any branch)
+
+**Grinder changes (orchestrator)**
+- [ ] `grinder_agent.py`: clone from `staging` branch (`git clone --branch staging ...`) instead of `main`
+- [ ] `grinder_agent.py` / Kilo prompt: PR targets `staging` as base branch instead of `main`
+- [ ] `github_client.py`: add `base: str = "main"` param to PR creation so grinders can target `staging`
+- [ ] After PM approves: auto-merge grinder PR to `staging` — no `human_review_code` interrupt needed at this step. Human only reviews `staging → main`.
+  - Either remove the `human_review_code` node from the graph, or make it configurable (skip when `target_branch == "staging"`)
+  - Add `merge_pr_to_staging()` step after PM approval using `GitHubClient`
+
+**E2B pre-built template (speed)**
+- [ ] Create a custom E2B sandbox template with Node.js 20 + Kilo CLI pre-installed
+  - Currently every grinder run installs Node.js + Kilo from scratch: ~2.5 min bootstrap
+  - With template: sandbox starts with everything pre-installed, only `git clone` needed: ~30s
+  - Create via E2B CLI: `e2b template build` with a Dockerfile that installs Node + Kilo
+  - Add `FACTORY_E2B_TEMPLATE_ID` config setting; grinder uses it in `AsyncSandbox.create(template=...)`
+
+**Key files:**
+- `.github/workflows/ci.yml` — add `staging` branch trigger + dedicated staging deploy job
+- `orchestrator/factory/agents/grinder_agent.py` — clone from staging, PR targets staging
+- `orchestrator/factory/integrations/github_client.py` — base branch param
+- `orchestrator/factory/graph.py` — make `human_review_code` interrupt optional/configurable
+- `orchestrator/factory/config.py` — add `FACTORY_TARGET_BRANCH` (default `staging`), `FACTORY_E2B_TEMPLATE_ID`
 
 ### Milestone F8: Factory v2 — Gap Fixes 🔲
 Fix correctness and reliability issues in the v1 orchestrator.
