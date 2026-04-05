@@ -208,11 +208,31 @@ Grinders clone from `staging` so they build on each other's work. Git is the com
 - After PM approval: auto-merge to `staging` via `GitHubClient` — no `human_review_code` interrupt for this step. Human gate is `staging → main` only.
 - Make `human_review_code` interrupt configurable (skip when `FACTORY_TARGET_BRANCH != "main"`)
 
-**E2B pre-built template** (5x speed improvement):
-- Current bootstrap: install Node.js + Kilo + clone repo + pip install = ~2.5 min per grinder
-- With template: only `git clone` needed = ~30 seconds
-- Create via `e2b template build` with Dockerfile (Node 20 + Kilo pre-installed)
-- Add `FACTORY_E2B_TEMPLATE_ID` config; grinder uses `AsyncSandbox.create(template=...)`
+**E2B sandbox speed — three tiers**
+
+E2B has three distinct persistence/caching mechanisms. Implement in order:
+
+| Tier | Mechanism | Requires | Bootstrap time |
+|------|-----------|----------|----------------|
+| 1 | Custom template (pre-baked image) | Available now | ~25s |
+| 2 | Volume repo mirror | Private beta | ~5s |
+| 3 | Pause/resume warm pool | Available now | <2s |
+
+**Tier 1 — Custom template** (do first):
+- Pre-bake Node.js 20 + Kilo CLI + Python deps into an E2B snapshot using `e2b template build`
+- Every grinder spawns from the snapshot in ~200ms; only `git clone staging` (~20s) remains
+- `FACTORY_E2B_TEMPLATE_ID` config key; grinder uses `AsyncSandbox.create(template=...)`
+
+**Tier 2 — Volume repo mirror** (private beta, contact support@e2b.dev):
+- A persistent volume holds a pre-cloned copy of the repo, updated on each `staging` push
+- Multiple sandboxes mount it simultaneously — read semantics are safe since each grinder creates its own `git worktree`
+- NVMe attach is constant-time (not size-dependent)
+- Write/locking semantics for concurrent writes are undocumented — not suitable for shared coordination state, only for read-only repo access
+
+**Tier 3 — Pause/resume warm pool** (future):
+- Pre-warm N sandboxes (tools installed, repo cloned, checked out), pause them (~4s per GB RAM)
+- Resume on demand: ~1s with full filesystem + process state preserved
+- Eliminates even the git clone step
 
 **New config keys:** `FACTORY_TARGET_BRANCH` (default `staging`), `FACTORY_E2B_TEMPLATE_ID`
 

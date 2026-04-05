@@ -123,12 +123,27 @@ The human gate moves to `staging → main` (promoting a batch of grinder work to
   - Either remove the `human_review_code` node from the graph, or make it configurable (skip when `target_branch == "staging"`)
   - Add `merge_pr_to_staging()` step after PM approval using `GitHubClient`
 
-**E2B pre-built template (speed)**
-- [ ] Create a custom E2B sandbox template with Node.js 20 + Kilo CLI pre-installed
-  - Currently every grinder run installs Node.js + Kilo from scratch: ~2.5 min bootstrap
-  - With template: sandbox starts with everything pre-installed, only `git clone` needed: ~30s
-  - Create via E2B CLI: `e2b template build` with a Dockerfile that installs Node + Kilo
-  - Add `FACTORY_E2B_TEMPLATE_ID` config setting; grinder uses it in `AsyncSandbox.create(template=...)`
+**E2B sandbox speed (three tiers)**
+
+E2B has three distinct mechanisms. Use in order of availability:
+
+- [ ] **Tier 1 — Custom template** (available now, no beta needed)
+  - Pre-bake Node.js 20 + Kilo CLI + Python deps into an E2B snapshot
+  - Sandboxes spin up from template in ~200ms; only `git clone` (~20s) remains
+  - Build: `e2b template build` with a Dockerfile
+  - Add `FACTORY_E2B_TEMPLATE_ID` config; grinder uses `AsyncSandbox.create(template=...)`
+  - Bootstrap: ~2.5 min → **~25s**
+
+- [ ] **Tier 2 — Volume repo mirror** (private beta — contact support@e2b.dev)
+  - Volume holds pre-cloned git repo; multiple sandboxes mount it simultaneously (read-only semantics fine since each grinder creates its own worktree)
+  - NVMe attach is constant-time regardless of repo size
+  - Updated when `staging` branch is pushed
+  - Bootstrap: ~25s → **~5s**
+
+- [ ] **Tier 3 — Pause/resume warm pool** (future optimisation)
+  - Pre-warm N grinder sandboxes (cloned, checked out, ready), pause them (~4s/GB RAM)
+  - Resume on demand: ~1 second with full state preserved
+  - Bootstrap: ~5s → **<2s**
 
 **Key files:**
 - `.github/workflows/ci.yml` — add `staging` branch trigger + dedicated staging deploy job
