@@ -455,6 +455,7 @@ jobs:
             cp /opt/meshwiki/staging/deploy/vps/staging.env.example /opt/meshwiki/staging.env
           fi
           cd /opt/meshwiki
+          docker compose pull meshwiki-staging orchestrator-staging || true
           docker compose up -d meshwiki-staging || true
           docker compose up -d --no-deps orchestrator-staging || true
           ENDDEPLOY
