@@ -496,14 +496,41 @@ async def grind_subtask_e2b(
         logger.error("e2b grinder: failed to fetch wiki page: %s", exc)
 
     base_branch = settings.pr_base_branch
+    review_feedback = subtask.get("review_feedback") or ""
+    is_rework = bool(review_feedback)
+
+    if is_rework:
+        branch_instruction = (
+            f"2. Set up the branch:\n"
+            f"   git fetch origin\n"
+            f"   git checkout factory/{subtask['id']} 2>/dev/null || git checkout -b factory/{subtask['id']} origin/{base_branch}\n"
+            f"   (This is a REWORK iteration — you must apply the fixes below before pushing.)\n"
+        )
+        rework_section = (
+            f"\n## ⚠️ REWORK REQUIRED — Previous review feedback\n\n"
+            f"{review_feedback}\n\n"
+            f"Apply these changes on top of the existing branch, then push and update the PR.\n"
+        )
+    else:
+        branch_instruction = (
+            f"2. Set up the branch (handles both fresh start and interrupted-run resume):\n"
+            f"   git fetch origin\n"
+            f"   git checkout factory/{subtask['id']} 2>/dev/null || git checkout -b factory/{subtask['id']} origin/{base_branch}\n"
+            f"   (If the branch already exists from a previous interrupted run, check out the existing branch.\n"
+            f"    Then check if there is already an open PR for this branch: gh pr list --head factory/{subtask['id']} --json number,url\n"
+            f"    If an open PR exists and this is NOT a rework, skip straight to step 9 and print its URL.)\n"
+        )
+        rework_section = ""
+
     task_prompt = (
         f"You are working on the MeshWiki project (FastAPI + Python 3.12 + Rust graph engine). "
         f"Implement the following task and open a GitHub PR when done.\n\n"
         f"## Task: {subtask['title']}\n\n"
-        f"{page_content}\n\n"
+        f"{page_content}\n"
+        f"{rework_section}\n"
         f"## Instructions\n"
         f"1. Explore the codebase to understand context\n"
-        f"2. Create a branch from origin/{base_branch}: git checkout -b factory/{subtask['id']} origin/{base_branch}\n"
+        f"{branch_instruction}"
         f"3. Implement the changes with tests\n"
         f"4. Run: .venv/bin/black src/ && .venv/bin/isort --profile black src/ && .venv/bin/ruff check src/\n"
         f"5. Run: python -m pytest src/tests/ -x -q\n"
@@ -512,7 +539,8 @@ async def grind_subtask_e2b(
         f"8. Rebase onto the latest {base_branch} to avoid merge conflicts:\n"
         f"   git fetch origin && git rebase origin/{base_branch}\n"
         f"   Resolve any conflicts, then: git push --force-with-lease\n"
-        f"9. Create a PR targeting {base_branch}: gh pr create --base {base_branch} --title '[Factory] ...' --body '...'\n"
+        f"9. {'Update the existing PR' if is_rework else 'Create a PR'} targeting {base_branch}: "
+        f"{'gh pr view --json url --jq .url  # print existing PR URL' if is_rework else f'gh pr create --base {base_branch} --title \"[Factory] ...\" --body \"...\"'}\n"
         f"   The PR title MUST start with '[Factory] ' so it is clearly identified as automated.\n"
         f"10. Print the PR URL on the last line of your output"
     )
@@ -581,7 +609,9 @@ async def grind_subtask_e2b(
 
         # Clone repo (shallow clone of the base branch so grinders start from the latest work)
         repo = settings.github_repo
-        clone_url = f"https://x-access-token:{settings.github_token}@github.com/{repo}.git"
+        clone_url = (
+            f"https://x-access-token:{settings.github_token}@github.com/{repo}.git"
+        )
         result = await sbx.commands.run(
             f"git clone --branch {base_branch} {clone_url} /tmp/repo",
             timeout=0,
@@ -622,7 +652,7 @@ async def grind_subtask_e2b(
 
         # Run Kilo then exit bash so pty_handle.wait() returns.
         kilo_cmd = (
-            f'cd /tmp/repo && kilo run --auto --model {model_arg}'
+            f"cd /tmp/repo && kilo run --auto --model {model_arg}"
             f' "$(cat /tmp/task.md)" ; exit\n'
         )
         await sbx.pty.send_stdin(pid, kilo_cmd.encode())
@@ -639,11 +669,13 @@ async def grind_subtask_e2b(
         pty_output = "".join(_pty_chunks)
         logger.info("e2b grinder: PTY output tail: %s", pty_output[-2000:])
 
-        match = _re.search(
+        # Use findall + take the last match: Kilo may output placeholder URLs
+        # earlier in its thinking; the actual PR URL appears at the end (step 10).
+        all_urls = _re.findall(
             r'https://github\.com/[^/\s"]+/[^/\s"]+/pull/\d+', pty_output
         )
-        if match:
-            pr_url = match.group(0)
+        if all_urls:
+            pr_url = all_urls[-1]
 
         if pr_url:
             status = "review"
