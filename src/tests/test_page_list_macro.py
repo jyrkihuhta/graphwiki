@@ -1,7 +1,6 @@
 """Unit tests for the <<PageList>> macro."""
 
 from datetime import datetime, timedelta
-from unittest.mock import MagicMock, patch
 
 from meshwiki.core.models import Page, PageMetadata
 from meshwiki.core.parser import parse_wiki_content
@@ -30,24 +29,10 @@ def make_page(
 
 
 def render(text: str, pages: list[Page] | None = None) -> str:
-    """Render text through the parser, patching get_storage."""
+    """Render text through the parser, passing pages directly as all_pages."""
     if pages is None:
         pages = []
-
-    mock_storage = MagicMock()
-
-    async def mock_list_pages_with_metadata() -> list[Page]:
-        return pages
-
-    async def mock_search_by_tag(tag: str) -> list[Page]:
-        return [p for p in pages if tag.lower() in [t.lower() for t in p.metadata.tags]]
-
-    mock_storage.list_pages_with_metadata = mock_list_pages_with_metadata
-    mock_storage.search_by_tag = mock_search_by_tag
-
-    with patch("meshwiki.core.dependencies.get_storage", return_value=mock_storage):
-        html = parse_wiki_content(text)
-    return html
+    return parse_wiki_content(text, all_pages=pages)
 
 
 class TestPageListBasic:
@@ -156,15 +141,12 @@ class TestPageListEdgeCases:
         assert "page-list-empty" in html
         assert "No pages found" in html
 
-    def test_storage_unavailable(self):
-        """<<PageList>> when get_storage raises RuntimeError shows unavailable message."""
-        with patch(
-            "meshwiki.core.dependencies.get_storage",
-            side_effect=RuntimeError("Storage not initialised"),
-        ):
-            html = parse_wiki_content("<<PageList>>")
-        assert "page-list-unavailable" in html
-        assert "PageList: storage not available" in html
+    def test_no_pages_shows_empty_not_unavailable(self):
+        """<<PageList>> with no pages shows empty message, not unavailable."""
+        html = render("<<PageList>>", pages=[])
+        assert "page-list-empty" in html
+        assert "No pages found" in html
+        assert "page-list-unavailable" not in html
 
     def test_not_replaced_in_fenced_code_block(self):
         """<<PageList>> inside code blocks is escaped, not rendered."""
