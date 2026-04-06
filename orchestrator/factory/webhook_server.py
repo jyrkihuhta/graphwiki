@@ -14,9 +14,65 @@ from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 
 from .config import get_settings
 from .graph import build_graph
+from .integrations.meshwiki_client import MeshWikiClient
 from .state import FactoryState
 
 logger = logging.getLogger(__name__)
+
+
+async def _resume_interrupted_tasks(graph, saver, settings) -> None:
+    """On startup, resume any tasks that were in_progress when the orchestrator died.
+
+    Strategy:
+    1. Ask MeshWiki for all tasks with status=in_progress and assignee=factory.
+    2. For each, check if the SQLite checkpointer has a saved state.
+    3. If yes, call ainvoke({}) with the same thread_id — LangGraph resumes
+       from the last node boundary rather than restarting from scratch.
+    """
+    client = MeshWikiClient(settings.meshwiki_url, settings.meshwiki_api_key)
+    try:
+        tasks = await client.list_tasks(status="in_progress")
+    except Exception as exc:
+        logger.warning("factory: could not fetch in_progress tasks on startup: %s", exc)
+        return
+
+    factory_tasks = [t for t in tasks if t.get("assignee") == "factory"]
+    if not factory_tasks:
+        return
+
+    logger.info("factory: found %d in_progress factory task(s) on startup", len(factory_tasks))
+    for task in factory_tasks:
+        page_name = task.get("name", "")
+        if not page_name:
+            continue
+
+        config = {"configurable": {"thread_id": page_name}}
+        # Check whether a checkpoint exists for this thread.
+        checkpoint_tuple = await saver.aget_tuple(config)
+        if checkpoint_tuple is None:
+            logger.info("factory: no checkpoint for %s — skipping resume", page_name)
+            continue
+
+        # Skip if the graph already reached END (no pending nodes).
+        if not checkpoint_tuple.next:
+            logger.info("factory: checkpoint for %s is at END — skipping resume", page_name)
+            continue
+
+        logger.info(
+            "factory: resuming interrupted task %s from checkpoint (next nodes: %s)",
+            page_name,
+            checkpoint_tuple.next,
+        )
+
+        def _log_exc(t: asyncio.Task, name: str = page_name) -> None:
+            if not t.cancelled() and (exc := t.exception()):
+                logger.error("graph task %s failed: %s", name, exc, exc_info=exc)
+
+        resume_task = asyncio.create_task(
+            graph.ainvoke(None, config=config),
+            name=f"graph:{page_name}:resume",
+        )
+        resume_task.add_done_callback(_log_exc)
 
 
 @asynccontextmanager
@@ -26,6 +82,7 @@ async def lifespan(app: FastAPI):
     async with AsyncSqliteSaver.from_conn_string(settings.checkpoint_db) as saver:
         app.state.graph = build_graph(saver)
         logger.info("factory: graph initialised with SQLite checkpointer at %s", settings.checkpoint_db)
+        await _resume_interrupted_tasks(app.state.graph, saver, settings)
         yield
     logger.info("factory: SQLite checkpointer closed")
 
