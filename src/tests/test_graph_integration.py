@@ -415,8 +415,10 @@ class TestBackLinksParser:
     def test_render_backlinks_no_links(self, wiki_dir):
         from meshwiki.core.parser import _render_backlinks
 
+        # Add an isolated page that nothing links to
+        (wiki_dir / "Isolated.md").write_text("# Isolated\n\nNo links to here.\n")
         init_engine(wiki_dir, watch=False)
-        html = _render_backlinks("About")
+        html = _render_backlinks("Isolated")
         assert html == ""
 
     def test_render_backlinks_without_engine(self):
@@ -441,9 +443,11 @@ class TestBackLinksParser:
     def test_backlinks_macro_no_backlinks(self, wiki_dir):
         from meshwiki.core.parser import parse_wiki_content
 
+        # Use an isolated page that nothing links to
+        (wiki_dir / "Isolated.md").write_text("# Isolated\n\nNo links to here.\n")
         init_engine(wiki_dir, watch=False)
         content = "# My Page\n\n<<BackLinks>>\n"
-        html = parse_wiki_content(content, page_name="About")
+        html = parse_wiki_content(content, page_name="Isolated")
         assert "backlinks" not in html
 
 
@@ -456,6 +460,15 @@ class TestBackLinksViaApi:
         from httpx import ASGITransport, AsyncClient
 
         os.environ["MESHWIKI_DATA_DIR"] = str(wiki_dir)
+
+        # Create a page with <<BackLinks>> that is linked from About and Contact
+        (wiki_dir / "Hub.md").write_text("# Hub\n\n<<BackLinks>>\n")
+        (wiki_dir / "About.md").write_text(
+            "---\nstatus: draft\n---\n# About\n\nSee [[HomePage]] and [[Hub]].\n"
+        )
+        (wiki_dir / "Contact.md").write_text(
+            "# Contact\n\nReturn to [[HomePage]] and [[Hub]].\n"
+        )
 
         import importlib
 
@@ -470,7 +483,7 @@ class TestBackLinksViaApi:
 
         transport = ASGITransport(app=meshwiki.main.app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
-            response = await client.get("/page/HomePage?raw=1")
+            response = await client.get("/page/Hub")
             assert response.status_code == 200
             body = response.text
             assert '<ul class="backlinks">' in body
