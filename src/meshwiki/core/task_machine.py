@@ -21,7 +21,7 @@ TASK_TRANSITIONS: dict[str, list[str]] = {
     "decomposed": ["approved", "planned", "blocked"],
     "approved": ["in_progress", "blocked"],
     "in_progress": ["review", "failed", "blocked"],
-    "review": ["merged", "rejected", "blocked"],
+    "review": ["merged", "rejected", "in_progress", "blocked"],
     "merged": ["done"],
     "done": [],
     "failed": ["planned", "blocked"],
@@ -37,6 +37,7 @@ CANONICAL_EVENTS: dict[tuple[str, str], str] = {
     ("in_progress", "review"): "task.pr_created",
     ("review", "merged"): "task.pr_merged",
     ("review", "rejected"): "task.pr_rejected",
+    ("review", "in_progress"): "task.rework",
     ("merged", "done"): "task.completed",
     ("planned", "in_progress"): "task.assigned",  # direct grind (no PM decomposition)
 }

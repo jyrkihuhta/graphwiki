@@ -117,3 +117,17 @@ class MeshWikiClient:
             resp = await client.get(url, headers=self._headers(), params=params)
             resp.raise_for_status()
             return resp.json()
+
+    async def append_to_page(self, page_name: str, content_to_append: str) -> None:
+        """
+        Append content_to_append to the body of the named wiki page.
+
+        Gets the current page content, strips trailing whitespace, appends
+        "\\n\\n" + content_to_append, then PUTs the updated content back.
+        """
+        page = await self.get_page(page_name)
+        if page is None:
+            raise ValueError(f"Page not found: {page_name!r}")
+        current_content = page.get("content", "")
+        new_content = current_content.rstrip() + "\n\n" + content_to_append
+        await self.create_page(page_name, new_content)

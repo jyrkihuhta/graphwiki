@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from datetime import datetime, timezone
 
 from ..agents.pm_agent import review_with_pm
 from ..config import get_settings
@@ -64,13 +65,23 @@ async def pm_review_node(state: FactoryState) -> dict:
 
         if decision == "approved":
             if get_settings().auto_merge and subtask.get("pr_url"):
-                pr_number = subtask.get("pr_number") or _extract_pr_number(subtask["pr_url"])
+                pr_number = subtask.get("pr_number") or _extract_pr_number(
+                    subtask["pr_url"]
+                )
                 if pr_number:
                     try:
                         await github_client.merge_pr(pr_number)
-                        logger.info("pm_review: auto-merged PR #%d for subtask %s", pr_number, subtask["id"])
+                        logger.info(
+                            "pm_review: auto-merged PR #%d for subtask %s",
+                            pr_number,
+                            subtask["id"],
+                        )
                     except Exception as exc:
-                        logger.warning("pm_review: auto-merge failed for PR #%d: %s", pr_number, exc)
+                        logger.warning(
+                            "pm_review: auto-merge failed for PR #%d: %s",
+                            pr_number,
+                            exc,
+                        )
             updated_subtask = SubTask(
                 **{**subtask, "status": "merged", "review_feedback": feedback}
             )
@@ -88,5 +99,37 @@ async def pm_review_node(state: FactoryState) -> dict:
             )
 
         updated_subtasks.append(updated_subtask)
+
+        timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M")
+
+        if decision == "approved":
+            pm_section = (
+                f"## PM Review — {timestamp}\n\n"
+                f"✅ **Approved**\n\n"
+                f"{feedback or 'Looks good.'}\n"
+            )
+        else:
+            pm_section = (
+                f"## PM Review — {timestamp}\n\n"
+                f"❌ **Changes requested**\n\n"
+                f"{feedback or 'See comments above.'}\n"
+            )
+
+        try:
+            await meshwiki_client.append_to_page(subtask["wiki_page"], pm_section)
+        except Exception as exc:
+            logger.warning("pm_review: failed to append review to wiki: %s", exc)
+
+        if decision != "approved":
+            try:
+                await meshwiki_client.transition_task(
+                    subtask["wiki_page"], "in_progress"
+                )
+            except Exception as exc:
+                logger.warning(
+                    "pm_review: failed to transition %s back to in_progress: %s",
+                    subtask["wiki_page"],
+                    exc,
+                )
 
     return {"subtasks": updated_subtasks}

@@ -615,16 +615,38 @@ def _render_task_status(page_name: str, page_metadata: dict) -> str:
         else ""
     )
 
-    # ── Section D: live terminal (in_progress only) ───────────────────────────
+    # ── Section C2: phase indicator (in_progress / review only) ───────────────
+    phase_html = ""
+    if status in ("in_progress", "review"):
+        pr_url = _get_meta_str(page_metadata, "pr_url")
+        pr_display = ""
+        if pr_url:
+            pr_num_match = re.search(r"/pull/(\d+)", pr_url)
+            if pr_num_match:
+                pr_num = pr_num_match.group(1)
+                pr_display = f' on <a href="{html_escape(pr_url)}" target="_blank" rel="noopener">PR #{html_escape(pr_num)}</a>'
+        if status == "in_progress":
+            if pr_url:
+                phase_text = f"🔨 Grinding — rework in progress{pr_display}"
+            else:
+                phase_text = "🔨 Grinding — grinder is implementing..."
+        elif status == "review":
+            if pr_url:
+                phase_text = f"🔍 PM reviewing{pr_display}..."
+            else:
+                phase_text = "🔍 PM reviewing..."
+        phase_html = f'<div class="task-status-phase">{phase_text}</div>'
+
+    # ── Section D: live terminal (in_progress / review) ──────────────────────
     terminal_html = ""
-    if status == "in_progress":
+    if status in ("in_progress", "review"):
         safe_id = re.sub(r"[^a-zA-Z0-9-]", "-", page_name)
-        # Escape < > so the JSON string is safe inside a <script> tag.
         page_name_js = (
             json.dumps(page_name).replace("<", "\\u003c").replace(">", "\\u003e")
         )
+        is_done_status = status in ("merged", "done", "failed", "rejected")
         terminal_html = (
-            '<div class="task-status-terminal">'
+            f'<div class="task-status-terminal"{" data-terminal-done" if is_done_status else ""}>'
             '<div class="task-terminal-header">'
             '<span class="task-terminal-dot task-terminal-dot--red"></span>'
             '<span class="task-terminal-dot task-terminal-dot--yellow"></span>'
@@ -637,6 +659,8 @@ def _render_task_status(page_name: str, page_metadata: dict) -> str:
             "(function(){"
             f"var PAGE={page_name_js};"
             f"var EL=document.getElementById('task-terminal-{safe_id}');"
+            f"var DONE={str(is_done_status).lower()};"
+            "var NO_SESSION_MSG='\\r\\n\\x1b[2m[no active terminal session for this task]\\x1b[0m\\r\\n';"
             "function boot(){"
             "var t=new Terminal({"
             "cols:220,rows:50,disableStdin:true,convertEol:true,scrollback:5000,"
@@ -645,10 +669,43 @@ def _render_task_status(page_name: str, page_metadata: dict) -> str:
             "});"
             "t.open(EL);"
             "var pr=location.protocol==='https:'?'wss:':'ws:';"
+            "var retries=0;"
+            "var retryMax=10;"
+            "var retryDelay=5000;"
+            "var bannerEl=null;"
+            "function showBanner(msg){"
+            "bannerEl=document.createElement('div');"
+            "bannerEl.style.cssText='position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);"
+            "color:#888;font-family:Menlo,Monaco,monospace;font-size:13px;text-align:center;"
+            "pointer-events:none;';"
+            "bannerEl.textContent=msg;"
+            "EL.style.position='relative';EL.appendChild(bannerEl);"
+            "}"
+            "function clearBanner(){if(bannerEl&&bannerEl.parentNode){bannerEl.parentNode.removeChild(bannerEl);bannerEl=null;}}"
+            "function connect(){"
             "var ws=new WebSocket(pr+'//'+location.host+'/ws/terminal/'+PAGE);"
-            "ws.onmessage=function(e){t.write(e.data);};"
-            "ws.onclose=function(){t.write('\\r\\n\\x1b[2m\\u2501\\u2501\\u2501 session ended \\u2501\\u2501\\u2501\\x1b[0m\\r\\n');};"
+            "ws.onmessage=function(e){"
+            "if(e.data===NO_SESSION_MSG.trim()){"
+            "if(!bannerEl){showBanner('[session ended — waiting for next grinder run...]');}"
+            "}else{"
+            "clearBanner();"
+            "if(e.data!==NO_SESSION_MSG){t.write(e.data);}"
+            "}"
+            "};"
+            "ws.onclose=function(e){"
+            "if(DONE||e.code===1000){t.write('\\r\\n\\x1b[2m\\u2501\\u2501\\u2501 session ended \\u2501\\u2501\\u2501\\x1b[0m\\r\\n');return;}"
+            "clearBanner();"
+            "if(retries<retryMax){"
+            "retries++;"
+            "showBanner('[session ended — waiting for next grinder run...]');"
+            "setTimeout(connect,retryDelay);"
+            "}else{"
+            "showBanner('[no more retries — reload page]');"
+            "}"
+            "};"
             "ws.onerror=function(){t.write('\\r\\n\\x1b[31m[connection error]\\x1b[0m\\r\\n');};"
+            "};"
+            "connect();"
             "}"
             "if(window.Terminal){boot();}"
             "else{"
@@ -668,6 +725,7 @@ def _render_task_status(page_name: str, page_metadata: dict) -> str:
         f"{badge_html}"
         f"{diagram_html}"
         f"{meta_html}"
+        f"{phase_html}"
         f"{terminal_html}"
         "</div>"
     )
