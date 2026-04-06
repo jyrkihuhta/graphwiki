@@ -747,7 +747,7 @@
                 break;
 
             case "page_updated":
-                flashNode(msg.page);
+                // Content change only — graph structure is unchanged, no visual update needed.
                 break;
 
             case "page_deleted":
