@@ -392,21 +392,14 @@ PAGECOUNT_PATTERN = re.compile(r"<<PageCount>>")
 
 def _render_page_count() -> str:
     """Render the <<PageCount>> macro as a plain number."""
-    try:
-        from meshwiki.core.dependencies import get_storage
+    from meshwiki.core.graph import get_engine
 
-        storage = get_storage()
-    except RuntimeError:
-        return '<span class="page-count-unavailable">—</span>'
+    engine = get_engine()
+    if engine is not None:
+        return f'<span class="page-count">{len(engine.list_pages())}</span>'
 
-    try:
-        import asyncio
-
-        pages = asyncio.run(storage.list_pages())
-    except Exception:
-        return '<span class="page-count-error">?</span>'
-
-    return f'<span class="page-count">{len(pages)}</span>'
+    # Fallback: no graph engine — unavailable during tests without init
+    return '<span class="page-count">—</span>'
 
 
 class PageCountPreprocessor(Preprocessor):
