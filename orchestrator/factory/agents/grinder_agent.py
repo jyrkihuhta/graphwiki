@@ -475,12 +475,13 @@ async def grind_subtask_e2b(
     settings = get_settings()
     subtask = dict(subtask)
 
-    # Transition to in_progress
+    # Transition to in_progress (best-effort — 422 is expected when the task was
+    # already transitioned externally, e.g. skip_decomposition flow)
     try:
         await meshwiki_client.transition_task(subtask["wiki_page"], "in_progress")
     except Exception as exc:
-        logger.error(
-            "e2b grinder: failed to transition %s to in_progress: %s",
+        logger.debug(
+            "e2b grinder: task %s already in_progress or transition failed: %s",
             subtask["wiki_page"],
             exc,
         )
@@ -507,10 +508,13 @@ async def grind_subtask_e2b(
         f"4. Run: .venv/bin/black src/ && .venv/bin/isort --profile black src/ && .venv/bin/ruff check src/\n"
         f"5. Run: python -m pytest src/tests/ -x -q\n"
         f"6. Fix any lint/test failures\n"
-        f"7. Commit and push the branch\n"
-        f"8. Create a PR targeting {base_branch}: gh pr create --base {base_branch} --title '[Factory] ...' --body '...'\n"
+        f"7. Commit your changes\n"
+        f"8. Rebase onto the latest {base_branch} to avoid merge conflicts:\n"
+        f"   git fetch origin && git rebase origin/{base_branch}\n"
+        f"   Resolve any conflicts, then: git push --force-with-lease\n"
+        f"9. Create a PR targeting {base_branch}: gh pr create --base {base_branch} --title '[Factory] ...' --body '...'\n"
         f"   The PR title MUST start with '[Factory] ' so it is clearly identified as automated.\n"
-        f"9. Print the PR URL on the last line of your output"
+        f"10. Print the PR URL on the last line of your output"
     )
 
     pr_url: str | None = None
