@@ -34,6 +34,12 @@ When decomposing:
 - Subtasks must be as independent as possible (minimize file overlap)
 - Include file paths you expect will be touched in each subtask
 - Write clear acceptance criteria
+- If the subtask adds a new wiki macro (<<MacroName>>) that needs async data
+  (storage, database), include this constraint in the description:
+  "Preprocessors run inside FastAPI's event loop — never use asyncio.run().
+  Pre-fetch data in the async route handler and pass it as a constructor
+  parameter to the Extension class. Follow the RecentChanges/PageList pattern
+  in parser.py."
 
 When reviewing:
 - Check that tests cover the new code

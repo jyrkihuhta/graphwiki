@@ -429,6 +429,7 @@ async def view_page(request: Request, name: str):
         page_name=name,
         page_metadata=frontmatter,
         recent_pages=recent_pages,
+        all_pages=all_pages,
     )
 
     return templates.TemplateResponse(
