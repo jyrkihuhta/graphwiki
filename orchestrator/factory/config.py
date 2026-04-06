@@ -30,6 +30,7 @@ class Settings(BaseSettings):
     repo_root: str = "/Users/jhuhta/meshwiki"  # FACTORY_REPO_ROOT
     grinder_provider: str = "e2b"  # FACTORY_GRINDER_PROVIDER
     grinder_model: str = "MiniMax-M2.7"  # FACTORY_GRINDER_MODEL
+    checkpoint_db: str = "/data/checkpoints.db"  # FACTORY_CHECKPOINT_DB
     pr_base_branch: str = "main"  # FACTORY_PR_BASE_BRANCH — branch grinders target
     auto_merge: bool = False  # FACTORY_AUTO_MERGE — merge PRs after PM approval, skip human review
 
