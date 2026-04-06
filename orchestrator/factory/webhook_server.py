@@ -61,11 +61,6 @@ async def _resume_interrupted_tasks(graph, saver, settings) -> None:
             logger.info("factory: no checkpoint for %s — skipping resume", page_name)
             continue
 
-        # Skip if the graph already reached END (no pending nodes).
-        if not checkpoint_tuple.next:
-            logger.info("factory: checkpoint for %s is at END — skipping resume", page_name)
-            continue
-
         logger.info(
             "factory: resuming interrupted task %s from checkpoint (next nodes: %s)",
             page_name,
