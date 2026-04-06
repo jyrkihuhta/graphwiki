@@ -530,6 +530,7 @@ async def grind_subtask_e2b(
     sbx = None
     try:
         sbx = await AsyncSandbox.create(
+            "meshwiki-grinder",  # pre-baked template: Node.js 20 + Kilo + gh + Python tools
             timeout=3600,  # sandbox lives up to 1 hour; default 5 min is too short
             envs={
                 "MINIMAX_API_KEY": settings.minimax_api_key,
@@ -566,27 +567,13 @@ async def grind_subtask_e2b(
             await meshwiki_client.relay_terminal(wiki_page, text)
 
         # ── Bootstrap ─────────────────────────────────────────────────────────
+        # Node.js 20, Kilo CLI, gh CLI, and common Python tools are pre-baked
+        # into the meshwiki-grinder template — only git config is needed here.
 
-        # Configure git identity and credential helper
         await sbx.commands.run(
             'git config --global user.email "factory@meshwiki" && '
             'git config --global user.name "Factory Grinder" && '
             f'git config --global url."https://x-access-token:{settings.github_token}@github.com/".insteadOf "https://github.com/"',
-            timeout=0,
-            on_stdout=_on_stdout,
-            on_stderr=_on_stderr,
-        )
-
-        # Bootstrap Node.js 20 + Kilo CLI + gh CLI (timeout=0 prevents premature kill)
-        logger.info("e2b grinder: bootstrapping Node.js + Kilo CLI + gh CLI...")
-        await sbx.commands.run(
-            "curl -fsSL https://deb.nodesource.com/setup_20.x | sudo bash - && "
-            "sudo apt-get install -y nodejs && "
-            "sudo npm install -g @kilocode/cli && "
-            "curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg && "
-            "sudo chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg && "
-            "echo 'deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main' | sudo tee /etc/apt/sources.list.d/github-cli.list && "
-            "sudo apt-get update -q && sudo apt-get install -y gh",
             timeout=0,
             on_stdout=_on_stdout,
             on_stderr=_on_stderr,
