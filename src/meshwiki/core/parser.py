@@ -258,6 +258,82 @@ class MetaTableExtension(Extension):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# PageCount macro
+# ─────────────────────────────────────────────────────────────────────────────
+
+PAGECOUNT_PATTERN = re.compile(r"<<PageCount>>")
+
+
+def _render_page_count() -> str:
+    """Render the <<PageCount>> macro as a plain integer string."""
+    from meshwiki.core.graph import get_engine, GRAPH_ENGINE_AVAILABLE
+
+    if GRAPH_ENGINE_AVAILABLE:
+        engine = get_engine()
+        if engine is not None:
+            try:
+                count = engine.page_count()
+                return str(count)
+            except Exception:
+                pass
+
+    try:
+        from meshwiki.core.dependencies import get_storage
+
+        storage = get_storage()
+    except RuntimeError:
+        return "0"
+
+    try:
+        import asyncio
+
+        pages = asyncio.run(storage.list_pages())
+        return str(len(pages))
+    except Exception:
+        return "0"
+
+
+class PageCountPreprocessor(Preprocessor):
+    """Preprocessor that replaces <<PageCount>> with a page count integer."""
+
+    def run(self, lines: list[str]) -> list[str]:
+        text = "\n".join(lines)
+        if "<<PageCount>>" not in text:
+            return lines
+
+        code_block_re = re.compile(r"(```.*?```|~~~.*?~~~)", re.DOTALL)
+        code_blocks: list[str] = []
+
+        def stash_code(m: re.Match) -> str:
+            placeholder = f"\x00PCBLOCK{len(code_blocks)}\x00"
+            code_blocks.append(m.group(0))
+            return placeholder
+
+        text = code_block_re.sub(stash_code, text)
+
+        def replace_match(_m: re.Match) -> str:
+            return self.md.htmlStash.store(_render_page_count())
+
+        text = PAGECOUNT_PATTERN.sub(replace_match, text)
+
+        for i, block in enumerate(code_blocks):
+            text = text.replace(f"\x00PCBLOCK{i}\x00", block)
+
+        return text.split("\n")
+
+
+class PageCountExtension(Extension):
+    """Markdown extension for <<PageCount>> macro."""
+
+    def extendMarkdown(self, md: Markdown) -> None:
+        md.preprocessors.register(
+            PageCountPreprocessor(md),
+            "pagecount",
+            29,
+        )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # RecentChanges macro
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -872,6 +948,7 @@ def create_parser(
                 page_name=page_name, page_metadata=page_metadata
             ),  # <<EpicStatus>>
             RecentChangesExtension(),  # <<RecentChanges(n)>>
+            PageCountExtension(),  # <<PageCount>>
         ]
     )
 

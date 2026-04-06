@@ -279,3 +279,22 @@ modified: '2026-01-02'
 This is body text with five words.
 """
         assert word_count(content) == 7
+
+
+# ============================================================
+# PageCount macro
+# ============================================================
+
+
+class TestPageCount:
+    def test_pagecount_replaces_macro(self):
+        html = parse_wiki_content("Total pages: <<PageCount>>")
+        assert "Total pages:" in html
+        assert "<<" not in html or "PageCount" not in html
+        assert html.count("<<PageCount>>") == 0
+
+    def test_pagecount_not_in_code_block(self):
+        content = "```\n<<PageCount>>\n```"
+        html = parse_wiki_content(content)
+        assert "PageCount" in html
+        assert "<span" not in html
