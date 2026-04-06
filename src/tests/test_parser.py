@@ -1,5 +1,7 @@
 """Unit tests for the Markdown parser and extensions."""
 
+import pytest
+
 from meshwiki.core.parser import (
     create_parser,
     extract_wiki_links,
@@ -222,6 +224,42 @@ class TestPageCountMacro:
         content = "~~~\n<<PageCount>>\n~~~"
         html = parse_wiki_content(content)
         assert "page-count" not in html
+
+    def test_page_count_never_errors(self):
+        """Macro must never render the error fallback regardless of engine state."""
+        html = parse_wiki_content("<<PageCount>>")
+        assert "page-count-error" not in html
+
+
+# ============================================================
+# PageCount macro — API-level (catches asyncio.run() in async context)
+# ============================================================
+
+
+class TestPageCountMacroViaApi:
+    """Render <<PageCount>> through the real FastAPI route.
+
+    parse_wiki_content() runs outside any event loop, so asyncio.run() would
+    work there.  The /page/ route runs inside uvicorn's event loop, which is
+    where the RuntimeError actually appears.  This test catches that.
+    """
+
+    @pytest.mark.asyncio
+    async def test_page_count_renders_via_route(self, tmp_path):
+        import meshwiki.main
+
+        meshwiki.main.storage.base_path = tmp_path
+        await meshwiki.main.storage.save_page("CountTest", "Pages: <<PageCount>>")
+
+        from httpx import ASGITransport, AsyncClient
+
+        transport = ASGITransport(app=meshwiki.main.app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.get("/page/CountTest")
+
+        assert resp.status_code == 200
+        assert "page-count-error" not in resp.text
+        assert "page-count" in resp.text
 
 
 # ============================================================
