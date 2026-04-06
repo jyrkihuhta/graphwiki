@@ -79,6 +79,13 @@ class TestIncludeWithHeading:
         assert "<h3>MyPage</h3>" in html
         assert "Content here" in html
 
+    def test_heading_defaults_to_level_2_when_text_only(self):
+        """<<Include(PageName, "Title")>> uses level 2 by default."""
+        page_contents = {"MyPage": "Content here."}
+        html = render('<<Include(MyPage, "Title")>>', page_contents=page_contents)
+        assert "<h2>Title</h2>" in html
+        assert "Content here" in html
+
     def test_level_clamped_to_1_6(self):
         """Levels outside 1-6 are clamped."""
         page_contents = {"Page": "Content"}

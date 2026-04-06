@@ -1043,15 +1043,8 @@ def _parse_include_args(
     if sort_match:
         sort = sort_match.group(1) or None
 
-    named_part_end = max(
-        from_match.end() if from_match else 0,
-        to_match.end() if to_match else 0,
-        sort_match.end() if sort_match else 0,
-    )
-    if named_part_end > 0:
-        args_str = args_str[:named_part_end]
-
-    positional = [s.strip() for s in args_str.split(",")]
+    clean = re.sub(r'\b(?:from|to|sort)=(?:"[^"]*"|\S+)', "", args_str)
+    positional = [s.strip() for s in clean.split(",")]
     if len(positional) >= 1:
         page_name = positional[0]
     if len(positional) >= 2 and positional[1]:
@@ -1118,8 +1111,8 @@ def _render_include(
     if heading_text is None and heading_level is not None:
         heading_text = page_name
 
-    if heading_text and heading_level:
-        level = max(1, min(6, heading_level))
+    if heading_text:
+        level = max(1, min(6, heading_level if heading_level is not None else 2))
         content = f"<h{level}>{html_escape(heading_text)}</h{level}>\n{content}"
 
     nested_html = parse_wiki_content(

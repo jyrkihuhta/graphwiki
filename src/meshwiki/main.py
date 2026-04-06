@@ -1,5 +1,6 @@
 """MeshWiki FastAPI application."""
 
+import asyncio
 import json
 import re
 import time
@@ -424,11 +425,12 @@ async def view_page(request: Request, name: str):
 
     # Fetch all page contents for <<Include>> macro.
     page_contents: dict[str, str] = {}
-    all_page_names = await storage.list_pages()
-    for page_name in all_page_names:
-        raw = await storage.get_raw_content(page_name)
-        if raw is not None:
-            page_contents[page_name] = raw
+    if "<<Include(" in page.content:
+        all_page_names = await storage.list_pages()
+        raws = await asyncio.gather(
+            *(storage.get_raw_content(n) for n in all_page_names)
+        )
+        page_contents = {n: r for n, r in zip(all_page_names, raws) if r is not None}
 
     # Parse content with wiki links, TOC, and page context for macros.
     html_content, toc_html = parse_wiki_content_with_toc(
