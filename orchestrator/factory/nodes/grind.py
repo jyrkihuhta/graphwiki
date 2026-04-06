@@ -42,7 +42,19 @@ async def grind_node(state: FactoryState) -> dict:
             subtask_id,
             subtask.get("attempt", 0),
         )
-        updated = {**subtask, "status": "failed", "error_log": list(subtask.get("error_log") or []) + ["PM requested changes but provided no feedback — cannot rework"]}
+        error_log = list(subtask.get("error_log") or []) + [
+            "PM requested changes but provided no feedback — cannot rework"
+        ]
+        updated = {**subtask, "status": "failed", "error_log": error_log}
+        meshwiki_client = MeshWikiClient()
+        try:
+            await meshwiki_client.transition_task(subtask["wiki_page"], "failed")
+        except Exception as exc:
+            logger.error(
+                "grind_node: failed to transition %s to failed: %s",
+                subtask["wiki_page"],
+                exc,
+            )
         subtasks = [updated if s["id"] == subtask_id else s for s in state["subtasks"]]
         return {"subtasks": subtasks}
 
