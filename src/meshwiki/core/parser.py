@@ -1008,6 +1008,241 @@ class BackLinksExtension(Extension):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Include macro
+# ─────────────────────────────────────────────────────────────────────────────
+
+INCLUDE_PATTERN = re.compile(
+    r"<<Include\(\s*(.+?)\s*\)>>",
+    re.DOTALL,
+)
+
+
+def _parse_include_args(
+    args_str: str,
+) -> tuple[str, str | None, int | None, str | None, str | None, str | None]:
+    """Parse Include macro arguments.
+
+    Returns:
+        Tuple of (page_name, heading_text, heading_level, from_marker, to_marker, sort).
+    """
+    page_name = args_str.strip()
+    heading_text: str | None = None
+    heading_level: int | None = None
+    from_marker: str | None = None
+    to_marker: str | None = None
+    sort: str | None = None
+
+    from_match = re.search(r'from="([^"]*)"', args_str)
+    to_match = re.search(r'to="([^"]*)"', args_str)
+    sort_match = re.search(r"sort=(ascending|descending)", args_str)
+
+    if from_match:
+        from_marker = from_match.group(1) or None
+    if to_match:
+        to_marker = to_match.group(1) or None
+    if sort_match:
+        sort = sort_match.group(1) or None
+
+    named_part_end = max(
+        from_match.end() if from_match else 0,
+        to_match.end() if to_match else 0,
+        sort_match.end() if sort_match else 0,
+    )
+    if named_part_end > 0:
+        args_str = args_str[:named_part_end]
+
+    positional = [s.strip() for s in args_str.split(",")]
+    if len(positional) >= 1:
+        page_name = positional[0]
+    if len(positional) >= 2 and positional[1]:
+        heading_text = positional[1].strip('"')
+    if len(positional) >= 3 and positional[2]:
+        try:
+            heading_level = int(positional[2])
+        except ValueError:
+            pass
+
+    return page_name, heading_text, heading_level, from_marker, to_marker, sort
+
+
+def _render_include(
+    page_name: str,
+    heading_text: str | None,
+    heading_level: int | None,
+    from_marker: str | None,
+    to_marker: str | None,
+    sort: str | None,
+    page_contents: dict[str, str],
+    include_chain: list[str],
+) -> str:
+    """Render the <<Include(...)>> macro as embedded content HTML."""
+    if page_name.endswith("/*"):
+        prefix = page_name[:-2]
+        matching_pages = sorted(
+            [pn for pn in page_contents if pn.startswith(prefix)],
+            reverse=(sort == "descending"),
+        )
+        if not matching_pages:
+            return f'<span class="include-missing">[[{page_name}]]</span>'
+        parts: list[str] = []
+        for matched_page in matching_pages:
+            content = page_contents.get(matched_page, "")
+            content = _strip_frontmatter(content)
+            nested_html = parse_wiki_content(
+                content,
+                page_contents=page_contents,
+                include_chain=include_chain + [matched_page],
+            )
+            parts.append(
+                f'<div class="include-content" data-included-page="{html_escape(matched_page)}">'
+                f"{nested_html}"
+                f"</div>"
+            )
+        return "\n".join(parts)
+
+    content = page_contents.get(page_name)
+    if content is None:
+        return f'<span class="include-missing">[[{page_name}]]</span>'
+
+    if page_name in include_chain:
+        return (
+            f'<span class="include-circular">[[{page_name}]]'
+            f"<em>(circular include skipped)</em></span>"
+        )
+
+    content = _strip_frontmatter(content)
+
+    if from_marker or to_marker:
+        content = _extract_snippet(content, from_marker, to_marker)
+
+    if heading_text is None and heading_level is not None:
+        heading_text = page_name
+
+    if heading_text and heading_level:
+        level = max(1, min(6, heading_level))
+        content = f"<h{level}>{html_escape(heading_text)}</h{level}>\n{content}"
+
+    nested_html = parse_wiki_content(
+        content,
+        page_contents=page_contents,
+        include_chain=include_chain + [page_name],
+    )
+
+    return (
+        f'<div class="include-content" data-included-page="{html_escape(page_name)}">'
+        f"{nested_html}"
+        f"</div>"
+    )
+
+
+def _strip_frontmatter(content: str) -> str:
+    """Strip YAML frontmatter from content."""
+    return FRONTMATTER_PATTERN.sub("", content)
+
+
+def _extract_snippet(
+    content: str, from_marker: str | None, to_marker: str | None
+) -> str:
+    """Extract snippet between from_marker and to_marker."""
+    if from_marker is None and to_marker is None:
+        return content
+
+    start = 0
+    end = len(content)
+
+    if from_marker:
+        idx = content.find(from_marker)
+        if idx != -1:
+            start = idx + len(from_marker)
+
+    if to_marker:
+        idx = content.find(to_marker, start)
+        if idx != -1:
+            end = idx
+
+    return content[start:end]
+
+
+class IncludePreprocessor(Preprocessor):
+    """Preprocessor that replaces <<Include(...)>> macros with embedded page content."""
+
+    def __init__(
+        self,
+        md: Markdown,
+        page_contents: dict[str, str] | None = None,
+        include_chain: list[str] | None = None,
+    ):
+        super().__init__(md)
+        self.page_contents = page_contents or {}
+        self.include_chain = include_chain or []
+
+    def run(self, lines: list[str]) -> list[str]:
+        text = "\n".join(lines)
+        if "<<Include(" not in text:
+            return lines
+
+        code_block_re = re.compile(r"(```.*?```|~~~.*?~~~)", re.DOTALL)
+        code_blocks: list[str] = []
+
+        def stash_code(m: re.Match) -> str:
+            placeholder = f"\x00INCLBLOCK{len(code_blocks)}\x00"
+            code_blocks.append(m.group(0))
+            return placeholder
+
+        text = code_block_re.sub(stash_code, text)
+
+        def replace_match(m: re.Match) -> str:
+            args_str = m.group(1)
+            (
+                page_name,
+                heading_text,
+                heading_level,
+                from_marker,
+                to_marker,
+                sort,
+            ) = _parse_include_args(args_str)
+            html = _render_include(
+                page_name,
+                heading_text,
+                heading_level,
+                from_marker,
+                to_marker,
+                sort,
+                self.page_contents,
+                self.include_chain,
+            )
+            return self.md.htmlStash.store(html)
+
+        text = INCLUDE_PATTERN.sub(replace_match, text)
+
+        for i, block in enumerate(code_blocks):
+            text = text.replace(f"\x00INCLBLOCK{i}\x00", block)
+
+        return text.split("\n")
+
+
+class IncludeExtension(Extension):
+    """Markdown extension for <<Include(...)>> macros."""
+
+    def __init__(
+        self,
+        page_contents: dict[str, str] | None = None,
+        include_chain: list[str] | None = None,
+        **kwargs,
+    ):
+        self.page_contents = page_contents or {}
+        self.include_chain = include_chain or []
+        super().__init__(**kwargs)
+
+    def extendMarkdown(self, md: Markdown) -> None:
+        md.preprocessors.register(
+            IncludePreprocessor(md, self.page_contents, self.include_chain),
+            "include",
+            28,
+        )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # EpicStatus macro
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -1173,6 +1408,8 @@ def create_parser(
     page_metadata: dict | None = None,
     recent_pages: list | None = None,
     all_pages: list | None = None,
+    page_contents: dict[str, str] | None = None,
+    include_chain: list[str] | None = None,
 ) -> Markdown:
     """Create a Markdown parser with wiki link support.
 
@@ -1183,6 +1420,8 @@ def create_parser(
         page_metadata: Frontmatter dict of the page (for TaskStatus macro).
         recent_pages: List of Page objects for RecentChanges macro.
         all_pages: List of all Page objects for PageList macro.
+        page_contents: Dict mapping page names to raw content for Include macro.
+        include_chain: List of page names in the current include chain (for circular detection).
 
     Returns:
         Configured Markdown parser instance.
@@ -1210,6 +1449,10 @@ def create_parser(
             PageCountExtension(),  # <<PageCount>>
             BackLinksExtension(page_name=page_name),  # <<BackLinks>>
             PageListExtension(all_pages=all_pages),  # <<PageList(...)>>
+            IncludeExtension(
+                page_contents=page_contents or {},
+                include_chain=include_chain or [],
+            ),  # <<Include(...)>>
         ]
     )
 
@@ -1221,6 +1464,8 @@ def parse_wiki_content(
     page_metadata: dict | None = None,
     recent_pages: list | None = None,
     all_pages: list | None = None,
+    page_contents: dict[str, str] | None = None,
+    include_chain: list[str] | None = None,
 ) -> str:
     """Parse wiki content (Markdown + wiki links) to HTML.
 
@@ -1231,6 +1476,8 @@ def parse_wiki_content(
         page_metadata: Frontmatter dict of the page (for TaskStatus macro).
         recent_pages: List of Page objects for RecentChanges macro.
         all_pages: List of all Page objects for PageList macro.
+        page_contents: Dict mapping page names to raw content for Include macro.
+        include_chain: List of page names in the current include chain (for circular detection).
 
     Returns:
         HTML string.
@@ -1241,6 +1488,8 @@ def parse_wiki_content(
         page_metadata=page_metadata,
         recent_pages=recent_pages,
         all_pages=all_pages,
+        page_contents=page_contents,
+        include_chain=include_chain or [],
     )
     return parser.convert(content)
 
@@ -1252,6 +1501,8 @@ def parse_wiki_content_with_toc(
     page_metadata: dict | None = None,
     recent_pages: list | None = None,
     all_pages: list | None = None,
+    page_contents: dict[str, str] | None = None,
+    include_chain: list[str] | None = None,
 ) -> tuple[str, str]:
     """Parse wiki content and return HTML with table of contents.
 
@@ -1262,6 +1513,8 @@ def parse_wiki_content_with_toc(
         page_metadata: Frontmatter dict of the page (for TaskStatus macro).
         recent_pages: List of Page objects for RecentChanges macro.
         all_pages: List of all Page objects for PageList macro.
+        page_contents: Dict mapping page names to raw content for Include macro.
+        include_chain: List of page names in the current include chain (for circular detection).
 
     Returns:
         Tuple of (html_content, toc_html).
@@ -1272,6 +1525,8 @@ def parse_wiki_content_with_toc(
         page_metadata=page_metadata,
         recent_pages=recent_pages,
         all_pages=all_pages,
+        page_contents=page_contents,
+        include_chain=include_chain or [],
     )
     html = parser.convert(content)
     toc_html = getattr(parser, "toc", "")

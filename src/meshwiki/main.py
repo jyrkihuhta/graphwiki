@@ -422,6 +422,14 @@ async def view_page(request: Request, name: str):
         reverse=True,
     )
 
+    # Fetch all page contents for <<Include>> macro.
+    page_contents: dict[str, str] = {}
+    all_page_names = await storage.list_pages()
+    for page_name in all_page_names:
+        raw = await storage.get_raw_content(page_name)
+        if raw is not None:
+            page_contents[page_name] = raw
+
     # Parse content with wiki links, TOC, and page context for macros.
     html_content, toc_html = parse_wiki_content_with_toc(
         page.content,
@@ -430,6 +438,7 @@ async def view_page(request: Request, name: str):
         page_metadata=frontmatter,
         recent_pages=recent_pages,
         all_pages=all_pages,
+        page_contents=page_contents,
     )
 
     return templates.TemplateResponse(
