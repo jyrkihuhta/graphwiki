@@ -100,6 +100,14 @@ async def append_terminal_chunk(name: str, body: TerminalChunkRequest) -> dict:
     The orchestrator calls this endpoint once per ``on_data`` callback from the
     E2B PTY.  The chunk is dropped silently if no browser is connected or the
     queue is full.
+
+    If no session exists (e.g. orchestrator restarted mid-grind and the
+    in_progress transition was rejected as a no-op), create one on the fly so
+    chunks are not silently dropped.
     """
+    from meshwiki.core.terminal_sessions import create_session, get_session
+
+    if get_session(name) is None:
+        create_session(name)
     await put_chunk(name, body.data)
     return {"ok": True}
