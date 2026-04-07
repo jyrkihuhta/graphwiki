@@ -17,6 +17,10 @@ def assign_grinders_node(state: FactoryState) -> dict:
     LangGraph requires nodes to return dicts; ``Send`` objects must come from
     routing functions, not nodes directly.
     """
+    logger.info(
+        "assign_grinders_node: reached, subtasks in state: %d",
+        len(state.get("subtasks", [])),
+    )
     return {}
 
 
