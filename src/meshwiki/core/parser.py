@@ -652,6 +652,14 @@ def _render_task_status(page_name: str, page_metadata: dict) -> str:
             '<span class="task-terminal-dot task-terminal-dot--yellow"></span>'
             '<span class="task-terminal-dot task-terminal-dot--green"></span>'
             f'<span class="task-terminal-title">kilo &mdash; {html_escape(page_name)}</span>'
+            '<button class="task-terminal-expand-btn" title="Expand terminal"'
+            ' onclick="(function(b){'
+            "var w=b.closest('.task-status-terminal');"
+            "var expanded=w.classList.toggle('terminal-expanded');"
+            "b.title=expanded?'Exit fullscreen':'Expand terminal';"
+            "b.innerHTML=expanded?'&#x2715;':'&#x26F6;';"
+            "document.body.style.overflow=expanded?'hidden':'';"
+            '})(this)">&#x26F6;</button>'
             "</div>"
             f'<div id="task-terminal-{safe_id}" class="task-terminal-body"></div>'
             "</div>"

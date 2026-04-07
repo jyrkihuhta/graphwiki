@@ -1910,6 +1910,7 @@ article.page > .breadcrumb {
     padding: 0.5rem 0.85rem;
     background: #2d2d2d;
     border-bottom: 1px solid #3a3a3a;
+    position: relative;
 }
 
 .task-terminal-dot {
@@ -1930,6 +1931,20 @@ article.page > .breadcrumb {
     color: #9ca3af;
 }
 
+.task-terminal-expand-btn {
+    margin-left: auto;
+    background: none;
+    border: none;
+    color: #6b7280;
+    cursor: pointer;
+    font-size: 15px;
+    padding: 0 0.1rem;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+}
+.task-terminal-expand-btn:hover { color: #d4d4d4; }
+
 .task-terminal-body {
     background: #1e1e1e;
     /* xterm.js mounts a canvas here; give it enough room for 50 rows at 13px */
@@ -1943,6 +1958,21 @@ article.page > .breadcrumb {
 .task-terminal-body .xterm {
     height: 100%;
     padding: 0.5rem;
+}
+
+/* Fullscreen / expanded terminal overlay */
+.task-status-terminal.terminal-expanded {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    border-radius: 0;
+    border: none;
+    margin: 0;
+}
+.task-status-terminal.terminal-expanded .task-terminal-body {
+    height: calc(100vh - 37px); /* 37px = header height */
+    min-height: 0;
+    overflow-y: auto;
 }
 
 /* PageList macro */
