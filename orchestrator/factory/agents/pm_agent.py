@@ -402,12 +402,17 @@ async def decompose_with_pm(
 
     context_block = "\n\n---\n\n".join(context_parts) if context_parts else "(none)"
 
+    task_wiki_page = state["task_wiki_page"]
+    task_title = state.get("title", task_wiki_page)
     user_message = (
-        f"## Parent Task: {state.get('title', state['task_wiki_page'])}\n\n"
+        f"## Parent Task: {task_title}\n\n"
+        f"**Wiki page path:** `{task_wiki_page}`\n\n"
         f"**Requirements:**\n{state.get('requirements', '')}\n\n"
         f"## Context Pages\n\n{context_block}\n\n"
         "Please decompose this task into concrete, independently implementable subtasks. "
         "Use the `meshwiki_create_subtask` tool for each subtask. "
+        f"Subtask page names must be prefixed with the parent wiki page path: "
+        f"`{task_wiki_page}/TASK001 - Title`, `{task_wiki_page}/TASK002 - Title`, etc. "
         "Read additional wiki pages with `meshwiki_read_page` if you need more context."
     )
 
