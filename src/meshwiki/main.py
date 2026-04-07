@@ -725,6 +725,7 @@ async def ws_terminal(websocket: WebSocket, name: str):
     from meshwiki.core.terminal_sessions import get_session, subscribe, unsubscribe
 
     await websocket.accept()
+    name = name.replace("_", " ")
     session = get_session(name)
     if session is None:
         await websocket.send_text(
