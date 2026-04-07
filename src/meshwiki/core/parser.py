@@ -258,6 +258,82 @@ class MetaTableExtension(Extension):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Callout Blocks
+# ─────────────────────────────────────────────────────────────────────────────
+
+CALLOUT_TYPES = {
+    "info": "\u2139\ufe0f",
+    "warning": "\u26a0\ufe0f",
+    "tip": "\ud83d\udca1",
+    "error": "\u274c",
+    "note": "\ud83d\udcdd",
+}
+
+
+class CalloutBlockPreprocessor(Preprocessor):
+    """Preprocessor that converts fenced code blocks with callout type tags into callout HTML."""
+
+    FENCE_OPEN_RE = re.compile(r"^(?P<fence>`{3,}|~{3,})(?P<lang>\w+)\s*$")
+
+    def run(self, lines: list[str]) -> list[str]:
+        result: list[str] = []
+        i = 0
+        while i < len(lines):
+            m = self.FENCE_OPEN_RE.match(lines[i])
+            if m is None:
+                result.append(lines[i])
+                i += 1
+                continue
+
+            fence_char = m.group("fence")[0]
+            lang = m.group("lang")
+            if lang not in CALLOUT_TYPES:
+                result.append(lines[i])
+                i += 1
+                continue
+
+            opener_len = len(m.group("fence"))
+            icon = CALLOUT_TYPES[lang]
+            body_lines: list[str] = []
+            j = i + 1
+            while j < len(lines):
+                if lines[j].startswith(fence_char) and (
+                    len(lines[j].strip()) >= opener_len
+                    or lines[j].strip() == fence_char[: len(lines[j].strip())]
+                ):
+                    closer_stripped = lines[j].strip()
+                    if closer_stripped == fence_char[: len(closer_stripped)]:
+                        pass
+                    elif closer_stripped.startswith(fence_char):
+                        break
+                body_lines.append(lines[j])
+                j += 1
+
+            escaped_content = html_escape("\n".join(body_lines))
+            html = (
+                f'<div class="callout callout--{lang}">'
+                f'<span class="callout__icon">{icon}</span>'
+                f'<span class="callout__body">{escaped_content}</span>'
+                f"</div>"
+            )
+            result.append(html)
+            i = j + 1
+
+        return result
+
+
+class CalloutExtension(Extension):
+    """Markdown extension for callout blocks using fenced code syntax."""
+
+    def extendMarkdown(self, md: Markdown) -> None:
+        md.preprocessors.register(
+            CalloutBlockPreprocessor(md),
+            "callout",
+            27,
+        )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # RecentChanges macro
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -1566,6 +1642,7 @@ def create_parser(
                 include_chain=include_chain or [],
             ),  # <<Include(...)>>
             NewPageExtension(),  # <<NewPage(...)>>
+            CalloutExtension(),  # callout blocks
         ]
     )
 

@@ -344,3 +344,84 @@ modified: '2026-01-02'
 This is body text with five words.
 """
         assert word_count(content) == 7
+
+
+# ============================================================
+# Callout Blocks
+# ============================================================
+
+
+class TestCalloutBlocks:
+    @pytest.mark.parametrize(
+        "lang,icon",
+        [
+            ("info", "\u2139\ufe0f"),
+            ("warning", "\u26a0\ufe0f"),
+            ("tip", "\ud83d\udca1"),
+            ("error", "\u274c"),
+            ("note", "\ud83d\udcdd"),
+        ],
+    )
+    def test_callout_type_renders_correctly(self, lang, icon):
+        content = f"```{lang}\nSome message\n```"
+        html = parse_wiki_content(content)
+        assert f"callout--{lang}" in html
+        assert icon in html
+        assert "Some message" in html
+
+    def test_callout_with_markdown_content(self):
+        content = "```info\nThis has **bold** text\n```"
+        html = parse_wiki_content(content)
+        assert "callout--info" in html
+        assert "This has **bold** text" in html
+
+    def test_multiple_callouts_same_page(self):
+        content = "```info\nFirst callout\n```\n\n```warning\nSecond callout\n```"
+        html = parse_wiki_content(content)
+        assert html.count("callout--") == 2
+        assert "callout--info" in html
+        assert "callout--warning" in html
+        assert "First callout" in html
+        assert "Second callout" in html
+
+    def test_non_callout_fenced_code_unaffected(self):
+        content = "```python\nprint('hello')\n```"
+        html = parse_wiki_content(content)
+        assert "callout" not in html
+        assert "<code" in html
+        assert "print" in html
+
+    def test_callout_tilde_fence(self):
+        content = "~~~note\nSome note text\n~~~"
+        html = parse_wiki_content(content)
+        assert "callout--note" in html
+        assert "Some note text" in html
+
+    def test_callout_content_html_escaped(self):
+        content = "```error\n<script>alert('xss')</script>\n```"
+        html = parse_wiki_content(content)
+        assert "callout--error" in html
+        assert "&lt;script&gt;" in html
+        assert "<script>alert" not in html
+
+    def test_callout_in_full_page_content(self):
+        content = "# Title\n\n```tip\nUse this tip\n```\n\nSome paragraph."
+        html = parse_wiki_content(content)
+        assert "<h1" in html
+        assert "callout--tip" in html
+        assert "Use this tip" in html
+        assert "Some paragraph" in html
+
+    def test_unknown_language_not_callout(self):
+        content = "```infoooo\nSome text\n```"
+        html = parse_wiki_content(content)
+        assert "callout" not in html
+
+    def test_callout_with_empty_body(self):
+        content = "```info\n\n```"
+        html = parse_wiki_content(content)
+        assert "callout--info" in html
+
+    def test_callout_extension_registered(self):
+        parser = create_parser()
+        assert "callout" in parser.preprocessors
