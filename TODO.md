@@ -15,7 +15,7 @@
 | 8 | **Navigation & Discovery** — search, TOC sidebar, tags, recent changes | ✅ Complete |
 | 9 | **Visual Polish** — dark mode, mobile responsive, notifications, code highlighting | ✅ Complete |
 | 10 | **Graph Enhancements** — node search, focus mode, tooltips, sizing | ✅ Complete |
-| 11 | **Macro System** — PageList, RecentChanges, BackLinks, PageCount macros | Planned |
+| 11 | **Macro System** — PageList, RecentChanges, BackLinks, PageCount, Include, NewPage macros | 🔄 In Progress |
 | 12 | **Authentication** — user accounts, login/logout, access control | Planned |
 | 13 | **Observability** — structured logging, metrics endpoint | Planned |
 | S1 | **Staging Integration** — `staging` branch, grinders → staging, auto-merge, E2B template | ✅ Complete |
@@ -90,7 +90,7 @@ Make the graph view more useful for navigation and exploration.
 
 ### Milestone S1: Staging Integration ✅ COMPLETE
 
-Staging factory is fully operational. Two successful grinder tasks merged.
+Staging factory is fully operational. Multiple successful grinder tasks merged.
 
 **Completed:**
 - [x] Staging container + Caddy routing at `staging.wiki.penni.fi`
@@ -103,8 +103,15 @@ Staging factory is fully operational. Two successful grinder tasks merged.
 - [x] CLAUDE.md gotcha #28: asyncio.run() in preprocessors is fatal
 - [x] TASK001 (PageCount macro) — grinder implemented, merged ✅
 - [x] TASK002 (BackLinks macro) — grinder implemented, merged ✅
+- [x] PageList macro fix — asyncio.run() replaced with Pattern B (constructor injection) ✅
+- [x] PM retry logic — 30s exponential backoff on Anthropic 529, MiniMax M2.7 fallback ✅
+- [x] PM review resilience — fail-fast on empty feedback, exception marks subtask failed ✅
+- [x] `merged → done` transition fix — pm_review_node transitions wiki page after auto-merge ✅
+- [x] Staging orchestrator source mount — `orchestrator-staging` mounts live source code (no Docker rebuild needed)
+- [x] Include macro (<<Include(PageName)>>) — full circular detection, E2E verified ✅
+- [x] NewPage macro (<<NewPage(Template, Label, Parent)>>) — E2E verified with full pipeline ✅
 
-**Key files:** `orchestrator/factory/agents/grinder_agent.py`, `orchestrator/e2b.Dockerfile`, `.github/workflows/ci.yml`, `orchestrator/factory/config.py`
+**Key files:** `orchestrator/factory/agents/grinder_agent.py`, `orchestrator/e2b.Dockerfile`, `.github/workflows/ci.yml`, `orchestrator/factory/config.py`, `deploy/vps/docker-compose.prod.yml`
 
 ### Milestone F8: Factory v2 — Gap Fixes 🔲
 Fix correctness and reliability issues in the v1 orchestrator.
@@ -159,10 +166,12 @@ Document the extension system and add useful built-in macros.
 
 - [x] Write developer guide: `docs/custom-macros.md`
 - [x] Add macro examples to sample wiki content (11 example pages with MetaTable usage)
-- [ ] `<<PageList(tag=value)>>` macro — embed a filtered list of pages
-- [ ] `<<RecentChanges(n=10)>>` macro — show recently modified pages
-- [ ] `<<BackLinks>>` macro — inline backlinks (alternative to sidebar panel)
-- [ ] `<<PageCount>>` macro — total page count for dashboards
+- [x] `<<PageList(tag=value)>>` macro — embed a filtered list of pages (Pattern B)
+- [x] `<<RecentChanges(n=10)>>` macro — show recently modified pages
+- [x] `<<BackLinks>>` macro — inline backlinks (alternative to sidebar panel)
+- [x] `<<PageCount>>` macro — total page count for dashboards
+- [x] `<<Include(PageName)>>` macro — transcludes another page, circular detection
+- [x] `<<NewPage(Template, "Label", Parent)>>` macro — inline form to create page from template
 - [ ] Live MetaTable refresh — wire WebSocket `page_updated` events to trigger HTMX re-fetch of MetaTable sections without full page reload
 - [ ] Macro escape syntax — preprocessors skip inline backtick spans and honor `\<<MacroName>>` as a literal `<<MacroName>>` (currently any bare `<<Macro>>` in prose triggers the preprocessor)
 **Key files:** `core/parser.py` (new extensions), `docs/custom-macros.md`
@@ -195,8 +204,8 @@ Add structured logging and metrics for production readiness.
 - [x] Users can search pages by name and content
 - [x] Dark mode works with one click
 - [x] Mobile layout is usable
-- [ ] Developer docs explain how to create custom macros
-- [ ] At least 3 new built-in macros available
+- [x] Developer docs explain how to create custom macros
+- [x] At least 3 new built-in macros available (PageList, BackLinks, PageCount, Include, NewPage)
 - [ ] Users can log in and edits are attributed
 - [ ] Structured logs with request context
 
