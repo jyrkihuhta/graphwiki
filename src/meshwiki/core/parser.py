@@ -1284,6 +1284,80 @@ class IncludeExtension(Extension):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Callout Blocks
+# ─────────────────────────────────────────────────────────────────────────────
+
+CALLOUT_TYPES = ("info", "warning", "tip", "error", "note")
+
+CALLOUT_ICONS: dict[str, str] = {
+    "info": "ℹ️",
+    "warning": "⚠️",
+    "tip": "💡",
+    "error": "❌",
+    "note": "📝",
+}
+
+
+class CalloutBlockPreprocessor(Preprocessor):
+    """Preprocessor that converts fenced callout blocks to raw HTML."""
+
+    FENCE_RE = re.compile(r"^(?P<fence>`{3,}|~{3,})(?P<type>\w+)\s*$")
+
+    def run(self, lines: list[str]) -> list[str]:
+        result: list[str] = []
+        i = 0
+        while i < len(lines):
+            m = self.FENCE_RE.match(lines[i])
+            if not m:
+                result.append(lines[i])
+                i += 1
+                continue
+
+            fence_char = m.group("fence")
+            callout_type = m.group("type")
+            if callout_type not in CALLOUT_TYPES:
+                result.append(lines[i])
+                i += 1
+                continue
+
+            body_lines: list[str] = []
+            j = i + 1
+            while j < len(lines):
+                if lines[j].startswith(fence_char):
+                    break
+                body_lines.append(lines[j])
+                j += 1
+
+            if j >= len(lines):
+                result.append(lines[i])
+                i += 1
+                continue
+
+            escaped = html_escape("\n".join(body_lines))
+            icon = CALLOUT_ICONS.get(callout_type, "")
+            html = (
+                f'<div class="callout callout--{callout_type}">'
+                f'<span class="callout__icon">{icon}</span>'
+                f'<span class="callout__body">{escaped}</span></div>'
+            )
+            result.append(self.md.htmlStash.store(html))
+            i = j + 1
+
+        return result
+
+
+class CalloutExtension(Extension):
+    """Markdown extension for fenced callout blocks."""
+
+    def extendMarkdown(self, md: Markdown) -> None:
+        md.preprocessors.register(
+            CalloutBlockPreprocessor(md),
+            "callout",
+            27,
+        )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # NewPage macro
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -1566,6 +1640,7 @@ def create_parser(
                 include_chain=include_chain or [],
             ),  # <<Include(...)>>
             NewPageExtension(),  # <<NewPage(...)>>
+            CalloutExtension(),  # ```info / ```warning / ```tip / ```error / ```note
         ]
     )
 
