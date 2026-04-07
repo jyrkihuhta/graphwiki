@@ -227,11 +227,18 @@ def build_page_tree_sync(pages: list[Page]) -> list[dict]:
         parts = page.name.split("/")
         level = len(parts) - 1
 
+        extra = (
+            page.metadata.model_extra if hasattr(page.metadata, "model_extra") else {}
+        )
+        status = extra.get("status", "") or ""
+        if isinstance(status, list):
+            status = status[0] if status else ""
         node = {
             "name": page.name,
             "title": page.title,
             "children": [],
             "level": level,
+            "status": status,
         }
         nodes[page.name] = node
 

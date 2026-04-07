@@ -43,15 +43,4 @@ async def finalize_node(state: FactoryState) -> dict:
             exc,
         )
 
-    # Move completed task into a Done/ subfolder so it collapses in the sidebar
-    # e.g. Factory/Macros/NewPageMacro → Factory/Macros/Done/NewPageMacro
-    if "/Done/" not in task_page:
-        parts = task_page.split("/")
-        done_page = "/".join(parts[:-1] + ["Done", parts[-1]])
-        try:
-            await client.rename_page(task_page, done_page)
-            logger.info("finalize: moved %s → %s", task_page, done_page)
-        except Exception as exc:
-            logger.warning("finalize: failed to move task to Done folder: %s", exc)
-
     return {"graph_status": "completed"}

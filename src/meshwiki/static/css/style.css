@@ -200,6 +200,18 @@ body {
     font-weight: 500;
 }
 
+.page-tree-link--done {
+    color: var(--color-text-muted);
+    text-decoration: line-through;
+    text-decoration-color: var(--color-border);
+}
+
+.page-tree-link--done:hover {
+    color: var(--color-text-muted);
+    text-decoration: line-through;
+    text-decoration-color: var(--color-border);
+}
+
 /* Page List */
 .page-list h1 {
     margin-bottom: 1.5rem;
