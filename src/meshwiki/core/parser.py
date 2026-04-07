@@ -818,80 +818,77 @@ def _parse_pagelist_args(args_str: str | None) -> dict[str, str]:
     return result
 
 
-def _render_page_list(args_str: str | None) -> str:
+def _render_page_list(args_str: str | None, all_pages: list) -> str:
     """Render <<PageList(...)>> as an HTML list of wiki pages.
 
     Args:
         args_str: Raw argument string from the macro (may be None).
+        all_pages: Pre-fetched list of Page objects passed in from the route handler.
+                   Must not be fetched here — preprocessors run inside the event loop.
     """
-    from meshwiki.core.graph import get_engine
-
     args = _parse_pagelist_args(args_str)
 
-    engine = get_engine()
-    if engine is None:
+    if all_pages is None:
         return (
+            '<div class="page-list-wrapper">'
             '<p class="page-list-unavailable">'
-            "<em>PageList: graph engine not available</em></p>"
+            "<em>PageList: storage not available</em></p></div>"
         )
 
-    try:
-        pages = engine.query([])
-    except Exception as e:
-        return f'<p class="page-list-error"><em>PageList error: {e}</em></p>'
+    pages = list(all_pages)
 
     if "tag" in args:
         tag_lower = args["tag"].lower()
         pages = [
-            p
-            for p in pages
-            if tag_lower in [t.lower() for t in (getattr(p, "tags", []) or [])]
+            p for p in pages if any(t.lower() == tag_lower for t in p.metadata.tags)
         ]
 
-    if "status" in args:
-        status_val = args["status"]
-        pages = [p for p in pages if getattr(p, "status", None) == status_val]
+    if "prefix" in args:
+        prefix = args["prefix"]
+        pages = [p for p in pages if p.name.startswith(prefix)]
 
-    if "parent" in args:
-        parent = args["parent"]
-        pages = [p for p in pages if getattr(p, "name", "").startswith(f"{parent}/")]
+    pages.sort(key=lambda p: p.name.lower())
 
-    pages.sort(key=lambda p: getattr(p, "name", "").lower())
-
-    limit = 50
     if "limit" in args:
         try:
             limit = int(args["limit"])
-            if limit <= 0:
-                limit = 50
+            if limit > 0:
+                pages = pages[:limit]
         except ValueError:
             pass
-    pages = pages[:limit]
 
     if not pages:
-        return '<p class="text-muted fst-italic">No pages found.</p>'
-
-    lines = ['<ul class="page-list">']
-    for page in pages:
-        name = getattr(page, "name", "")
-        title = getattr(page, "title", None) or name
-        url_name = name.replace(" ", "_")
-        status = getattr(page, "status", None)
-        badge_html = ""
-        if status:
-            badge_cls = _BADGE_CLASS.get(status, "badge-secondary")
-            badge_html = (
-                f' <span class="badge {badge_cls}">{html_escape(status)}</span>'
-            )
-        lines.append(
-            f'<li><a href="/wiki/{url_name}">{html_escape(title)}</a>{badge_html}</li>'
+        return (
+            '<div class="page-list-wrapper">'
+            '<p class="page-list-empty"><em>No pages found</em></p></div>'
         )
-    lines.append("</ul>")
+
+    lines = ['<div class="page-list-wrapper">', '<ul class="page-list">']
+    for page in pages:
+        url_name = page.name.replace(" ", "_")
+        tags_html = ""
+        if page.metadata.tags:
+            tag_links = [
+                f'<a href="/search?tag={html_escape(t)}" class="tag-pill">{html_escape(t)}</a>'
+                for t in page.metadata.tags
+            ]
+            tags_html = f'<span class="page-list-tags">{"".join(tag_links)}</span>'
+        lines.append(
+            f'<li class="page-list-item">'
+            f'<a href="/page/{url_name}" class="wiki-link">{html_escape(page.name)}</a>'
+            f"{tags_html}"
+            f"</li>"
+        )
+    lines.append("</ul></div>")
     return "\n".join(lines)
 
 
 class PageListPreprocessor(Preprocessor):
     """Preprocessor that replaces <<PageList(...)>> macros with an HTML list."""
+
+    def __init__(self, md: Markdown, all_pages: list | None = None):
+        super().__init__(md)
+        self.all_pages = all_pages or []
 
     def run(self, lines: list[str]) -> list[str]:
         text = "\n".join(lines)
@@ -910,7 +907,7 @@ class PageListPreprocessor(Preprocessor):
 
         def replace_match(m: re.Match) -> str:
             args_str = m.group(1)
-            html = _render_page_list(args_str)
+            html = _render_page_list(args_str, self.all_pages)
             return self.md.htmlStash.store(html)
 
         text = PAGELIST_PATTERN.sub(replace_match, text)
@@ -924,11 +921,15 @@ class PageListPreprocessor(Preprocessor):
 class PageListExtension(Extension):
     """Markdown extension for <<PageList(...)>> macros."""
 
+    def __init__(self, all_pages: list | None = None, **kwargs):
+        self.all_pages = all_pages or []
+        super().__init__(**kwargs)
+
     def extendMarkdown(self, md: Markdown) -> None:
         md.preprocessors.register(
-            PageListPreprocessor(md),
+            PageListPreprocessor(md, self.all_pages),
             "pagelist",
-            27,
+            28,
         )
 
 
@@ -1698,7 +1699,7 @@ def create_parser(
             RecentChangesExtension(recent_pages=recent_pages),  # <<RecentChanges(n)>>
             PageCountExtension(),  # <<PageCount>>
             BackLinksExtension(page_name=page_name),  # <<BackLinks>>
-            PageListExtension(),  # <<PageList(...)>>
+            PageListExtension(all_pages=all_pages),  # <<PageList(...)>>
             IncludeExtension(
                 page_contents=page_contents or {},
                 include_chain=include_chain or [],
