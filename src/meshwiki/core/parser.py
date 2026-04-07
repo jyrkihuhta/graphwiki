@@ -1328,6 +1328,11 @@ class CalloutBlockPreprocessor(Preprocessor):
                 body_lines.append(lines[j])
                 j += 1
 
+            if j >= len(lines):
+                result.append(lines[i])
+                i += 1
+                continue
+
             escaped = html_escape("\n".join(body_lines))
             icon = CALLOUT_ICONS.get(callout_type, "")
             html = (
