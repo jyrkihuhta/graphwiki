@@ -195,6 +195,35 @@ async def receive_webhook(
     logger.info("webhook: received event=%s (raw=%s) page=%s", event, raw_event, page_name)
 
     if event == "task.assigned":
+        # Guardrail: only accept pages assigned to the factory.
+        metadata: dict = data.get("metadata") or {}
+        if metadata.get("assignee") != "factory":
+            logger.info(
+                "webhook: ignoring task.assigned for %s (assignee=%s)",
+                page_name,
+                metadata.get("assignee"),
+            )
+            return {"status": "ignored", "reason": "not assigned to factory"}
+
+        # Guardrail: only accept task/epic page types.
+        page_type = metadata.get("type", "")
+        if page_type not in ("task", "epic", ""):
+            logger.info(
+                "webhook: ignoring task.assigned for %s (type=%s)",
+                page_name,
+                page_type,
+            )
+            return {"status": "ignored", "reason": f"unsupported page type: {page_type}"}
+
+        # Guardrail: don't start a duplicate graph thread if one is already running.
+        running = {t.get_name() for t in asyncio.all_tasks() if not t.done()}
+        if f"graph:{page_name}" in running:
+            logger.info(
+                "webhook: ignoring task.assigned for %s (graph already running)",
+                page_name,
+            )
+            return {"status": "ignored", "reason": "graph already running"}
+
         graph = request.app.state.graph
         initial_state = _build_initial_state(page_name, data)
         config = {"configurable": {"thread_id": page_name}}

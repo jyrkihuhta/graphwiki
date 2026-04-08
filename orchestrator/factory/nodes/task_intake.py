@@ -42,10 +42,41 @@ async def task_intake_node(state: FactoryState) -> dict:
         return {
             "title": task_wiki_page,
             "requirements": "",
-            "graph_status": "decomposing",
+            "graph_status": "failed",
+            "error": f"task page not found: {task_wiki_page}",
         }
 
     metadata: dict = page.get("metadata") or {}
+
+    # Guardrail: only process pages assigned to the factory.
+    if metadata.get("assignee") != "factory":
+        logger.warning(
+            "task_intake: page %s is not assigned to factory (assignee=%s) — aborting",
+            task_wiki_page,
+            metadata.get("assignee"),
+        )
+        return {
+            "title": task_wiki_page,
+            "requirements": "",
+            "graph_status": "failed",
+            "error": "page not assigned to factory",
+        }
+
+    # Guardrail: only process task/epic page types.
+    page_type = metadata.get("type", "task")
+    if page_type not in ("task", "epic"):
+        logger.warning(
+            "task_intake: page %s has unsupported type %r — aborting",
+            task_wiki_page,
+            page_type,
+        )
+        return {
+            "title": task_wiki_page,
+            "requirements": "",
+            "graph_status": "failed",
+            "error": f"unsupported page type: {page_type}",
+        }
+
     title: str = metadata.get("title", task_wiki_page)
     requirements: str = page.get("content", "")
 
