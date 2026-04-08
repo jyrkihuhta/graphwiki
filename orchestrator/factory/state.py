@@ -20,6 +20,11 @@ def _merge_subtasks(current: list, update: list) -> list:
     return list(merged.values())
 
 
+def _union_ids(current: list[str], update: list[str]) -> list[str]:
+    """Union reducer for subtask ID lists (failed or completed)."""
+    return list(set(current) | set(update))
+
+
 class SubTask(TypedDict):
     """Represents a single unit of work assigned to a grinder agent."""
 
@@ -66,8 +71,8 @@ class FactoryState(TypedDict):
 
     # Execution
     active_grinders: dict[str, str]  # subtask_id -> grinder session id
-    completed_subtask_ids: list[str]
-    failed_subtask_ids: list[str]
+    completed_subtask_ids: Annotated[list[str], _union_ids]
+    failed_subtask_ids: Annotated[list[str], _union_ids]
 
     # PM conversation history (accumulates via add_messages reducer)
     pm_messages: Annotated[list[BaseMessage], add_messages]
