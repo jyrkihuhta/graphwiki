@@ -466,7 +466,6 @@ async def view_page(request: Request, name: str):
         page_name=name,
         page_metadata=page_metadata,
         recent_pages=recent_pages,
-        all_pages=all_pages,
         page_contents=page_contents,
     )
 
