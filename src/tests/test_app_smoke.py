@@ -468,3 +468,50 @@ class TestFullLifecycle:
         # 11. HomePage wiki link to Projects is now missing again
         resp = await client.get("/page/HomePage")
         assert "wiki-link-missing" in resp.text
+
+
+# ============================================================
+# Macro rendering
+# ============================================================
+
+
+class TestMacros:
+    @pytest.mark.asyncio
+    async def test_pagelist_macro_renders_without_error(self, client):
+        """<<PageList>> must not raise AttributeError (e.g. list_pages_with_metadata).
+
+        When the Rust engine is unavailable in tests, PageListPreprocessor
+        returns the line unchanged — the important thing is that the page
+        renders with 200, not a 500 from a wrong method call.
+        """
+        await client.post(
+            "/page/MacroTest",
+            data={"content": "# Macro Test\n\n<<PageList>>\n"},
+        )
+        resp = await client.get("/page/MacroTest")
+        assert resp.status_code == 200
+
+    @pytest.mark.asyncio
+    async def test_pagelist_macro_calls_list_pages_not_list_pages_with_metadata(
+        self, wiki_app, client
+    ):
+        """PageListPreprocessor must call engine.list_pages(), not
+        engine.list_pages_with_metadata() (the latter doesn't exist on
+        the Rust GraphEngine and raises AttributeError).
+        """
+        from unittest.mock import MagicMock, patch
+
+        mock_engine = MagicMock()
+        mock_engine.list_pages.return_value = []
+
+        await client.post(
+            "/page/MacroTestEngine",
+            data={"content": "# Test\n\n<<PageList>>\n"},
+        )
+
+        with patch("meshwiki.core.parser.get_engine", return_value=mock_engine):
+            resp = await client.get("/page/MacroTestEngine")
+
+        assert resp.status_code == 200
+        mock_engine.list_pages.assert_called()
+        mock_engine.list_pages_with_metadata.assert_not_called()

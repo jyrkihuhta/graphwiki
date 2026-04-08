@@ -589,10 +589,18 @@ async def review_with_pm(
     if page:
         acceptance_criteria = page.get("content", "")
 
+    branch_name = subtask.get("branch_name") or ""
+
     user_message = (
         f"## Subtask: {subtask['title']}\n\n"
         f"**Acceptance Criteria (from wiki page):**\n{acceptance_criteria}\n\n"
-        f"## PR Diff\n\n```diff\n{diff}\n```\n\n"
+        f"## PR Diff (branch: `{branch_name}`)\n\n```diff\n{diff}\n```\n\n"
+        "**Important:** The diff above shows only changes relative to the PR base branch "
+        "(staging), not relative to main. Changes that were already on staging will NOT "
+        "appear in the diff even if they are part of the full implementation. Before "
+        "requesting changes for a missing feature, use `github_read_file` with "
+        f"`ref: \"{branch_name}\"` to read the actual current file and verify whether "
+        "the feature is already present.\n\n"
         "Please review this PR. "
         "Use `pm_approve_pr` if the implementation meets all acceptance criteria, "
         "or `pm_request_changes` with specific feedback if it does not."
@@ -657,6 +665,14 @@ async def review_with_pm(
                     result_content = page.get("content", "")
                 else:
                     result_content = f"Page '{tool_input['page_name']}' not found."
+            elif tool_name == "github_read_file":
+                try:
+                    ref = tool_input.get("ref") or "staging"
+                    result_content = await github_client.get_file_content(
+                        tool_input["path"], ref=ref
+                    )
+                except Exception as exc:
+                    result_content = f"Error reading file: {exc}"
             else:
                 result_content = "Tool not available during review"
 

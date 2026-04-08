@@ -114,6 +114,7 @@ async def pm_review_node(state: FactoryState) -> dict:
                     **subtask,
                     "status": "changes_requested",
                     "review_feedback": feedback,
+                    "attempt": subtask.get("attempt", 0) + 1,
                 }
             )
             logger.info(
