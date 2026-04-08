@@ -896,7 +896,7 @@ class PageListPreprocessor(Preprocessor):
         if engine is None:
             return lines
 
-        pages = engine.list_pages_with_metadata()
+        pages = engine.list_pages()
 
         text = "\n".join(lines)
         if "<<PageList" not in text:
