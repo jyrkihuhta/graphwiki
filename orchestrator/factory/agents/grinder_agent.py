@@ -644,7 +644,7 @@ async def grind_subtask_e2b(
         )
 
         pty_handle = await sbx.pty.create(
-            size=PtySize(cols=220, rows=50),
+            size=PtySize(cols=160, rows=50),
             on_data=_on_pty_data,
             timeout=0,  # no timeout — sandbox 1-hour limit applies
         )

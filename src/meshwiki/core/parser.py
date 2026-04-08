@@ -671,7 +671,7 @@ def _render_task_status(page_name: str, page_metadata: dict) -> str:
             "var NO_SESSION_MSG='\\r\\n\\x1b[2m[no active terminal session for this task]\\x1b[0m\\r\\n';"
             "function boot(){"
             "var t=new Terminal({"
-            "cols:220,rows:50,disableStdin:true,convertEol:true,scrollback:5000,"
+            "cols:160,rows:50,disableStdin:true,convertEol:true,scrollback:5000,"
             "fontFamily:'Menlo,Monaco,\"Courier New\",monospace',fontSize:13,"
             "theme:{background:'#1e1e1e',foreground:'#d4d4d4'}"
             "});"
