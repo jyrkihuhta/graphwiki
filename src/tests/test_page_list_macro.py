@@ -3,8 +3,6 @@
 from datetime import datetime, timedelta
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from meshwiki.core.models import Page, PageMetadata
 from meshwiki.core.parser import parse_wiki_content
 
@@ -202,8 +200,6 @@ class TestPageListEngineUnavailable:
 
     def test_page_list_engine_unavailable(self):
         """When get_engine() returns None, PageList should not raise."""
-        with patch(
-            "meshwiki.core.parser.get_engine", return_value=None, create=True
-        ):
+        with patch("meshwiki.core.parser.get_engine", return_value=None, create=True):
             html = parse_wiki_content("<<PageList>>")
         assert html is not None

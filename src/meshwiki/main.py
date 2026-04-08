@@ -722,15 +722,15 @@ async def ws_terminal(websocket: WebSocket, name: str):
     Replays the full buffer to late-joining clients, then streams new chunks
     as they arrive.  Multiple concurrent connections are supported.
     """
-    from meshwiki.core.terminal_sessions import get_session, subscribe, unsubscribe
+    from meshwiki.core.terminal_sessions import (
+        get_session,
+        resolve_session_name,
+        subscribe,
+        unsubscribe,
+    )
 
     await websocket.accept()
-    # The URL encodes spaces as underscores (wiki convention), but page names
-    # may also contain underscores that are part of the name (e.g. get_engine()).
-    # Try the decoded name verbatim first; only fall back to replacing all
-    # underscores with spaces if no session is found under the original name.
-    if get_session(name) is None:
-        name = name.replace("_", " ")
+    name = resolve_session_name(name)
     session = get_session(name)
     if session is None:
         await websocket.send_text(
