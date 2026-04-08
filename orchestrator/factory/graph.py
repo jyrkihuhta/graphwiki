@@ -29,7 +29,11 @@ logger = logging.getLogger(__name__)
 
 
 def route_after_intake(state: FactoryState) -> str:
-    """Route after task intake: skip decompose if decomposition_approved is set."""
+    """Route after task intake."""
+    if state.get("graph_status") == "failed":
+        return "abort"
+    if state.get("graph_status") == "grinding":
+        return "skip_decompose"
     if state.get("decomposition_approved"):
         return "skip_decompose"
     return "decompose"
@@ -121,7 +125,7 @@ def build_graph(checkpointer):
     graph.add_conditional_edges(
         "task_intake",
         route_after_intake,
-        {"decompose": "decompose", "skip_decompose": "assign_grinders"},
+        {"decompose": "decompose", "skip_decompose": "assign_grinders", "abort": END},
     )
     # Human plan review is disabled — dispatch grinders immediately after decompose.
     graph.add_edge("decompose", "assign_grinders")
