@@ -633,6 +633,14 @@ async def grind_subtask_e2b(
             on_stderr=_on_stderr,
         )
 
+        # Install orchestrator deps (langgraph, anthropic, etc.)
+        await sbx.commands.run(
+            "cd /tmp/repo/orchestrator && pip install -e '.[dev]' -q --no-cache-dir",
+            timeout=0,
+            on_stdout=_on_stdout,
+            on_stderr=_on_stderr,
+        )
+
         # Write task file
         await sbx.files.write("/tmp/task.md", task_prompt)
 
