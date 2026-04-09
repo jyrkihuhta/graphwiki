@@ -18,6 +18,7 @@
 | 11 | **Macro System** — PageList, RecentChanges, BackLinks, PageCount, Include, NewPage macros | 🔄 In Progress |
 | 12 | **Authentication** — user accounts, login/logout, access control | Planned |
 | 13 | **Observability** — structured logging, metrics endpoint | Planned |
+| 14 | **Version History** — SQLite revisions, diff view, restore | ✅ Complete |
 | S1 | **Staging Integration** — `staging` branch, grinders → staging, auto-merge, E2B template | ✅ Complete |
 | F8 | **Factory v2: Gap Fixes** — cost tracking, concurrency control, bookkeeper bot | 🔲 Planned |
 | F9 | **Factory v2: HBR Manager** — resource tracking, daily budget, 24/7 scheduler | 🔲 Planned |
@@ -26,7 +27,7 @@
 
 **Priority:** S1 → F8 → F9 → F10 → F11 → 11 → 12 → 13
 
-**~390 tests passing** (70 graph-core + ~320 Python), CI pipeline active.
+**~390 tests passing** (70 graph-core + ~321 Python), CI pipeline active.
 
 ---
 
@@ -210,6 +211,25 @@ Add structured logging and metrics for production readiness.
 - [ ] Document logging conventions
 
 **Key files:** `main.py`, `core/logging.py` (new)
+
+---
+
+### Milestone 14: Version History ✅
+
+SQLite-backed revision tracking for every page save. Zero new dependencies (stdlib `sqlite3` + `difflib`).
+
+- [x] `RevisionStore` SQLite store — per-page sequential revision numbering, WAL mode
+- [x] `Revision` Pydantic model added to `models.py`
+- [x] `FileStorage` wired up — all 4 write paths (save, delete, rename, frontmatter) record/clean revisions
+- [x] `GET /page/{name}/history` — paginated revision list
+- [x] `GET /page/{name}/history/{rev}` — read-only rendered past revision with restore button
+- [x] `POST /page/{name}/restore/{rev}` — restores content, records new revision
+- [x] `GET /page/{name}/diff/{a..b}` — unified diff view (also `diff/{n}` shorthand)
+- [x] JSON API: `GET /api/v1/pages/{name}/history[/{rev}]`
+- [x] Config: `MESHWIKI_HISTORY_ENABLED` (default `true`)
+- [x] 60 new tests (28 unit + 13 storage + 19 integration)
+
+**Key files:** `core/revision_store.py` (new), `core/storage.py`, `core/models.py`, `core/dependencies.py`, `main.py`, `api/pages.py`, `templates/page/history.html`, `templates/page/revision.html`, `templates/page/diff.html`, `static/css/style.css`
 
 ---
 
