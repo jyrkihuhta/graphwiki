@@ -195,6 +195,17 @@ async def receive_webhook(
     logger.info("webhook: received event=%s (raw=%s) page=%s", event, raw_event, page_name)
 
     if event == "task.assigned":
+        # Skip subtask pages — they are driven by their parent graph thread.
+        # MeshWiki includes full page metadata in `data`, so parent_task is
+        # available here without an extra HTTP round-trip.
+        if data.get("parent_task"):
+            logger.debug(
+                "webhook: ignoring task.assigned for subtask %s (parent_task=%s)",
+                page_name,
+                data["parent_task"],
+            )
+            return {"status": "ignored", "reason": "subtask managed by parent graph"}
+
         # Guardrail: don't start a duplicate graph thread if one is already running.
         # Assignee/type checks are done in task_intake (which reads the actual page).
         running = {t.get_name() for t in asyncio.all_tasks() if not t.done()}
