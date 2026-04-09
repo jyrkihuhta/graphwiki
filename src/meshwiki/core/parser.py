@@ -1003,6 +1003,18 @@ def _parse_pagelist_args(args_str: str | None) -> dict[str, str]:
     return result
 
 
+def _get_page_tags(page) -> list[str]:
+    """Return the tags for a page object.
+
+    Handles both Pydantic Page (page.metadata.tags) and Rust PageInfo
+    (page.metadata is a plain dict).
+    """
+    metadata = page.metadata
+    if isinstance(metadata, dict):
+        return metadata.get("tags", [])
+    return getattr(metadata, "tags", None) or []
+
+
 def _render_page_list(args_str: str | None, all_pages: list) -> str:
     """Render <<PageList(...)>> as an HTML list of wiki pages.
 
@@ -1025,9 +1037,7 @@ def _render_page_list(args_str: str | None, all_pages: list) -> str:
     if "tag" in args:
         tag_lower = args["tag"].lower()
         pages = [
-            p
-            for p in pages
-            if any(t.lower() == tag_lower for t in p.metadata.get("tags", []))
+            p for p in pages if any(t.lower() == tag_lower for t in _get_page_tags(p))
         ]
 
     if "prefix" in args:
@@ -1054,7 +1064,7 @@ def _render_page_list(args_str: str | None, all_pages: list) -> str:
     for page in pages:
         url_name = page.name.replace(" ", "_")
         tags_html = ""
-        page_tags = page.metadata.get("tags", [])
+        page_tags = _get_page_tags(page)
         if page_tags:
             tag_links = [
                 f'<a href="/search?tag={html_escape(t)}" class="tag-pill">{html_escape(t)}</a>'
@@ -1074,15 +1084,17 @@ def _render_page_list(args_str: str | None, all_pages: list) -> str:
 class PageListPreprocessor(Preprocessor):
     """Preprocessor that replaces <<PageList(...)>> macros with an HTML list."""
 
-    def __init__(self, md: Markdown):
+    def __init__(self, md: Markdown, pages: list | None = None):
         super().__init__(md)
+        self.pages = pages
 
     def run(self, lines: list[str]) -> list[str]:
-        engine = get_engine()
-        if engine is None:
-            return lines
-
-        pages = engine.list_pages()
+        pages = self.pages
+        if pages is None:
+            engine = get_engine()
+            if engine is None:
+                return lines
+            pages = engine.list_pages()
 
         text = "\n".join(lines)
         if "<<PageList" not in text:
@@ -1114,9 +1126,13 @@ class PageListPreprocessor(Preprocessor):
 class PageListExtension(Extension):
     """Markdown extension for <<PageList(...)>> macros."""
 
+    def __init__(self, pages: list | None = None, **kwargs):
+        self.pages = pages
+        super().__init__(**kwargs)
+
     def extendMarkdown(self, md: Markdown) -> None:
         md.preprocessors.register(
-            PageListPreprocessor(md),
+            PageListPreprocessor(md, pages=self.pages),
             "pagelist",
             28,
         )
@@ -1829,7 +1845,7 @@ def create_parser(
             PageCountExtension(),  # <<PageCount>>
             TagListExtension(pages=pages),  # <<TagList>>
             BackLinksExtension(page_name=page_name),  # <<BackLinks>>
-            PageListExtension(),  # <<PageList(...)>>
+            PageListExtension(pages=pages),  # <<PageList(...)>>
             IncludeExtension(
                 page_contents=page_contents or {},
                 include_chain=include_chain or [],

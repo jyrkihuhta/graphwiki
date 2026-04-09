@@ -1,7 +1,7 @@
 """Unit tests for the <<PageList>> macro."""
 
 from datetime import datetime, timedelta
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 from meshwiki.core.models import Page, PageMetadata
 from meshwiki.core.parser import parse_wiki_content
@@ -29,24 +29,9 @@ def make_page(
     )
 
 
-def make_engine(pages: list) -> MagicMock:
-    """Return a MagicMock engine whose list_pages_with_metadata() returns pages."""
-    engine = MagicMock()
-    engine.list_pages_with_metadata.return_value = pages
-    return engine
-
-
 def render(text: str, pages: list, **kwargs) -> str:
-    """Render wiki text with a mocked engine supplying pages.
-
-    Patch target is 'meshwiki.core.parser.get_engine' — the site where
-    PageListPreprocessor imports/calls it (patch where used, not defined).
-    Uses create=True because on some branches get_engine is not yet imported
-    at that location.
-    """
-    engine = make_engine(pages)
-    with patch("meshwiki.core.parser.get_engine", return_value=engine, create=True):
-        return parse_wiki_content(text, **kwargs)
+    """Render wiki text with pages injected directly into the parser."""
+    return parse_wiki_content(text, pages=pages, **kwargs)
 
 
 class TestPageListBasic:

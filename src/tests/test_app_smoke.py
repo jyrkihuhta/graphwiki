@@ -492,17 +492,16 @@ class TestMacros:
         assert resp.status_code == 200
 
     @pytest.mark.asyncio
-    async def test_pagelist_macro_calls_list_pages_not_list_pages_with_metadata(
+    async def test_pagelist_macro_does_not_call_engine_list_pages_with_metadata(
         self, wiki_app, client
     ):
-        """PageListPreprocessor must call engine.list_pages(), not
-        engine.list_pages_with_metadata() (the latter doesn't exist on
-        the Rust GraphEngine and raises AttributeError).
+        """PageListPreprocessor must NOT call engine.list_pages_with_metadata()
+        (that method doesn't exist on the Rust GraphEngine and raises AttributeError).
+        Pages are now injected from storage, so the engine is not involved.
         """
         from unittest.mock import MagicMock, patch
 
         mock_engine = MagicMock()
-        mock_engine.list_pages.return_value = []
 
         await client.post(
             "/page/MacroTestEngine",
@@ -513,5 +512,4 @@ class TestMacros:
             resp = await client.get("/page/MacroTestEngine")
 
         assert resp.status_code == 200
-        mock_engine.list_pages.assert_called()
         mock_engine.list_pages_with_metadata.assert_not_called()
