@@ -3,6 +3,39 @@
 import logging
 from typing import Any
 
+
+def _patch_frontmatter(content: str, updates: dict[str, Any]) -> str:
+    """Update or add fields in YAML frontmatter of a page content string.
+
+    Only modifies the first ``---`` block.  Fields already present are
+    updated in-place; new fields are appended before the closing ``---``.
+    Returns *content* unchanged if no frontmatter block is found.
+    """
+    if not content.startswith("---\n"):
+        return content
+    close = content.find("\n---\n", 4)
+    if close == -1:
+        return content
+    front_lines = content[4:close].split("\n")
+    body = content[close + 5:]
+
+    updated_keys: set[str] = set()
+    new_front: list[str] = []
+    for line in front_lines:
+        if ":" in line:
+            key = line.split(":", 1)[0].strip()
+            if key in updates:
+                new_front.append(f"{key}: {updates[key]}")
+                updated_keys.add(key)
+                continue
+        new_front.append(line)
+
+    for key, value in updates.items():
+        if key not in updated_keys:
+            new_front.append(f"{key}: {value}")
+
+    return "---\n" + "\n".join(new_front) + "\n---\n" + body
+
 import httpx
 
 from ..config import get_settings
@@ -134,16 +167,24 @@ class MeshWikiClient:
             )
             resp.raise_for_status()
 
-    async def append_to_page(self, page_name: str, content_to_append: str) -> None:
+    async def append_to_page(
+        self,
+        page_name: str,
+        content_to_append: str,
+        frontmatter_updates: dict[str, Any] | None = None,
+    ) -> None:
         """
         Append content_to_append to the body of the named wiki page.
 
-        Gets the current page content, strips trailing whitespace, appends
-        "\\n\\n" + content_to_append, then PUTs the updated content back.
+        Gets the current page content, optionally patches frontmatter fields,
+        strips trailing whitespace, appends "\\n\\n" + content_to_append, then
+        PUTs the updated content back in a single round-trip.
         """
         page = await self.get_page(page_name)
         if page is None:
             raise ValueError(f"Page not found: {page_name!r}")
         current_content = page.get("content", "")
+        if frontmatter_updates:
+            current_content = _patch_frontmatter(current_content, frontmatter_updates)
         new_content = current_content.rstrip() + "\n\n" + content_to_append
         await self.create_page(page_name, new_content)

@@ -124,6 +124,7 @@ Fix correctness and reliability issues in the v1 orchestrator.
 - [ ] Bookkeeper bot — periodic job reconciling stale task states (stuck in_progress → failed, merged PRs → merged)
 - [ ] PM review feedback visible on wiki — `append_to_page` in `pm_review_node` isn't writing feedback to the task page; PM review decisions should be visible in the Agent Log section
 - [x] PM review token cost — implemented: diff capped at `FACTORY_PM_REVIEW_MAX_DIFF_LINES` (default 500), configurable full-review model via `FACTORY_PM_REVIEW_MODEL`, and two-pass triage via `FACTORY_PM_TRIAGE_MODEL` (Haiku fast-path; escalates to Sonnet only when triage requests changes)
+- [x] Deferred subtask routing bug — `route_after_grinding` now loops back to `assign_grinders` when pending subtasks remain (file-conflict serialization left TASK002 stranded); subtask pages now include `assignee: factory` in frontmatter
 - [ ] PM review failure triggers spurious `task.assigned` restart — when pm_review_node marks subtask `failed` and transitions the wiki page, the `failed→in_progress` webhook fires `task.assigned` which starts a duplicate graph run; the transition in the exception handler should use a status that doesn't trigger a new graph run, or webhook_server should ignore `task.assigned` for threads already in progress
 - [ ] Signed grinder commits — GitHub App token or GPG key in E2B sandbox
 - [ ] Redecompose escalation — implement `"redecompose"` decision in `escalate_node`
@@ -183,6 +184,8 @@ Document the extension system and add useful built-in macros.
 - [x] `<<PageCount>>` macro — total page count for dashboards
 - [x] `<<Include(PageName)>>` macro — transcludes another page, circular detection
 - [x] `<<NewPage(Template, "Label", Parent)>>` macro — inline form to create page from template
+- [x] `<<LastModified>>` macro — inline relative time of page's last modification, falls back to `—`
+- [x] `<<TagList>>` macro — inline tag list with counts, links to `/search?tag=X`, sorted by count descending
 - [ ] Live MetaTable refresh — wire WebSocket `page_updated` events to trigger HTMX re-fetch of MetaTable sections without full page reload
 - [ ] Macro escape syntax — preprocessors skip inline backtick spans and honor `\<<MacroName>>` as a literal `<<MacroName>>` (currently any bare `<<Macro>>` in prose triggers the preprocessor)
 - [ ] `<<TaskStatus>>` rework edge — if a task has been returned from `review` back to `in_progress` at least once, show the back-edge in the Mermaid state diagram with the retry count as an edge label (e.g. `review -->|×2| in_progress`); read attempt count from `subtask["attempt"]` or a dedicated `rework_count` field in frontmatter

@@ -605,8 +605,14 @@ _BADGE_CLASS: dict[str, str] = {
 }
 
 
-def _mermaid_diagram(status: str) -> str:
-    """Return a Mermaid ``flowchart LR`` string for *status*."""
+def _mermaid_diagram(status: str, rework_count: int = 0) -> str:
+    """Return a Mermaid ``flowchart LR`` string for *status*.
+
+    Args:
+        status: Current task status.
+        rework_count: Number of times PM has requested rework; adds a labelled
+            back-edge from ``review`` to ``in_progress`` when > 0.
+    """
     # Build the happy-path chain definition once.
     chain = " --> ".join(f"{s}({s.replace('_', ' ')})" for s in _HAPPY_PATH)
     lines = ["flowchart LR", f"    {chain}"]
@@ -616,6 +622,11 @@ def _mermaid_diagram(status: str) -> str:
     if is_off_path:
         branch_from = _OFF_PATH_BRANCH[status]
         lines.append(f"    {branch_from} --> {status}({status.replace('_', ' ')})")
+
+    # Add rework back-edge when PM has requested changes at least once.
+    if rework_count > 0:
+        label = f"×{rework_count}"
+        lines.append(f'    review -->|"{label}"| in_progress')
 
     lines.append("")
 
@@ -691,6 +702,13 @@ def _render_task_status(page_name: str, page_metadata: dict) -> str:
     status: str = _get_meta_str(page_metadata, "status", "draft")
     badge_cls = _BADGE_CLASS.get(status, "gray")
 
+    rework_count = 0
+    raw_rework = page_metadata.get("rework_count", 0)
+    try:
+        rework_count = int(raw_rework)
+    except (ValueError, TypeError):
+        pass
+
     # ── Section A: status badge ───────────────────────────────────────────────
     badge_html = (
         f'<span class="task-status-badge task-status-badge--{badge_cls}">'
@@ -699,7 +717,7 @@ def _render_task_status(page_name: str, page_metadata: dict) -> str:
     )
 
     # ── Section B: Mermaid flowchart ──────────────────────────────────────────
-    mermaid_src = _mermaid_diagram(status)
+    mermaid_src = _mermaid_diagram(status, rework_count=rework_count)
     diagram_html = (
         '<div class="task-status-diagram">'
         f'<div class="mermaid">{html_escape(mermaid_src)}</div>'

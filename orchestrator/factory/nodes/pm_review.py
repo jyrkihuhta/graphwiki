@@ -138,8 +138,13 @@ async def pm_review_node(state: FactoryState) -> dict:
                 f"{feedback or 'See comments above.'}\n"
             )
 
+        fm_updates: dict | None = None
+        if decision != "approved":
+            fm_updates = {"rework_count": updated_subtask.get("attempt", 1)}
         try:
-            await meshwiki_client.append_to_page(subtask["wiki_page"], pm_section)
+            await meshwiki_client.append_to_page(
+                subtask["wiki_page"], pm_section, frontmatter_updates=fm_updates
+            )
         except Exception as exc:
             logger.warning("pm_review: failed to append review to wiki: %s", exc)
 
