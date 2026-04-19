@@ -225,10 +225,12 @@ async def get_page_tree() -> list[dict]:
     return build_page_tree_sync(pages)
 
 
-def _is_factory_page(page: Page) -> bool:
-    """Return True for factory-managed pages that should not appear in the sidebar."""
+def _is_hidden_page(page: Page) -> bool:
+    """Return True for pages that should not appear in the sidebar."""
     extra = page.metadata.model_extra or {}
-    return bool(extra.get("parent_task") or extra.get("assignee") == "factory")
+    if extra.get("parent_task") or extra.get("assignee") == "factory":
+        return True
+    return extra.get("sidebar") is False
 
 
 def build_page_tree_sync(pages: list[Page]) -> list[dict]:
@@ -249,7 +251,7 @@ def build_page_tree_sync(pages: list[Page]) -> list[dict]:
     # Collect declared children (preserving frontmatter order), skipping factory.
     children_of: dict[str, list[str]] = {}
     for page in pages:
-        if _is_factory_page(page):
+        if _is_hidden_page(page):
             continue
         declared = page.metadata.children
         if declared:
@@ -262,7 +264,7 @@ def build_page_tree_sync(pages: list[Page]) -> list[dict]:
     roots = [
         p
         for p in pages
-        if not _is_factory_page(p) and p.name not in all_declared_children
+        if not _is_hidden_page(p) and p.name not in all_declared_children
     ]
     roots.sort(key=lambda p: (p.name != "Home", p.name.lower()))
 
@@ -323,7 +325,7 @@ def build_page_tree_sync(pages: list[Page]) -> list[dict]:
         _mark_reachable(root.name, frozenset(), reachable)
 
     orphans = sorted(
-        [p for p in pages if not _is_factory_page(p) and p.name not in reachable],
+        [p for p in pages if not _is_hidden_page(p) and p.name not in reachable],
         key=lambda p: (p.name != "Home", p.name.lower()),
     )
     for orphan in orphans:

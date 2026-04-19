@@ -172,6 +172,26 @@ def test_parent_task_excluded():
     assert _names(tree) == ["Normal"]
 
 
+def test_sidebar_false_excluded():
+    pages = [_page("Normal"), _page("Scratch", sidebar=False)]
+    tree = build_page_tree_sync(pages)
+    assert _names(tree) == ["Normal"]
+
+
+def test_sidebar_true_not_excluded():
+    """sidebar: true (or any truthy value) should not suppress the page."""
+    pages = [_page("Normal"), _page("Explicit", sidebar=True)]
+    tree = build_page_tree_sync(pages)
+    assert any(n["name"] == "Explicit" for n in tree)
+
+
+def test_sidebar_false_string_not_excluded():
+    """sidebar: 'false' (string) is truthy — page should still appear."""
+    pages = [_page("Normal"), _page("StringFalse", sidebar="false")]
+    tree = build_page_tree_sync(pages)
+    assert any(n["name"] == "StringFalse" for n in tree)
+
+
 def test_factory_child_not_shown_even_if_declared():
     """A factory page is excluded even if listed as a child of a non-factory page."""
     pages = [
