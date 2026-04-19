@@ -124,7 +124,7 @@ class TestBacklinksRoute:
             assert response.status_code == 200
             body = response.text
             # About and Contact both link to HomePage
-            assert "Pages linking here" in body
+            assert "Backlinks" in body
             assert "About" in body
             assert "Contact" in body
 
@@ -154,7 +154,7 @@ class TestBacklinksRoute:
             ) as client:
                 response = await client.get("/page/HomePage")
                 assert response.status_code == 200
-                assert "Pages linking here" not in response.text
+                assert "Backlinks" not in response.text
 
 
 # ============================================================

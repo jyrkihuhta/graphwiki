@@ -927,7 +927,11 @@ async def api_graph():
     # Add parent→child edges from declared children: frontmatter
     page_ids = {p.name for p in pages}
     for page in pages:
-        for child_name in page.metadata.children:
+        meta = page.metadata
+        children = (
+            meta.children if hasattr(meta, "children") else meta.get("children", [])
+        )
+        for child_name in children:
             if child_name in page_ids:
                 links.append(
                     {"source": page.name, "target": child_name, "type": "parent"}
