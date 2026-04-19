@@ -641,9 +641,7 @@ async def test_escalate_retriable() -> None:
         failed_subtask_ids=[failed_sub["id"]],
     )
 
-    mock_client_instance = AsyncMock()
-    mock_client_instance.get_page = AsyncMock(return_value={"content": "# Task"})
-    mock_client_instance.create_page = AsyncMock(return_value={})
+    mock_client_instance = _mock_client_for_cm(AsyncMock())
     mock_client_cls = MagicMock(return_value=mock_client_instance)
 
     with patch("factory.nodes.escalate.MeshWikiClient", mock_client_cls):
@@ -654,6 +652,7 @@ async def test_escalate_retriable() -> None:
     assert len(result["subtasks"]) == 1
     assert result["subtasks"][0]["attempt"] == 1
     assert result["subtasks"][0]["status"] == "pending"
+    mock_client_instance.append_to_page.assert_awaited_once()
 
 
 @pytest.mark.asyncio
@@ -671,9 +670,7 @@ async def test_escalate_exhausted() -> None:
         failed_subtask_ids=[failed_sub["id"]],
     )
 
-    mock_client_instance = AsyncMock()
-    mock_client_instance.get_page = AsyncMock(return_value={"content": "# Task"})
-    mock_client_instance.create_page = AsyncMock(return_value={})
+    mock_client_instance = _mock_client_for_cm(AsyncMock())
     mock_client_cls = MagicMock(return_value=mock_client_instance)
 
     with patch("factory.nodes.escalate.MeshWikiClient", mock_client_cls):
@@ -684,6 +681,31 @@ async def test_escalate_exhausted() -> None:
     # Status should remain "failed" when not retriable
     assert result["subtasks"][0]["attempt"] == 2
     assert result["subtasks"][0]["status"] == "failed"
+
+
+@pytest.mark.asyncio
+async def test_escalate_uses_append_not_create() -> None:
+    """escalate_node calls append_to_page, never create_page, to avoid clobbering."""
+    failed_sub = _make_subtask(
+        wiki_page="Task_0042_Sub_01",
+        title="Sub 01",
+        status="failed",
+        attempt=0,
+        max_attempts=2,
+    )
+    state = _make_state(
+        subtasks=[failed_sub],
+        failed_subtask_ids=[failed_sub["id"]],
+    )
+
+    mock_client_instance = _mock_client_for_cm(AsyncMock())
+    mock_client_cls = MagicMock(return_value=mock_client_instance)
+
+    with patch("factory.nodes.escalate.MeshWikiClient", mock_client_cls):
+        await escalate_node(state)
+
+    mock_client_instance.append_to_page.assert_awaited_once()
+    mock_client_instance.create_page.assert_not_called()
 
 
 # ---------------------------------------------------------------------------

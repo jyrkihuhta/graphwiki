@@ -44,15 +44,10 @@ async def escalate_node(state: FactoryState) -> dict:
         retriable = [s for s in failed_subtasks if s["attempt"] < s["max_attempts"] - 1]
 
         try:
-            page = await client.get_page(state["task_wiki_page"])
-            if page:
-                content = page.get("content", "")
-                note = (
-                    f"\n\n## Escalation\n\nFailed subtasks: {', '.join(failed_ids)}\n"
-                )
-                if retriable:
-                    note += f"Retrying: {', '.join(s['id'] for s in retriable)}\n"
-                await client.create_page(state["task_wiki_page"], content + note)
+            note = f"## Escalation\n\nFailed subtasks: {', '.join(failed_ids)}\n"
+            if retriable:
+                note += f"Retrying: {', '.join(s['id'] for s in retriable)}\n"
+            await client.append_to_page(state["task_wiki_page"], note)
         except Exception as exc:
             logger.error("escalate: failed to update task page: %s", exc)
 
