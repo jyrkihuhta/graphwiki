@@ -30,15 +30,21 @@ def test_build_page_tree_flat():
 
 
 def test_build_page_tree_no_children_all_are_roots():
-    """Without children: declarations, all pages appear as independent roots."""
-    pages = _make_pages("Factory", "Factory/Macros", "Factory/Macros/Include")
+    """Without children: declarations, flat pages appear as independent roots.
+
+    Slash-named pages are hidden by _is_hidden_page (legacy subpage convention).
+    """
+    pages = _make_pages("Factory", "Notes", "Home")
     tree = build_page_tree_sync(pages)
     # All three are roots because none declares the others as children.
-    assert {n["name"] for n in tree} == {
-        "Factory",
-        "Factory/Macros",
-        "Factory/Macros/Include",
-    }
+    assert {n["name"] for n in tree} == {"Factory", "Notes", "Home"}
+
+
+def test_slash_named_pages_hidden_from_sidebar():
+    """Pages with '/' in their name are hidden; non-slash page is still a root."""
+    pages = _make_pages("Factory", "Factory/Macros", "Factory/Macros/Include")
+    tree = build_page_tree_sync(pages)
+    assert {n["name"] for n in tree} == {"Factory"}
 
 
 def test_build_page_tree_children_declaration_drives_nesting():
@@ -58,10 +64,10 @@ def test_build_page_tree_children_declaration_drives_nesting():
 
 
 def test_build_page_tree_page_without_children_declaration_is_root():
-    """A page not listed as any child is a root even if its name contains '/'."""
-    pages = _make_pages("Orphan/Child")
+    """A page not listed as any child is a root."""
+    pages = _make_pages("OrphanChild")
     tree = build_page_tree_sync(pages)
-    assert tree[0]["name"] == "Orphan/Child"
+    assert tree[0]["name"] == "OrphanChild"
 
 
 @pytest.fixture()

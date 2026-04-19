@@ -103,6 +103,7 @@ def test_build_subtask_defaults() -> None:
     assert subtask["review_feedback"] is None
     assert subtask["token_budget"] == 50000
     assert subtask["files_touched"] == ["src/meshwiki/main.py"]
+    assert subtask["acceptance_criteria"] == ["Returns 200", "Results are sorted"]
     # id is generated; just check it starts with the parent thread id
     assert subtask["id"].startswith("task-0042")
 

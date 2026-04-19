@@ -264,6 +264,8 @@ def build_page_tree_sync(pages: list[Page]) -> list[dict]:
             children_of[page.name] = [_ref(c) for c in declared]
 
     # Derive implicit children from parent_task: (append after explicitly declared ones).
+    # Compare normalised names to prevent duplicates when a page is both in children:
+    # (underscore form) and has parent_task: (space form) pointing at the same parent.
     for page in pages:
         if _is_hidden_page(page):
             continue
@@ -271,7 +273,7 @@ def build_page_tree_sync(pages: list[Page]) -> list[dict]:
         parent = extra.get("parent_task")
         if parent:
             bucket = children_of.setdefault(_ref(parent), [])
-            if page.name not in bucket:
+            if _ref(page.name) not in {_ref(c) for c in bucket}:
                 bucket.append(page.name)
 
     all_declared_children: set[str] = {
@@ -943,17 +945,23 @@ async def api_graph():
         for target in engine.get_outlinks(page.name):
             links.append({"source": page.name, "target": target})
 
-    # Add parent→child edges from declared children: frontmatter
+    # Add parent→child edges from declared children: frontmatter.
+    # Normalise underscore→space so children: [Foo_Bar] matches stored page 'Foo Bar'.
+    def _ref_graph(name: str) -> str:
+        return name.replace("_", " ")
+
     page_ids = {p.name for p in pages}
+    page_ids_norm = {_ref_graph(n): n for n in page_ids}  # normalised → canonical
     for page in pages:
         meta = page.metadata
         children = (
             meta.children if hasattr(meta, "children") else meta.get("children", [])
         )
         for child_name in children:
-            if child_name in page_ids:
+            canonical = page_ids_norm.get(_ref_graph(child_name))
+            if canonical:
                 links.append(
-                    {"source": page.name, "target": child_name, "type": "parent"}
+                    {"source": page.name, "target": canonical, "type": "parent"}
                 )
 
     return {"nodes": nodes, "links": links}

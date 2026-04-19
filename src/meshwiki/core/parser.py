@@ -1251,8 +1251,11 @@ class ChildrenPreprocessor(Preprocessor):
         else:
             parts = ['<ul class="children-list">']
             for child in children:
-                url = child.replace(" ", "_")
-                display = html_escape(child.replace("_", " "))
+                # Normalise: underscores and spaces are interchangeable in page names
+                # (mirrors the _ref() logic in build_page_tree_sync / storage._path_to_name).
+                normalised = child.replace("_", " ")
+                url = normalised.replace(" ", "_")
+                display = html_escape(normalised)
                 parts.append(
                     f'<li><a href="/page/{url}" class="wiki-link">{display}</a></li>'
                 )

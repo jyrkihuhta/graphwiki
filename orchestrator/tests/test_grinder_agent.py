@@ -68,6 +68,7 @@ def _make_subtask(**kwargs) -> SubTask:
         "max_attempts": 3,
         "error_log": [],
         "files_touched": ["src/meshwiki/main.py"],
+        "acceptance_criteria": [],
         "token_budget": 10000,
         "tokens_used": 0,
         "review_feedback": None,

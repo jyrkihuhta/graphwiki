@@ -429,6 +429,7 @@ def _build_subtask(tool_input: dict[str, Any], parent_thread_id: str) -> SubTask
         max_attempts=3,
         error_log=[],
         files_touched=tool_input.get("expected_files", []),
+        acceptance_criteria=tool_input.get("acceptance_criteria", []),
         token_budget=tool_input.get("token_budget", 50000),
         tokens_used=0,
         review_feedback=None,
@@ -487,8 +488,9 @@ async def decompose_with_pm(
         f"## Context Pages\n\n{context_block}\n\n"
         "Please decompose this task into concrete, independently implementable subtasks. "
         "Use the `meshwiki_create_subtask` tool for each subtask. "
-        f"Subtask page names must be prefixed with the parent wiki page path: "
-        f"`{task_wiki_page}/TASK001 - Title`, `{task_wiki_page}/TASK002 - Title`, etc. "
+        f"Subtask page names must use the format `{task_wiki_page}_TASK001_Short_title`, "
+        f"`{task_wiki_page}_TASK002_Short_title`, etc. "
+        "Use underscores throughout — do NOT use slashes in page names. "
         "Read additional wiki pages with `meshwiki_read_page` if you need more context."
     )
 

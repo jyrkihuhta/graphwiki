@@ -101,7 +101,41 @@ def run(dry_run: bool = False, reverse: bool = False) -> None:
         print("\nMigration complete.")
 
 
+def _build_reverse_replacement_map() -> dict[str, str]:
+    """Return flat-name → slash-path mapping for wiki-link reverse rewrite."""
+    return {new: old for old, new in MIGRATIONS.items()}
+
+
+def rewrite_links_reverse(content: str, reverse_map: dict[str, str]) -> str:
+    """Rewrite [[FlatName]] → [[Dir/FlatName]] for all known migrations."""
+    pat = re.compile(
+        r"\[\[(" + "|".join(re.escape(flat) for flat in reverse_map) + r")(\|[^\]]+)?\]\]"
+    )
+
+    def replace(m: re.Match) -> str:
+        flat = m.group(1)
+        display = m.group(2) or ""
+        original = reverse_map[flat]
+        return f"[[{original}{display}]]"
+
+    return pat.sub(replace, content)
+
+
 def _do_reverse(dry_run: bool) -> None:
+    reverse_map = _build_reverse_replacement_map()
+
+    # 1. Rewrite [[FlatName]] links back to [[Dir/OriginalName]] before moving files,
+    #    so that links resolve correctly under the restored subdirectory layout.
+    for md_file in PAGES_DIR.rglob("*.md"):
+        content = md_file.read_text(encoding="utf-8")
+        new_content = rewrite_links_reverse(content, reverse_map)
+        if new_content != content:
+            rel = md_file.relative_to(REPO_ROOT)
+            print(f"LINKS {rel}")
+            if not dry_run:
+                md_file.write_text(new_content, encoding="utf-8")
+
+    # 2. Move flat files back under their original subdirectories.
     for old_rel, new_name in MIGRATIONS.items():
         new_path = PAGES_DIR / f"{new_name}.md"
         old_path = PAGES_DIR / Path(old_rel + ".md")

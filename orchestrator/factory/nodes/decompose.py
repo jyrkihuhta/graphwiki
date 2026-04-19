@@ -21,20 +21,12 @@ def _build_subtask_page(subtask: SubTask, parent_task: str) -> str:
     Returns:
         Full page content as a Markdown string.
     """
-    criteria_lines = "\n".join(
-        f"- [ ] {criterion}" for criterion in (subtask.get("files_touched") or [])
-    )
-    # files_touched holds expected_files from the PM tool call
+    criteria_list = subtask.get("acceptance_criteria") or []
+    criteria_lines = "\n".join(f"- [ ] {c}" for c in criteria_list)
     files_lines = "\n".join(f"- `{f}`" for f in (subtask.get("files_touched") or []))
 
-    # We store acceptance_criteria in description for now — the PM agent
-    # stores it there via _build_subtask. Render it from description.
     description = subtask.get("description", "")
 
-    # Pull acceptance criteria out of subtask if available (stored via
-    # the tool input; _build_subtask merges them into description).
-    # We use the description field as-is and leave criteria blank unless
-    # the caller passes them explicitly.
     criteria_block = criteria_lines or "- [ ] See description"
     files_block = files_lines or "_(none specified)_"
 

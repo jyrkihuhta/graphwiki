@@ -56,6 +56,7 @@ class SubTask(TypedDict):
     max_attempts: int  # default 3
     error_log: list[str]
     files_touched: list[str]  # estimated, filled in by PM during decomposition
+    acceptance_criteria: list[str]  # criteria the grinder must satisfy
     token_budget: int  # max tokens for the grinder session
     tokens_used: int
     review_feedback: str | None  # PM feedback for rejected subtasks
