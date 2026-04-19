@@ -5,11 +5,12 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from fastapi.testclient import TestClient
 
-from factory.webhook_server import app
+from factory.webhook_server import _clear_stuck_grinders, app
 
 
 @pytest.fixture
@@ -130,3 +131,90 @@ def test_webhook_valid_hmac(client: TestClient, monkeypatch) -> None:
     assert resp.status_code == 200
 
     cfg.get_settings.cache_clear()
+
+
+# ---------------------------------------------------------------------------
+# _clear_stuck_grinders
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_clear_stuck_grinders_no_stuck_entries() -> None:
+    """When no active grinders have pending subtasks, aupdate_state is not called."""
+    graph = MagicMock()
+    graph.aget_state = AsyncMock(
+        return_value=MagicMock(
+            values={
+                "active_grinders": ["g1"],
+                "subtasks": [{"id": "g1", "status": "done"}],
+            }
+        )
+    )
+    graph.aupdate_state = AsyncMock()
+
+    await _clear_stuck_grinders(graph, {"configurable": {"thread_id": "T"}}, "T")
+
+    graph.aupdate_state.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_clear_stuck_grinders_removes_stuck() -> None:
+    """Grinders whose subtasks are still pending are removed from active_grinders."""
+    graph = MagicMock()
+    graph.aget_state = AsyncMock(
+        return_value=MagicMock(
+            values={
+                "active_grinders": ["g1", "g2", "g3"],
+                "subtasks": [
+                    {"id": "g1", "status": "done"},
+                    {"id": "g2", "status": "pending"},
+                    {"id": "g3", "status": "changes_requested"},
+                ],
+            }
+        )
+    )
+    graph.aupdate_state = AsyncMock()
+    config = {"configurable": {"thread_id": "T"}}
+
+    await _clear_stuck_grinders(graph, config, "T")
+
+    graph.aupdate_state.assert_awaited_once()
+    call_args = graph.aupdate_state.call_args[0]
+    remaining = call_args[1]["active_grinders"]
+    assert remaining == ["g1"]
+
+
+@pytest.mark.asyncio
+async def test_clear_stuck_grinders_no_snapshot() -> None:
+    """When aget_state returns None, the function returns without error."""
+    graph = MagicMock()
+    graph.aget_state = AsyncMock(return_value=None)
+    graph.aupdate_state = AsyncMock()
+
+    await _clear_stuck_grinders(graph, {"configurable": {"thread_id": "T"}}, "T")
+
+    graph.aupdate_state.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_clear_stuck_grinders_aget_state_raises() -> None:
+    """Exceptions from aget_state are caught and logged; no re-raise."""
+    graph = MagicMock()
+    graph.aget_state = AsyncMock(side_effect=RuntimeError("db error"))
+    graph.aupdate_state = AsyncMock()
+
+    await _clear_stuck_grinders(graph, {"configurable": {"thread_id": "T"}}, "T")
+
+    graph.aupdate_state.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_clear_stuck_grinders_empty_state() -> None:
+    """When active_grinders and subtasks are absent, no update is called."""
+    graph = MagicMock()
+    graph.aget_state = AsyncMock(return_value=MagicMock(values={}))
+    graph.aupdate_state = AsyncMock()
+
+    await _clear_stuck_grinders(graph, {"configurable": {"thread_id": "T"}}, "T")
+
+    graph.aupdate_state.assert_not_called()

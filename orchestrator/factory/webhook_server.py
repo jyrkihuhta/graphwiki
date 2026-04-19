@@ -20,6 +20,45 @@ from .state import FactoryState
 logger = logging.getLogger(__name__)
 
 
+async def _clear_stuck_grinders(graph, config: dict, page_name: str) -> None:
+    """Clear active_grinders entries whose subtasks never completed before a crash.
+
+    When the orchestrator dies mid-fan-out, grinder IDs remain in
+    ``active_grinders`` even though their subtasks are still ``pending``.
+    ``route_grinders`` skips those IDs, so the graph would stall forever.
+    This function removes the stale entries so the next ``ainvoke`` re-dispatches
+    the affected subtasks.
+    """
+    try:
+        snapshot = await graph.aget_state(config)
+        if snapshot is None:
+            return
+        active: list[str] = list(snapshot.values.get("active_grinders") or [])
+        subtasks: list[dict] = list(snapshot.values.get("subtasks") or [])
+        stuck = {
+            s["id"]
+            for s in subtasks
+            if s["id"] in active
+            and s.get("status") in ("pending", "changes_requested")
+        }
+        if not stuck:
+            return
+        logger.info(
+            "factory: clearing %d stuck grinder(s) for %s: %s",
+            len(stuck),
+            page_name,
+            stuck,
+        )
+        await graph.aupdate_state(
+            config,
+            {"active_grinders": [gid for gid in active if gid not in stuck]},
+        )
+    except Exception as exc:
+        logger.warning(
+            "factory: could not clear stuck grinders for %s: %s", page_name, exc
+        )
+
+
 async def _resume_interrupted_tasks(graph, saver, settings) -> None:
     """On startup, resume any tasks that were active when the orchestrator died.
 
@@ -27,8 +66,10 @@ async def _resume_interrupted_tasks(graph, saver, settings) -> None:
     1. Ask MeshWiki for all tasks with status=in_progress or status=review
        that are assigned to factory (both statuses represent active graph runs).
     2. For each, check if the SQLite checkpointer has a saved state.
-    3. If yes, call ainvoke(None) with the same thread_id — LangGraph resumes
-       from the last node boundary rather than restarting from scratch.
+    3. Clear any stale active_grinders entries left over from a mid-fan-out crash
+       so route_grinders can re-dispatch those subtasks.
+    4. Call ainvoke(None) with the same thread_id — LangGraph resumes from the
+       last node boundary rather than restarting from scratch.
     """
     async with MeshWikiClient(
         settings.meshwiki_url, settings.meshwiki_api_key
@@ -68,6 +109,8 @@ async def _resume_interrupted_tasks(graph, saver, settings) -> None:
                     "factory: no checkpoint for %s — skipping resume", page_name
                 )
                 continue
+
+            await _clear_stuck_grinders(graph, config, page_name)
 
             logger.info(
                 "factory: resuming interrupted task %s from checkpoint", page_name
