@@ -96,7 +96,6 @@ class FactoryState(TypedDict):
     graph_status: Literal[
         "intake",
         "decomposing",
-        "awaiting_approval",
         "dispatching",
         "grinding",
         "reviewing",

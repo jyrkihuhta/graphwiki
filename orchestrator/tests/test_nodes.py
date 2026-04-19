@@ -110,7 +110,7 @@ async def test_task_intake_node() -> None:
 
 @pytest.mark.asyncio
 async def test_task_intake_node_page_not_found() -> None:
-    """task_intake_node falls back gracefully when the page is not found."""
+    """task_intake_node sets graph_status='failed' when the page is not found."""
     state = _make_state()
 
     mock_client = _mock_client_for_cm(AsyncMock())
@@ -119,9 +119,7 @@ async def test_task_intake_node_page_not_found() -> None:
     with patch("factory.nodes.task_intake.MeshWikiClient", return_value=mock_client):
         result = await task_intake_node(state)
 
-    assert result["graph_status"] == "decomposing"
-    assert result["title"] == "Task_0042_test"  # falls back to page name
-    assert result["requirements"] == ""
+    assert result["graph_status"] == "failed"
 
 
 # ---------------------------------------------------------------------------
