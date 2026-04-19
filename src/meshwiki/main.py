@@ -230,7 +230,10 @@ def _is_hidden_page(page: Page) -> bool:
     if "/" in page.name:
         return True
     extra = page.metadata.model_extra or {}
-    if extra.get("parent_task") or extra.get("assignee") == "factory":
+    if extra.get("parent_task"):
+        return True
+    # Hide factory-assigned tasks but keep epics visible (they're navigation targets)
+    if extra.get("assignee") == "factory" and extra.get("type") != "epic":
         return True
     return extra.get("sidebar") is False
 

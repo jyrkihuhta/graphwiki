@@ -161,9 +161,16 @@ def test_stub_title_derived_from_name():
 
 
 def test_factory_assignee_excluded():
-    pages = [_page("Normal"), _page("FactoryTask", assignee="factory")]
+    pages = [_page("Normal"), _page("FactoryTask", assignee="factory", type="task")]
     tree = build_page_tree_sync(pages)
     assert _names(tree) == ["Normal"]
+
+
+def test_factory_epic_not_excluded():
+    """Epics with assignee: factory are visible — they're navigation targets."""
+    pages = [_page("Normal"), _page("Epic_001_foo", assignee="factory", type="epic")]
+    tree = build_page_tree_sync(pages)
+    assert any(n["name"] == "Epic_001_foo" for n in tree)
 
 
 def test_parent_task_excluded():
