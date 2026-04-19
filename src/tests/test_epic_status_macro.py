@@ -236,18 +236,17 @@ async def test_child_tasks_uses_parent_task_field(tmp_path):
             base_url="http://test",
             follow_redirects=False,
         ) as client:
-            # Epic lives at top level
+            # Epic and task use flat names (post-MoC; slashes are invalid)
             await meshwiki.main.storage.save_page(
-                "Epics/Sprint1",
+                "Sprint1",
                 "---\ntype: epic\ntitle: Sprint 1\n---\n<<EpicStatus>>",
             )
-            # Task lives elsewhere but links via parent_task
             await meshwiki.main.storage.save_page(
-                "Tasks/FixBug",
-                "---\ntype: task\nstatus: done\nparent_task: Epics/Sprint1\n---\nBody",
+                "FixBug",
+                "---\ntype: task\nstatus: done\nparent_task: Sprint1\n---\nBody",
             )
 
-            resp = await client.get("/page/Epics/Sprint1")
+            resp = await client.get("/page/Sprint1")
             assert resp.status_code == 200
             assert "1 / 1 tasks complete" in resp.text
     finally:

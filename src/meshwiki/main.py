@@ -249,8 +249,10 @@ def build_page_tree_sync(pages: list[Page]) -> list[dict]:
     """
     page_map: dict[str, Page] = {p.name: p for p in pages}
 
-    # Underscores and spaces are interchangeable in page name references
-    # (storage converts _path_to_name with replace("_", " ")).
+    # storage._path_to_name (storage.py) converts underscores to spaces when
+    # loading pages from disk, so stored page names always use spaces.  Frontmatter
+    # authors often write children: [Foo_Bar] with underscores.  _ref() normalises
+    # both forms to spaces so all comparisons are consistent.
     def _ref(name: str) -> str:
         return name.replace("_", " ")
 
@@ -372,14 +374,9 @@ def _validate_page_name(name: str) -> None:
     # Block null bytes and backslashes (Windows path separator)
     if "\x00" in name or "\\" in name:
         raise HTTPException(status_code=400, detail="Invalid page name")
-    # Block absolute paths and trailing slashes
-    if name.startswith("/") or name.endswith("/"):
-        raise HTTPException(status_code=400, detail="Invalid page name")
-    # Block consecutive slashes
-    if "//" in name:
-        raise HTTPException(status_code=400, detail="Invalid page name")
-    # Block empty segments and directory traversal
-    if any(seg in (".", "..") or seg == "" for seg in name.split("/")):
+    # Block slashes entirely — the MoC system uses flat page names; slash pages
+    # are hidden from the sidebar with no warning, so creation should be rejected.
+    if "/" in name:
         raise HTTPException(status_code=400, detail="Invalid page name")
 
 
@@ -585,11 +582,21 @@ async def page_diff(request: Request, name: str, rev_range: str):
 @app.get("/page/{name:path}", response_class=HTMLResponse)
 async def view_page(request: Request, name: str):
     """View a wiki page."""
-    # 301 redirect for legacy slash-path URLs (e.g. /page/Docs/Getting_Started → /page/Getting_Started)
+    # 301 redirect for legacy slash-path URLs (e.g. /page/Docs/Getting_Started → /page/Getting_Started).
+    # Only handles one-level-deep legacy paths; deeper nesting is left to fall through.
     if "/" in name:
-        slug = name.rsplit("/", 1)[1]
-        if slug and storage._get_path(slug).exists():
-            return RedirectResponse(url=f"/page/{slug}", status_code=301)
+        parts = name.split("/")
+        if len(parts) == 2:
+            slug = parts[1]
+            if slug:
+                try:
+                    _validate_page_name(slug)
+                except HTTPException:
+                    slug = ""
+                if slug and storage._get_path(slug).exists():
+                    qs = request.url.query
+                    target = f"/page/{slug}" + (f"?{qs}" if qs else "")
+                    return RedirectResponse(url=target, status_code=301)
     _validate_page_name(name)
     page = await storage.get_page(name)
 

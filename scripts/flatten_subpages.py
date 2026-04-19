@@ -19,7 +19,10 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).parent.parent
 PAGES_DIR = REPO_ROOT / "src" / "data" / "pages"
 
-# Mapping: old slash path → new flat name (without .md extension)
+# Mapping: old slash path → new flat name (without .md extension).
+# This is a one-shot migration script for the specific Docs/ and Notes/ pages
+# that existed at the time of the MoC navigation overhaul.  It is not a general
+# tool for future page moves; add an entry here only if running a second migration.
 MIGRATIONS: dict[str, str] = {
     "Docs/Architecture_Overview": "Architecture_Overview",
     "Docs/Getting_Started": "Getting_Started",

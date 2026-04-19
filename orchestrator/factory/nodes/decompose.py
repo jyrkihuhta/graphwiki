@@ -100,10 +100,14 @@ async def decompose_node(state: FactoryState) -> dict:
 
         # Guard: reject any subtask whose parent_task field doesn't point directly
         # to this epic — the PM must not create nested subtasks (two-level chains).
+        # Normalise underscores↔spaces (storage uses spaces; PM may emit underscores).
+        def _norm(s: str) -> str:
+            return s.replace("_", " ").strip()
+
         valid_subtasks = []
         for subtask in subtasks:
             subtask_parent = subtask.get("parent_task", "")
-            if subtask_parent != parent_task:
+            if _norm(subtask_parent) != _norm(parent_task):
                 logger.error(
                     "decompose: rejecting subtask %s — parent_task '%s' does not "
                     "match epic '%s'; nested subtasks are not allowed",

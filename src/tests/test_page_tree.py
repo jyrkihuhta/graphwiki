@@ -133,6 +133,49 @@ def test_longer_cycle_no_infinite_recursion():
     assert isinstance(tree, list)
 
 
+def test_tail_cycle_root_still_present():
+    """A→B→C→B: A is a real root; B and C form a tail cycle off A.
+
+    A must appear as a root; B and C must each appear exactly once in the tree
+    (not duplicated by orphan recovery since they are reachable from A).
+    """
+    pages = [
+        _page("A", children=["B"]),
+        _page("B", children=["C"]),
+        _page("C", children=["B"]),
+    ]
+    tree = build_page_tree_sync(pages)
+    root_names = [n["name"] for n in tree]
+    assert "A" in root_names
+    # B and C are reachable from A; orphan recovery must not surface them as extra roots
+    assert root_names.count("B") == 0
+    assert root_names.count("C") == 0
+    # Both B and C appear exactly once as descendants of A
+    all_names: list[str] = []
+
+    def _collect(nodes: list[dict]) -> None:
+        for n in nodes:
+            all_names.append(n["name"])
+            _collect(n["children"])
+
+    _collect(tree)
+    assert all_names.count("B") == 1
+    assert all_names.count("C") == 1
+
+
+def test_self_loop_page_still_appears_as_root():
+    """A page listing itself in children: should still appear in the sidebar.
+
+    It is in all_declared_children (suppressing root detection), so without
+    special handling it vanishes. The orphan-recovery pass must surface it.
+    """
+    pages = [_page("Self", children=["Self"]), _page("Other")]
+    tree = build_page_tree_sync(pages)
+    all_names = {n["name"] for n in tree}
+    assert "Self" in all_names
+    assert "Other" in all_names
+
+
 # ---------------------------------------------------------------------------
 # Missing children (stubs)
 # ---------------------------------------------------------------------------
