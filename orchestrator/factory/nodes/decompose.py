@@ -113,7 +113,7 @@ async def decompose_node(state: FactoryState) -> dict:
             page = subtask["wiki_page"]
             expected_prefix = parent_task + "/"
             relative = (
-                page[len(expected_prefix):]
+                page[len(expected_prefix) :]
                 if page.startswith(expected_prefix)
                 else page
             )
@@ -135,17 +135,32 @@ async def decompose_node(state: FactoryState) -> dict:
             )
         subtasks = valid_subtasks
 
+        dispatched: list[SubTask] = []
         for subtask in subtasks:
             page_content = _build_subtask_page(subtask, parent_task)
             try:
                 await meshwiki_client.create_page(subtask["wiki_page"], page_content)
                 logger.info("decompose: created wiki page %s", subtask["wiki_page"])
+                dispatched.append(subtask)
             except Exception as exc:
                 logger.error(
-                    "decompose: failed to create wiki page %s: %s",
+                    "decompose: failed to create wiki page %s — skipping dispatch: %s",
                     subtask["wiki_page"],
                     exc,
                 )
+
+        if subtasks and not dispatched:
+            raise RuntimeError(
+                f"decompose: all {len(subtasks)} subtask page(s) failed to create "
+                f"for parent task {parent_task!r} — aborting dispatch"
+            )
+
+        if len(dispatched) < len(subtasks):
+            logger.warning(
+                "decompose: only %d/%d subtask pages created; dispatching partial set",
+                len(dispatched),
+                len(subtasks),
+            )
 
         try:
             await meshwiki_client.transition_task(parent_task, "decomposed")
@@ -158,7 +173,7 @@ async def decompose_node(state: FactoryState) -> dict:
             )
 
     return {
-        "subtasks": subtasks,
+        "subtasks": dispatched,
         "graph_status": "dispatching",
         "incremental_costs_usd": [incremental_cost],
     }

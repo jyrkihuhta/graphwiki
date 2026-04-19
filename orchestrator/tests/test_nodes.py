@@ -200,6 +200,73 @@ async def test_decompose_node_no_subtasks() -> None:
     )
 
 
+@pytest.mark.asyncio
+async def test_decompose_node_create_page_failure_skips_subtask() -> None:
+    """A subtask whose wiki page fails to create is excluded from dispatch."""
+    state = _make_state(
+        title="Test Task",
+        requirements="Build something.",
+        graph_status="decomposing",
+    )
+    good = _make_subtask(wiki_page="Task_0042_Sub_01_good", title="Good subtask")
+    bad = _make_subtask(wiki_page="Task_0042_Sub_02_bad", title="Bad subtask")
+
+    mock_meshwiki = _mock_client_for_cm(AsyncMock())
+    mock_meshwiki.transition_task = AsyncMock(return_value={})
+
+    async def _create_page(name, content):
+        if "bad" in name:
+            raise RuntimeError("storage error")
+        return {}
+
+    mock_meshwiki.create_page = _create_page
+
+    with (
+        patch("factory.nodes.decompose.MeshWikiClient", return_value=mock_meshwiki),
+        patch(
+            "factory.nodes.decompose.decompose_with_pm",
+            new=AsyncMock(
+                return_value={
+                    "subtasks": [good, bad],
+                    "incremental_cost_usd": 0.0,
+                }
+            ),
+        ),
+    ):
+        result = await decompose_node(state)
+
+    dispatched_names = [s["wiki_page"] for s in result["subtasks"]]
+    assert "Task_0042_Sub_01_good" in dispatched_names
+    assert "Task_0042_Sub_02_bad" not in dispatched_names
+
+
+@pytest.mark.asyncio
+async def test_decompose_node_all_create_page_failures_raise() -> None:
+    """If every subtask page fails to create, decompose_node raises RuntimeError."""
+    state = _make_state(
+        title="Test Task",
+        requirements="Build something.",
+        graph_status="decomposing",
+    )
+    subtask = _make_subtask(wiki_page="Task_0042_Sub_01_fail", title="Failing subtask")
+
+    mock_meshwiki = _mock_client_for_cm(AsyncMock())
+    mock_meshwiki.create_page = AsyncMock(side_effect=RuntimeError("network error"))
+    mock_meshwiki.transition_task = AsyncMock(return_value={})
+
+    with (
+        patch("factory.nodes.decompose.MeshWikiClient", return_value=mock_meshwiki),
+        patch(
+            "factory.nodes.decompose.decompose_with_pm",
+            new=AsyncMock(
+                return_value={"subtasks": [subtask], "incremental_cost_usd": 0.0}
+            ),
+        ),
+        pytest.raises(RuntimeError, match="aborting dispatch"),
+    ):
+        await decompose_node(state)
+
+
 # ---------------------------------------------------------------------------
 # pm_review_node
 # ---------------------------------------------------------------------------
