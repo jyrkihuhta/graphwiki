@@ -35,6 +35,7 @@ class SubTask(TypedDict):
 
     id: str  # unique within parent task, e.g. "task-0042-sub-01"
     wiki_page: str  # MeshWiki page name
+    parent_task: str  # wiki page name of the parent epic
     title: str
     description: str
     status: Literal[

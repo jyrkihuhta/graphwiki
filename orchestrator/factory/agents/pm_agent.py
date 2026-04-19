@@ -34,9 +34,9 @@ All code must follow PEP 8, have type hints, use async/await for storage, and in
 
 When decomposing:
 - Subtasks must be FLAT — never create subtasks of subtasks. Every subtask's
-  `wiki_page` must be a direct child of the parent task page, e.g.
-  "Factory/MyEpic/TASK001 - Do the thing". Never use a path like
-  "Factory/MyEpic/TASK001/TASK001a - Sub-thing". There is no nesting.
+  `wiki_page` must use the format "{parent_page_name}_TASK{N:03d}_{Short_title}"
+  (underscores, no slashes), e.g. "Epic_0001_graph_view_TASK001_Add_search".
+  Never nest further: set `parent_task` to the parent epic page, not another subtask.
 - Prefer SMALL, ATOMIC subtasks. One subtask = one focused file change. Smaller
   scope means fewer things the grinder can get wrong.
 - The task requirements specify how many subtasks to create — follow that exactly.
@@ -111,7 +111,7 @@ PM_TOOLS: list[dict[str, Any]] = [
             "properties": {
                 "page_name": {
                     "type": "string",
-                    "description": "The MeshWiki page name for this subtask. Use the format '{parent_page_name}/TASK{N:03d} - {Short descriptive title}' where parent_page_name is the wiki page being decomposed and N starts at 001 for each epic (e.g. if decomposing 'Factory/GraphViewEnhancements', create 'Factory/GraphViewEnhancements/TASK001 - Add search feature'). Scan existing subpages of the parent to find the highest N and increment by 1.",
+                    "description": "The MeshWiki page name for this subtask. Use the format '{parent_page_name}_TASK{N:03d}_{Short_descriptive_title}' (underscores, no slashes) where parent_page_name is the wiki page being decomposed and N starts at 001 for each epic (e.g. if decomposing 'Epic_0001_graph_view', create 'Epic_0001_graph_view_TASK001_Add_search_feature'). Scan existing pages with the parent prefix to find the highest N and increment by 1.",
                 },
                 "title": {
                     "type": "string",
@@ -417,6 +417,7 @@ def _build_subtask(tool_input: dict[str, Any], parent_thread_id: str) -> SubTask
     return SubTask(
         id=subtask_id,
         wiki_page=tool_input["page_name"],
+        parent_task=tool_input.get("parent_task", ""),
         title=tool_input["title"],
         description=tool_input["description"],
         status="pending",

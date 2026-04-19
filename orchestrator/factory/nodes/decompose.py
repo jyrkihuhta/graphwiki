@@ -106,22 +106,17 @@ async def decompose_node(state: FactoryState) -> dict:
 
         parent_task = state.get("task_wiki_page", "")
 
-        # Guard: reject any subtask whose wiki_page is more than one level below
-        # the parent task — the PM must not create nested subtasks.
+        # Guard: reject any subtask whose parent_task field doesn't point directly
+        # to this epic — the PM must not create nested subtasks (two-level chains).
         valid_subtasks = []
         for subtask in subtasks:
-            page = subtask["wiki_page"]
-            expected_prefix = parent_task + "/"
-            relative = (
-                page[len(expected_prefix) :]
-                if page.startswith(expected_prefix)
-                else page
-            )
-            if "/" in relative:
+            subtask_parent = subtask.get("parent_task", "")
+            if subtask_parent != parent_task:
                 logger.error(
-                    "decompose: rejecting nested subtask %s (parent=%s) — "
-                    "subtask wiki_page must be a direct child of the parent task",
-                    page,
+                    "decompose: rejecting subtask %s — parent_task '%s' does not "
+                    "match epic '%s'; nested subtasks are not allowed",
+                    subtask["wiki_page"],
+                    subtask_parent,
                     parent_task,
                 )
                 continue

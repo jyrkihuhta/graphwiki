@@ -265,6 +265,46 @@ async def test_decompose_node_all_create_page_failures_raise() -> None:
         await decompose_node(state)
 
 
+@pytest.mark.asyncio
+async def test_decompose_node_rejects_subtask_with_wrong_parent_task() -> None:
+    """Subtasks whose parent_task doesn't match the epic are dropped (no slash needed)."""
+    state = _make_state(
+        title="Test Task",
+        requirements="Build something.",
+        graph_status="decomposing",
+    )
+    # good has parent_task matching the epic; bad has a different parent_task
+    good = _make_subtask(
+        wiki_page="Epic_0042_test_TASK001_good",
+        title="Good subtask",
+        parent_task="Task_0042_test",
+    )
+    bad = _make_subtask(
+        wiki_page="Epic_0042_test_TASK001_good_TASK001_nested",
+        title="Nested subtask",
+        parent_task="Epic_0042_test_TASK001_good",  # points to a subtask, not the epic
+    )
+
+    mock_meshwiki = _mock_client_for_cm(AsyncMock())
+    mock_meshwiki.create_page = AsyncMock(return_value={})
+    mock_meshwiki.transition_task = AsyncMock(return_value={})
+
+    with (
+        patch("factory.nodes.decompose.MeshWikiClient", return_value=mock_meshwiki),
+        patch(
+            "factory.nodes.decompose.decompose_with_pm",
+            new=AsyncMock(
+                return_value={"subtasks": [good, bad], "incremental_cost_usd": 0.0}
+            ),
+        ),
+    ):
+        result = await decompose_node(state)
+
+    dispatched_names = [s["wiki_page"] for s in result["subtasks"]]
+    assert "Epic_0042_test_TASK001_good" in dispatched_names
+    assert "Epic_0042_test_TASK001_good_TASK001_nested" not in dispatched_names
+
+
 # ---------------------------------------------------------------------------
 # pm_review_node
 # ---------------------------------------------------------------------------
