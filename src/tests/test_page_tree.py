@@ -160,23 +160,35 @@ def test_stub_title_derived_from_name():
 # ---------------------------------------------------------------------------
 
 
-def test_factory_assignee_excluded():
+def test_factory_assignee_visible():
+    """Factory-assigned pages (tasks, epics) appear in the sidebar."""
     pages = [_page("Normal"), _page("FactoryTask", assignee="factory", type="task")]
     tree = build_page_tree_sync(pages)
-    assert _names(tree) == ["Normal"]
+    assert any(n["name"] == "FactoryTask" for n in tree)
 
 
-def test_factory_epic_not_excluded():
-    """Epics with assignee: factory are visible — they're navigation targets."""
-    pages = [_page("Normal"), _page("Epic_001_foo", assignee="factory", type="epic")]
+def test_subtask_appears_under_epic():
+    """A page with parent_task: Epic becomes a child of Epic in the sidebar."""
+    pages = [
+        _page("Epic"),
+        _page("Subtask", parent_task="Epic"),
+    ]
     tree = build_page_tree_sync(pages)
-    assert any(n["name"] == "Epic_001_foo" for n in tree)
+    epic_node = _find(tree, "Epic")
+    assert epic_node is not None
+    assert "Subtask" in _names(epic_node["children"])
 
 
-def test_parent_task_excluded():
-    pages = [_page("Normal"), _page("Subtask", parent_task="Epic_001")]
+def test_subtask_not_a_root():
+    """A page with parent_task: should not appear as a top-level root."""
+    pages = [
+        _page("Normal"),
+        _page("Epic"),
+        _page("Subtask", parent_task="Epic"),
+    ]
     tree = build_page_tree_sync(pages)
-    assert _names(tree) == ["Normal"]
+    root_names = _names(tree)
+    assert "Subtask" not in root_names
 
 
 def test_sidebar_false_excluded():
@@ -218,10 +230,9 @@ def test_factory_child_not_shown_even_if_declared():
     assert root["name"] == "Root"
 
 
-def test_factory_page_not_a_root():
-    """Factory pages never appear as sidebar roots."""
+def test_empty_parent_task_is_not_a_child():
+    """parent_task: '' (empty string) is falsy — page still appears as a root."""
     pages = [_page("Epic_001_foo", parent_task=""), _page("Home")]
-    # parent_task="" is falsy — should NOT be filtered
     tree = build_page_tree_sync(pages)
     assert any(n["name"] == "Epic_001_foo" for n in tree)
 

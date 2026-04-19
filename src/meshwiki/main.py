@@ -230,30 +230,26 @@ def _is_hidden_page(page: Page) -> bool:
     if "/" in page.name:
         return True
     extra = page.metadata.model_extra or {}
-    if extra.get("parent_task"):
-        return True
-    # Hide factory-assigned tasks but keep epics visible (they're navigation targets)
-    if extra.get("assignee") == "factory" and extra.get("type") != "epic":
-        return True
     return extra.get("sidebar") is False
 
 
 def build_page_tree_sync(pages: list[Page]) -> list[dict]:
-    """Build a declarative hierarchy from each page's ``children:`` frontmatter.
+    """Build a declarative hierarchy from ``children:`` frontmatter and ``parent_task:`` fields.
 
     Each node: {"name": str, "title": str, "children": list[dict], "level": int,
     "status": str, "stub": bool}
 
+    - Pages with ``children:`` declare explicit child order.
+    - Pages with ``parent_task:`` are implicitly appended as children of that parent.
     - Pages never declared as anyone's child are roots.
     - A page can appear under multiple parents (DAG).
     - Cycles are detected per-path; back-edges are dropped with a warning.
-    - Factory pages (``parent_task:`` or ``assignee: factory``) are excluded.
     - Missing children render as stub nodes (no page exists yet).
     - ``Home`` is pinned as the first root.
     """
     page_map: dict[str, Page] = {p.name: p for p in pages}
 
-    # Collect declared children (preserving frontmatter order), skipping factory.
+    # Build children_of from both explicit children: lists and parent_task: fields.
     children_of: dict[str, list[str]] = {}
     for page in pages:
         if _is_hidden_page(page):
@@ -261,6 +257,17 @@ def build_page_tree_sync(pages: list[Page]) -> list[dict]:
         declared = page.metadata.children
         if declared:
             children_of[page.name] = list(declared)
+
+    # Derive implicit children from parent_task: (append after explicitly declared ones).
+    for page in pages:
+        if _is_hidden_page(page):
+            continue
+        extra = page.metadata.model_extra or {}
+        parent = extra.get("parent_task")
+        if parent:
+            bucket = children_of.setdefault(parent, [])
+            if page.name not in bucket:
+                bucket.append(page.name)
 
     all_declared_children: set[str] = {
         child for kids in children_of.values() for child in kids
