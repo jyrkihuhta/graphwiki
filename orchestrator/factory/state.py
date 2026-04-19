@@ -97,6 +97,7 @@ class FactoryState(TypedDict):
         "intake",
         "decomposing",
         "awaiting_approval",
+        "dispatching",
         "grinding",
         "reviewing",
         "completed",
