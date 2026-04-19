@@ -219,6 +219,13 @@ def test_factory_page_not_a_root():
     assert any(n["name"] == "Epic_001_foo" for n in tree)
 
 
+def test_slash_name_page_excluded():
+    """Pages with '/' in their name (old-style subpages) are hidden from the sidebar."""
+    pages = [_page("Normal"), _page("Factory/Standalone")]
+    tree = build_page_tree_sync(pages)
+    assert _names(tree) == ["Normal"]
+
+
 # ---------------------------------------------------------------------------
 # Status propagation
 # ---------------------------------------------------------------------------

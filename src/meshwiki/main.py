@@ -227,6 +227,8 @@ async def get_page_tree() -> list[dict]:
 
 def _is_hidden_page(page: Page) -> bool:
     """Return True for pages that should not appear in the sidebar."""
+    if "/" in page.name:
+        return True
     extra = page.metadata.model_extra or {}
     if extra.get("parent_task") or extra.get("assignee") == "factory":
         return True
