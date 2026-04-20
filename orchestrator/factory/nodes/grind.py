@@ -21,9 +21,8 @@ async def grind_node(state: FactoryState) -> dict:
     ``active_grinders`` is updated by appending the current subtask ID.  The
     ``_merge_active_grinders`` reducer unions these single-element additions
     across parallel branches so no concurrent write clobbers another branch's
-    update.  The full reset of ``active_grinders`` happens in
-    ``collect_results_node``, which runs serially after all parallel branches
-    join (and can therefore safely return an empty list to clear the field).
+    update.  ``_current_subtask_id`` is intentionally NOT returned here —
+    the routing function reads it from the branch-local state set by ``Send()``.
 
     Args:
         state: Current FactoryState, must contain ``_current_subtask_id``.
@@ -70,7 +69,6 @@ async def grind_node(state: FactoryState) -> dict:
             return {
                 "subtasks": [updated],
                 "active_grinders": [subtask_id],
-                "_current_subtask_id": subtask_id,
             }
 
         result = await grind_subtask(state, subtask, meshwiki_client)
@@ -106,6 +104,4 @@ async def grind_node(state: FactoryState) -> dict:
         "subtasks": [updated],
         "incremental_costs_usd": [incremental_cost],
         "active_grinders": [subtask_id],
-        # Echo subtask ID so route_after_grinding can identify which branch completed.
-        "_current_subtask_id": subtask_id,
     }

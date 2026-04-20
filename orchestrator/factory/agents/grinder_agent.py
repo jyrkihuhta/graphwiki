@@ -785,7 +785,11 @@ async def grind_subtask_e2b(
         )
 
         pty_handle = await asyncio.wait_for(
-            sbx.pty.create(size=PtySize(cols=160, rows=50), on_data=_on_pty_data),
+            sbx.pty.create(
+                size=PtySize(cols=160, rows=50),
+                on_data=_on_pty_data,
+                timeout=2400,  # 40 min; matches asyncio.wait_for below; 0 = unlimited
+            ),
             timeout=30,
         )
         pid = pty_handle.pid

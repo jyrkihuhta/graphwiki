@@ -73,8 +73,6 @@ async def pm_review_node(state: FactoryState) -> dict:
             return {
                 "subtasks": [updated_subtask],
                 "incremental_costs_usd": [0.0],
-                # Echo subtask ID so route_after_pm_review can identify the branch.
-                "_current_subtask_id": subtask_id,
             }
 
         decision: str = result.get("decision", "changes_requested")
@@ -194,6 +192,4 @@ async def pm_review_node(state: FactoryState) -> dict:
     return {
         "subtasks": [updated_subtask],
         "incremental_costs_usd": [incremental_cost],
-        # Echo subtask ID so route_after_pm_review can identify the branch.
-        "_current_subtask_id": subtask_id,
     }
