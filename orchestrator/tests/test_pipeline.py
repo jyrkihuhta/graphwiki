@@ -65,9 +65,11 @@ def _make_initial_state(subtask: SubTask) -> FactoryState:
         human_approval_response=None,
         human_feedback=None,
         cost_usd=0.0,
+        incremental_costs_usd=[],
         graph_status="intake",
         error=None,
         escalation_decision=None,
+        _current_subtask_id=None,
     )
 
 
@@ -187,9 +189,12 @@ async def test_pipeline_happy_path_reaches_done() -> None:
         # First invoke: runs until human_review_code interrupt
         await graph.ainvoke(initial_state, config=config)
 
-        # Inject human approval into the checkpoint, then resume
+        # Inject human approval into the checkpoint as if human_review_code produced it,
+        # then resume.  as_node is required so LangGraph routes forward from the node.
         await graph.aupdate_state(
-            config, {"human_approval_response": "approve", "human_feedback": None}
+            config,
+            {"human_approval_response": "approve", "human_feedback": None},
+            as_node="human_review_code",
         )
         final_state = await graph.ainvoke(None, config=config)
 
@@ -334,9 +339,12 @@ async def test_pipeline_pm_review_requests_changes_reruns_grinder() -> None:
         # First run: pauses at human_review_code after second PM review approves
         await graph.ainvoke(initial_state, config=config)
 
-        # Inject approval into checkpoint, then resume
+        # Inject approval into checkpoint, then resume.
+        # as_node is required so LangGraph routes forward from the interrupt node.
         await graph.aupdate_state(
-            config, {"human_approval_response": "approve", "human_feedback": None}
+            config,
+            {"human_approval_response": "approve", "human_feedback": None},
+            as_node="human_review_code",
         )
         final_state = await graph.ainvoke(None, config=config)
 
@@ -381,7 +389,9 @@ async def test_finalize_calls_transition_to_done() -> None:
     ):
         await graph.ainvoke(initial_state, config=config)
         await graph.aupdate_state(
-            config, {"human_approval_response": "approve", "human_feedback": None}
+            config,
+            {"human_approval_response": "approve", "human_feedback": None},
+            as_node="human_review_code",
         )
         await graph.ainvoke(None, config=config)
 
