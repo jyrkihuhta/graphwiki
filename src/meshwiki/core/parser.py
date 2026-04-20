@@ -93,6 +93,13 @@ class WikiLinkInlineProcessor(InlineProcessor):
         el = Element("a")
         el.text = display_text
         el.set("href", f"/page/{page_name.replace(' ', '_')}")
+        el.set(
+            "hx-get",
+            f"/api/pages/{page_name.replace(' ', '_')}/preview",
+        )
+        el.set("hx-trigger", "mouseenter delay:250ms")
+        el.set("hx-target", "#wiki-hover-card")
+        el.set("hx-swap", "outerHTML")
 
         # Add class based on whether page exists
         if self.page_exists(page_name):
