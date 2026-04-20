@@ -17,7 +17,15 @@
     <ul class="page-tree-list" role="list">
         {% for node in nodes %}
         <li class="page-tree-item" data-name="{{ node.name }}">
-            {% if node.children %}
+            {% if node.get('section') %}
+            <details class="page-tree-details page-tree-section" open>
+                <summary class="page-tree-summary page-tree-summary--section">
+                    <span class="page-tree-expand-icon">›</span>
+                    <span class="page-tree-section-label">{{ node.title }}</span>
+                </summary>
+                {{ render_tree(node.children, level + 1) }}
+            </details>
+            {% elif node.children %}
             {% set is_done = node.status in ('done', 'merged', 'failed', 'rejected') %}
             <details class="page-tree-details" data-page-name="/page/{{ node.name.replace(' ', '_') }}" {{ 'open' if level < 2 else '' }}>
                 <summary class="page-tree-summary">

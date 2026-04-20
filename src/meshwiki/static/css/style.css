@@ -212,6 +212,20 @@ body {
     text-decoration-color: var(--color-border);
 }
 
+.page-tree-summary--section {
+    cursor: pointer;
+    margin-top: 0.5rem;
+}
+
+.page-tree-section-label {
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--color-text-muted);
+    flex: 1;
+}
+
 /* Page List */
 .page-list h1 {
     margin-bottom: 1.5rem;

@@ -204,10 +204,45 @@ def test_stub_title_derived_from_name():
 
 
 def test_factory_assignee_visible():
-    """Factory-assigned pages (tasks, epics) appear in the sidebar."""
+    """Standalone factory tasks appear inside the 'Standalone Tasks' section."""
     pages = [_page("Normal"), _page("FactoryTask", assignee="factory", type="task")]
     tree = build_page_tree_sync(pages)
-    assert any(n["name"] == "FactoryTask" for n in tree)
+    # FactoryTask is nested under the section node, not at the root level
+    assert _find(tree, "FactoryTask") is not None
+    # Root names should not include FactoryTask directly
+    assert "FactoryTask" not in _names(tree)
+
+
+def test_epic_appears_in_factory_section():
+    """Epics are grouped under the 'Factory' section node."""
+    pages = [_page("MyEpic", type="epic"), _page("Home")]
+    tree = build_page_tree_sync(pages)
+    section = next(
+        (n for n in tree if n.get("section") and n["title"] == "Factory"), None
+    )
+    assert section is not None
+    assert _find(section["children"], "MyEpic") is not None
+
+
+def test_standalone_task_appears_in_standalone_section():
+    """Tasks without parent_task appear under 'Standalone Tasks' section."""
+    pages = [_page("Solo", type="task"), _page("Home")]
+    tree = build_page_tree_sync(pages)
+    section = next(
+        (n for n in tree if n.get("section") and n["title"] == "Standalone Tasks"), None
+    )
+    assert section is not None
+    assert _find(section["children"], "Solo") is not None
+
+
+def test_section_nodes_not_in_wiki_roots():
+    """Regular wiki pages are not inside a section."""
+    pages = [_page("Home"), _page("WikiPage"), _page("AnEpic", type="epic")]
+    tree = build_page_tree_sync(pages)
+    wiki_names = [n["name"] for n in tree if not n.get("section")]
+    assert "WikiPage" in wiki_names
+    assert "Home" in wiki_names
+    assert "AnEpic" not in wiki_names
 
 
 def test_subtask_appears_under_epic():

@@ -325,11 +325,52 @@ def build_page_tree_sync(pages: list[Page]) -> list[dict]:
                 node["children"].append(child)
         return node
 
-    tree = []
+    # Classify roots into sections: epics → "Factory", standalone factory tasks →
+    # "Standalone Tasks", everything else → regular wiki tree.
+    epic_roots: list[Page] = []
+    standalone_task_roots: list[Page] = []
+    wiki_roots: list[Page] = []
+
     for root in roots:
+        page = page_map.get(root.name)
+        if page is None:
+            wiki_roots.append(root)
+            continue
+        extra = page.metadata.model_extra or {}
+        page_type = extra.get("type") or (page.metadata.model_extra or {}).get("type")
+        if page_type == "epic":
+            epic_roots.append(root)
+        elif page_type == "task" and not extra.get("parent_task"):
+            standalone_task_roots.append(root)
+        else:
+            wiki_roots.append(root)
+
+    def _section(label: str, slug: str, section_roots: list[Page]) -> dict:
+        children = []
+        for root in section_roots:
+            node = _subtree(root.name, 1, frozenset())
+            if node is not None:
+                children.append(node)
+        return {
+            "name": f"__section__{slug}",
+            "title": label,
+            "children": children,
+            "level": 0,
+            "status": "",
+            "stub": False,
+            "section": True,
+        }
+
+    tree: list[dict] = []
+    for root in wiki_roots:
         node = _subtree(root.name, 0, frozenset())
         if node is not None:
             tree.append(node)
+
+    if epic_roots:
+        tree.append(_section("Factory", "factory", epic_roots))
+    if standalone_task_roots:
+        tree.append(_section("Standalone Tasks", "standalone", standalone_task_roots))
 
     # Orphan recovery: pages that form pure cycles (or are only referenced by
     # cycle members) are unreachable from normal roots. Surface them at the root
