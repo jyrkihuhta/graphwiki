@@ -132,8 +132,8 @@ class FactoryState(TypedDict):
     # back to FACTORY_GITHUB_REPO when absent.  Set once by task_intake_node.
     task_repo: str | None
 
-    # Per-branch routing (ephemeral — set by Send() and echoed by grind/pm_review)
-    # Used by route_after_grinding and route_after_pm_review to identify which
-    # subtask this branch is operating on.  Not a persistent field; each branch
-    # writes its own value so parallel branches don't conflict.
-    _current_subtask_id: str | None
+    # Per-branch routing — echoed back by grind_node / pm_review_node so the
+    # conditional routing function can identify which subtask this branch is for.
+    # Annotated with a last-write-wins reducer so parallel branches can each echo
+    # their own value without raising INVALID_CONCURRENT_GRAPH_UPDATE.
+    _current_subtask_id: Annotated[str | None, lambda _cur, new: new]
