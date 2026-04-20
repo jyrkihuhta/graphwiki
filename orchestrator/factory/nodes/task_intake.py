@@ -123,13 +123,14 @@ async def task_intake_node(state: FactoryState) -> dict:
             pre_seeded = await mc.list_tasks(
                 parent_task=task_wiki_page, assignee="factory"
             )
-        planned_subtasks = [
+        _done = {"done", "merged", "failed", "rejected"}
+        active_subtasks = [
             t for t in pre_seeded
-            if (t.get("metadata") or {}).get("status") == "planned"
+            if (t.get("metadata") or {}).get("status") not in _done
         ]
-        if planned_subtasks:
+        if active_subtasks:
             subtasks: list[SubTask] = []
-            for t_data in planned_subtasks:
+            for t_data in active_subtasks:
                 t_meta = t_data.get("metadata") or {}
                 t_name: str = t_data["name"]
                 async with MeshWikiClient() as mc:
