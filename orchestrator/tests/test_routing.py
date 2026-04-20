@@ -14,7 +14,6 @@ from factory.graph import (
 )
 from factory.state import FactoryState, SubTask
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -112,7 +111,9 @@ class TestRouteAfterGrinding:
 
     def test_changes_requested_treated_as_pending(self) -> None:
         review_sub = _make_subtask(wiki_page="Task_0042_Sub_01", status="review")
-        rework_sub = _make_subtask(wiki_page="Task_0042_Sub_02", status="changes_requested")
+        rework_sub = _make_subtask(
+            wiki_page="Task_0042_Sub_02", status="changes_requested"
+        )
         state = _make_state(subtasks=[review_sub, rework_sub])
         assert route_after_grinding(state) == "more_pending"
 

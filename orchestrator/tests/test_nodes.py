@@ -39,8 +39,10 @@ def _make_state(**kwargs) -> FactoryState:
         "human_approval_response": None,
         "human_feedback": None,
         "cost_usd": 0.0,
+        "incremental_costs_usd": [],
         "graph_status": "intake",
         "error": None,
+        "escalation_decision": None,
     }
     defaults.update(kwargs)
     return FactoryState(**defaults)
@@ -660,6 +662,61 @@ async def test_finalize_node_handles_client_error() -> None:
     assert result["graph_status"] == "completed"
 
 
+@pytest.mark.asyncio
+async def test_finalize_node_accumulates_incremental_costs() -> None:
+    """finalize_node sums incremental_costs_usd into cost_usd and returns total."""
+    merged_sub = _make_subtask(status="merged")
+    # Simulate state where decompose + two grind branches each added cost deltas
+    state = _make_state(
+        subtasks=[merged_sub],
+        cost_usd=0.0,
+        incremental_costs_usd=[0.001, 0.002, 0.003],  # $0.006 total
+    )
+
+    mock_client_instance = _mock_client_for_cm(AsyncMock())
+    mock_client_instance.get_page = AsyncMock(
+        return_value={"metadata": {"status": "in_progress"}}
+    )
+    mock_client_instance.transition_task = AsyncMock(return_value={})
+    mock_client_cls = MagicMock(return_value=mock_client_instance)
+
+    with patch("factory.nodes.finalize.MeshWikiClient", mock_client_cls):
+        result = await finalize_node(state)
+
+    assert result["graph_status"] == "completed"
+    assert abs(result["cost_usd"] - 0.006) < 1e-9
+
+    # cost_usd must be written to the wiki page frontmatter on the "done" transition
+    calls = mock_client_instance.transition_task.call_args_list
+    done_call = next(c for c in calls if c[0][1] == "done")
+    extra = done_call[1].get("extra_fields") or {}
+    assert "cost_usd" in extra
+    assert float(extra["cost_usd"]) == round(0.006, 4)
+
+
+@pytest.mark.asyncio
+async def test_finalize_node_carries_forward_existing_cost_usd() -> None:
+    """finalize_node adds incremental deltas on top of any pre-existing cost_usd."""
+    merged_sub = _make_subtask(status="merged")
+    state = _make_state(
+        subtasks=[merged_sub],
+        cost_usd=0.010,  # cost recorded in a previous graph run (e.g. resume)
+        incremental_costs_usd=[0.005],
+    )
+
+    mock_client_instance = _mock_client_for_cm(AsyncMock())
+    mock_client_instance.get_page = AsyncMock(
+        return_value={"metadata": {"status": "in_progress"}}
+    )
+    mock_client_instance.transition_task = AsyncMock(return_value={})
+    mock_client_cls = MagicMock(return_value=mock_client_instance)
+
+    with patch("factory.nodes.finalize.MeshWikiClient", mock_client_cls):
+        result = await finalize_node(state)
+
+    assert abs(result["cost_usd"] - 0.015) < 1e-9
+
+
 # ---------------------------------------------------------------------------
 # escalate_node
 # ---------------------------------------------------------------------------
@@ -968,12 +1025,20 @@ async def test_grind_node_returns_delta_not_full_list() -> None:
     only its single updated subtask so _merge_subtasks never clobbers a
     concurrent branch's status with a stale snapshot.
     """
-    sub_01 = _make_subtask(wiki_page="Task_0042_Sub_01", title="Sub 01", status="pending")
-    sub_02 = _make_subtask(wiki_page="Task_0042_Sub_02", title="Sub 02", status="pending")
+    sub_01 = _make_subtask(
+        wiki_page="Task_0042_Sub_01", title="Sub 01", status="pending"
+    )
+    sub_02 = _make_subtask(
+        wiki_page="Task_0042_Sub_02", title="Sub 02", status="pending"
+    )
     state = _make_state(subtasks=[sub_01, sub_02])
     state["_current_subtask_id"] = sub_01["id"]
 
-    updated_sub = {**sub_01, "status": "review", "pr_url": "https://github.com/o/r/pull/1"}
+    updated_sub = {
+        **sub_01,
+        "status": "review",
+        "pr_url": "https://github.com/o/r/pull/1",
+    }
 
     mock_meshwiki = _mock_client_for_cm(AsyncMock())
     mock_meshwiki.transition_task = AsyncMock(return_value={})
@@ -992,7 +1057,11 @@ async def test_grind_node_returns_delta_not_full_list() -> None:
     assert len(result["subtasks"]) == 1
     assert result["subtasks"][0]["id"] == sub_01["id"]
     assert result["subtasks"][0]["status"] == "review"
-    assert "active_grinders" not in result
+    # grind_node adds the current subtask ID to active_grinders for crash recovery.
+    # The _merge_active_grinders reducer unions these additions across parallel branches.
+    # collect_results_node resets the field to [] after all branches join.
+    assert "active_grinders" in result
+    assert sub_01["id"] in result["active_grinders"]
 
 
 # ---------------------------------------------------------------------------

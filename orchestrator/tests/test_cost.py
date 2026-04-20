@@ -140,3 +140,50 @@ class TestOpenAIResponseAdapter:
         oai = SimpleNamespace(choices=[choice], usage=None)
         adapter = _OpenAIResponseAdapter(oai)
         assert adapter.usage is None
+
+
+class TestTypicalSessionCostEstimate:
+    """Sanity-check cost estimates for a typical grinder session.
+
+    A typical run uses ~50k input + ~5k output tokens for PM (Sonnet),
+    plus a 15-minute E2B sandbox.  Total should be under $0.50.
+    """
+
+    def test_pm_decompose_cost_typical(self):
+        """Decompose pass: ~50k input + 5k output with claude-sonnet-4-6."""
+        usage = SimpleNamespace(input_tokens=50_000, output_tokens=5_000)
+        cost = tokens_to_usd(usage, "claude-sonnet-4-6")
+        # 50k * 3e-6 + 5k * 15e-6 = $0.15 + $0.075 = $0.225
+        assert 0.10 < cost < 0.30, f"Unexpected decompose cost: ${cost:.4f}"
+
+    def test_pm_triage_cost_typical(self):
+        """Triage pass: ~10k input + 512 output with claude-haiku."""
+        usage = SimpleNamespace(input_tokens=10_000, output_tokens=512)
+        cost = tokens_to_usd(usage, "claude-haiku-4-5-20251001")
+        # 10k * 0.8e-6 + 512 * 4e-6 = $0.008 + $0.002 = $0.010
+        assert cost < 0.05, f"Triage should be cheap: ${cost:.4f}"
+
+    def test_e2b_sandbox_15min_cost(self):
+        """E2B sandbox for 15 minutes (900 seconds)."""
+        cost = sandbox_time_to_usd(900)
+        # 900 * 0.000014 = $0.0126
+        assert cost < 0.02, f"15-min sandbox cost too high: ${cost:.4f}"
+        assert cost > 0.005, f"15-min sandbox cost suspiciously low: ${cost:.4f}"
+
+    def test_full_session_cost_under_50_cents(self):
+        """End-to-end session with decompose + triage + 1 grind + review should be < $0.50."""
+        pm_decompose = tokens_to_usd(
+            SimpleNamespace(input_tokens=50_000, output_tokens=5_000),
+            "claude-sonnet-4-6",
+        )
+        pm_triage = tokens_to_usd(
+            SimpleNamespace(input_tokens=10_000, output_tokens=512),
+            "claude-haiku-4-5-20251001",
+        )
+        pm_review = tokens_to_usd(
+            SimpleNamespace(input_tokens=20_000, output_tokens=2_000),
+            "claude-sonnet-4-6",
+        )
+        e2b_sandbox = sandbox_time_to_usd(900)  # 15 minutes
+        total = pm_decompose + pm_triage + pm_review + e2b_sandbox
+        assert total < 0.50, f"Typical session too expensive: ${total:.4f}"

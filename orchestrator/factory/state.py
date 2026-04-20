@@ -30,6 +30,24 @@ def _append_cost(current: list[float], update: list[float]) -> list[float]:
     return current + update
 
 
+def _merge_active_grinders(current: list[str], update: list[str]) -> list[str]:
+    """Reducer for active_grinders supporting both parallel additions and full reset.
+
+    Parallel grinder branches each return their own subtask ID as a single-element
+    list.  The reducer unions these additions into the current set.
+
+    A full reset (e.g. from ``collect_results_node``) is signalled by returning
+    an empty list ``[]``, which replaces the current value entirely.  This
+    avoids the need for a separate clear mechanism while still allowing
+    concurrent ``grind_node`` branches to safely add their IDs without clobbering
+    each other.
+    """
+    if not update:
+        # Empty list signals a full reset (e.g. after all grinders complete).
+        return []
+    return list(dict.fromkeys(list(current) + update))
+
+
 class SubTask(TypedDict):
     """Represents a single unit of work assigned to a grinder agent."""
 
@@ -79,7 +97,9 @@ class FactoryState(TypedDict):
     decomposition_approved: bool
 
     # Execution
-    active_grinders: list[str]  # subtask_ids currently running in a sandbox
+    active_grinders: Annotated[
+        list[str], _merge_active_grinders
+    ]  # subtask_ids currently running in a sandbox
     completed_subtask_ids: Annotated[list[str], _union_ids]
     failed_subtask_ids: Annotated[list[str], _union_ids]
 

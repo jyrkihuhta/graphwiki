@@ -10,35 +10,27 @@ from ..state import FactoryState, SubTask
 logger = logging.getLogger(__name__)
 
 
-def assign_grinders_node(state: FactoryState) -> dict:
-    """No-op state update before fan-out.
+def _select_subtasks_to_dispatch(
+    state: FactoryState,
+) -> list[SubTask]:
+    """Select which pending subtasks to dispatch in this round.
 
-    The actual fan-out to parallel grinders is handled by :func:`route_grinders`,
-    which is registered as the conditional edge routing function on this node.
-    LangGraph requires nodes to return dicts; ``Send`` objects must come from
-    routing functions, not nodes directly.
-    """
-    logger.info(
-        "assign_grinders_node: reached, subtasks in state: %d",
-        len(state.get("subtasks", [])),
-    )
-    return {}
+    Applies the concurrency cap and file-conflict serialization logic, returning
+    the subset of pending subtasks that should be dispatched now.
 
+    Only subtasks whose IDs are not already in ``active_grinders`` are
+    considered.  This prevents re-dispatching grinders that are still running
+    (relevant in crash-recovery scenarios where ``active_grinders`` is restored
+    from the checkpoint).
 
-def route_grinders(state: FactoryState) -> list[Send]:
-    """Fan out pending/changes_requested subtasks to parallel grinder instances.
-
-    Detects file overlap and serializes conflicting subtasks — only subtasks
-    with non-overlapping ``files_touched`` sets are dispatched in this round.
-    The rest remain 'pending' and will be picked up in a subsequent round.
-
-    Respects FACTORY_MAX_CONCURRENT_SANDBOXES cap — only dispatches up to
-    (cap - len(active_grinders)) subtasks in this round.
+    Args:
+        state: Current FactoryState.
 
     Returns:
-        List of ``Send`` commands, one per non-conflicting pending subtask.
+        List of SubTask dicts to dispatch, respecting the concurrency cap and
+        file-overlap constraints.
     """
-    active = state.get("active_grinders", [])
+    active = state.get("active_grinders") or []
     slots_free = FACTORY_MAX_CONCURRENT_SANDBOXES - len(active)
 
     if slots_free <= 0:
@@ -77,6 +69,48 @@ def route_grinders(state: FactoryState) -> list[Send]:
         else:
             assigned_files |= files
             to_dispatch.append(subtask)
+
+    return to_dispatch
+
+
+def assign_grinders_node(state: FactoryState) -> dict:
+    """No-op state update before fan-out.
+
+    The actual fan-out to parallel grinders is handled by :func:`route_grinders`,
+    which is registered as the conditional edge routing function on this node.
+    LangGraph requires nodes to return dicts; ``Send`` objects must come from
+    routing functions, not nodes directly.
+    """
+    logger.info(
+        "assign_grinders_node: reached, subtasks in state: %d",
+        len(state.get("subtasks", [])),
+    )
+    return {}
+
+
+def route_grinders(state: FactoryState) -> list[Send]:
+    """Fan out pending/changes_requested subtasks to parallel grinder instances.
+
+    Detects file overlap and serializes conflicting subtasks — only subtasks
+    with non-overlapping ``files_touched`` sets are dispatched in this round.
+    The rest remain 'pending' and will be picked up in a subsequent round.
+
+    Respects FACTORY_MAX_CONCURRENT_SANDBOXES cap — only dispatches up to
+    (cap - len(active_grinders)) subtasks in this round.
+
+    Returns:
+        List of ``Send`` commands, one per non-conflicting pending subtask.
+    """
+    active = state.get("active_grinders") or []
+    to_dispatch = _select_subtasks_to_dispatch(state)
+
+    logger.info(
+        "route_grinders: dispatching %d subtask(s), %d active, cap=%d (task %s)",
+        len(to_dispatch),
+        len(active),
+        FACTORY_MAX_CONCURRENT_SANDBOXES,
+        state.get("task_wiki_page", "<unknown>"),
+    )
 
     return [
         Send("grind", {**state, "_current_subtask_id": subtask["id"]})

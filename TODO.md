@@ -117,29 +117,44 @@ Staging factory is fully operational. Multiple successful grinder tasks merged.
 ### Milestone F8: Factory v2 — Gap Fixes 🔲
 Fix correctness and reliability issues in the v1 orchestrator.
 
-- [ ] Cost tracking — `cost_usd` never incremented; add `factory/cost.py`, read `response.usage` from PM agent calls, track E2B wall-clock time
-- [ ] Concurrency control — cap `route_grinders` at `FACTORY_MAX_CONCURRENT_SANDBOXES` (3), populate `active_grinders` in `grind_node`
-- [ ] httpx clients — share a single `httpx.AsyncClient` per session in `MeshWikiClient` and `GitHubClient`
+**Cost & resource control (highest impact)**
+- [x] **F8.1** Concurrency control — cap `route_grinders` at `FACTORY_MAX_CONCURRENT_SANDBOXES` (3), populate `active_grinders` in `grind_node`
+- [x] **F8.2** Cost tracking — `cost_usd` never incremented; add `factory/cost.py`, read `response.usage` from PM agent calls, track E2B wall-clock time
+
+**Correctness**
+- [ ] **F8.3** Fan-in state merge bug — when parallel grinders finish at different times, `collect_results` sees a merged subtasks list that drops the failed status of earlier-finishing subtasks; investigate LangGraph reducer annotation on `subtasks` / `failed_subtask_ids` fields in `FactoryState` and add an `Annotated` reducer so all branch updates are correctly combined
+- [ ] **F8.4** Per-subtask PM review — currently PM review waits for ALL grinders to finish before reviewing any; restructure so each grind instance fans out to its own `pm_review` via `Send()`, unblocking fast subtasks from slow rework cycles
+- [ ] **F8.5** PM review feedback visible on wiki — `append_to_page` in `pm_review_node` isn't writing feedback to the task page; PM review decisions should be visible in the Agent Log section
+
+**Reliability**
+- [ ] **F8.6** Bookkeeper bot — periodic job reconciling stale task states (stuck in_progress → failed, merged PRs → merged)
+- [ ] **F8.7** Unit tests for routing functions — `route_after_grinding`, `route_grinders` file-overlap, `route_after_pm_review`
+
+**Performance**
+- [ ] **F8.8** Pre-bake Python deps into E2B template — `pip install -e '.[dev]'` runs from scratch every grind session; baking deps into the `meshwiki-grinder` E2B template snapshot would make this near-instant and eliminate a large chunk of per-run disk/time overhead (requires rebuilding the template via `e2b template build`)
+
+**Security**
+- [ ] **F8.9** GitHub webhook secret on staging — `MESHWIKI_GITHUB_WEBHOOK_SECRET` is empty in staging env, so HMAC verification is skipped; anyone can POST fake "PR merged" events to trigger task page transitions
+- [ ] **F8.10** Auth-gate `/ws/terminal/{name}` WebSocket — currently unauthenticated; anyone who knows (or guesses) a task page name can read live grinder terminal output, which may include API keys, tokens, or repo contents streamed via Kilo
+
+**Efficiency**
+- [ ] **F8.11** httpx clients — share a single `httpx.AsyncClient` per session in `MeshWikiClient` and `GitHubClient`
+
+**Larger refactors / lower priority**
+- [ ] **F8.12** Stable page identity via UUID — terminal session keys, WebSocket lookups, and graph thread IDs all use the fragile human-readable page name (spaces/underscores/special chars cause mismatch bugs). Root cause: wiki URLs encode spaces as underscores, but page names can also contain real underscores (e.g. `get_engine()`), making the two indistinguishable in a URL. Add a `uuid` frontmatter field generated on page creation; use it as the canonical key everywhere internally, keeping the page name only for display/URL routing
+- [ ] **F8.13** Redecompose escalation — implement `"redecompose"` decision in `escalate_node`
+- [ ] **F8.14** Signed grinder commits — GitHub App token or GPG key in E2B sandbox
+- [ ] **F8.15** Persist grinder terminal output and run a review bot — terminal chunks are currently streamed to the browser and discarded; storing them (e.g. appended to the task wiki page or a sidecar log file) would enable a post-run bot to analyze patterns across sessions: recurring lint failures, commands that always fail first try, slow steps, Kilo confusion about tool use. Bot output could feed back into improved task prompts, better bootstrap steps, or a "known issues" section in CLAUDE.md
+- [ ] **F8.16** `/api/graph`, `/ws/graph`, `/metrics` are unauthenticated — exposes all page names, links, and per-page view counts to anonymous users; acceptable for now but worth locking down before any public exposure
+
+**Completed**
 - [x] Configurable PM model — `FACTORY_PM_DECOMPOSE_MODEL`, `FACTORY_PM_REVIEW_MODEL`, `FACTORY_PM_TRIAGE_MODEL` env vars
 - [x] Review feedback in rework — `subtask["review_feedback"]` appended to Kilo task prompt on rework iterations
-- [ ] Bookkeeper bot — periodic job reconciling stale task states (stuck in_progress → failed, merged PRs → merged)
-- [ ] PM review feedback visible on wiki — `append_to_page` in `pm_review_node` isn't writing feedback to the task page; PM review decisions should be visible in the Agent Log section
-- [x] PM review token cost — implemented: diff capped at `FACTORY_PM_REVIEW_MAX_DIFF_LINES` (default 500), configurable full-review model via `FACTORY_PM_REVIEW_MODEL`, and two-pass triage via `FACTORY_PM_TRIAGE_MODEL` (Haiku fast-path; escalates to Sonnet only when triage requests changes)
-- [x] Deferred subtask routing bug — `route_after_grinding` now loops back to `assign_grinders` when pending subtasks remain (file-conflict serialization left TASK002 stranded); subtask pages now include `assignee: factory` in frontmatter
-- [x] Spurious `task.assigned` restart from subtask transitions — webhook_server now checks `data["parent_task"]` in the payload and ignores `task.assigned` for subtask pages before any asyncio task is created; `task_intake` `parent_task` guardrail retained as defence-in-depth
-- [ ] Signed grinder commits — GitHub App token or GPG key in E2B sandbox
-- [ ] Redecompose escalation — implement `"redecompose"` decision in `escalate_node`
-- [ ] Unit tests for routing functions — `route_after_grinding`, `route_grinders` file-overlap, `route_after_pm_review`
-- [ ] Per-subtask PM review — currently PM review waits for ALL grinders to finish before reviewing any; restructure so each grind instance fans out to its own `pm_review` via `Send()`, unblocking fast subtasks from slow rework cycles
-- [ ] Stable page identity via UUID — terminal session keys, WebSocket lookups, and graph thread IDs all use the fragile human-readable page name (spaces/underscores/special chars cause mismatch bugs). Root cause: wiki URLs encode spaces as underscores, but page names can also contain real underscores (e.g. `get_engine()`), making the two indistinguishable in a URL. Add a `uuid` frontmatter field generated on page creation; use it as the canonical key everywhere internally, keeping the page name only for display/URL routing
-- [x] E2B sandbox disk optimisation — `git clone --depth 1` + `pip install --no-cache-dir` already in grinder_agent.py (done via GrinderBootstrap)
-- [x] Orchestrator dep install in grinder — `cd /tmp/repo/orchestrator && pip install -e '.[dev]' -q --no-cache-dir` added to bootstrap (GrinderBootstrap PR #126)
-- [ ] Pre-bake Python deps into E2B template — `pip install -e '.[dev]'` runs from scratch every grind session; baking deps into the `meshwiki-grinder` E2B template snapshot would make this near-instant and eliminate a large chunk of per-run disk/time overhead (requires rebuilding the template via `e2b template build`)
-- [ ] Fan-in state merge bug — when parallel grinders finish at different times, `collect_results` sees a merged subtasks list that drops the failed status of earlier-finishing subtasks; investigate LangGraph reducer annotation on `subtasks` / `failed_subtask_ids` fields in `FactoryState` and add an `Annotated` reducer so all branch updates are correctly combined
-- [ ] Persist grinder terminal output and run a review bot — terminal chunks are currently streamed to the browser and discarded; storing them (e.g. appended to the task wiki page or a sidecar log file) would enable a post-run bot to analyze patterns across sessions: recurring lint failures, commands that always fail first try, slow steps, Kilo confusion about tool use. Bot output could feed back into improved task prompts, better bootstrap steps, or a "known issues" section in CLAUDE.md
-- [ ] Auth-gate `/ws/terminal/{name}` WebSocket — currently unauthenticated; anyone who knows (or guesses) a task page name can read live grinder terminal output, which may include API keys, tokens, or repo contents streamed via Kilo
-- [ ] GitHub webhook secret on staging — `MESHWIKI_GITHUB_WEBHOOK_SECRET` is empty in staging env, so HMAC verification is skipped; anyone can POST fake "PR merged" events to trigger task page transitions
-- [ ] `/api/graph`, `/ws/graph`, `/metrics` are unauthenticated — exposes all page names, links, and per-page view counts to anonymous users; acceptable for now but worth locking down before any public exposure
+- [x] PM review token cost — diff capped at `FACTORY_PM_REVIEW_MAX_DIFF_LINES` (default 500), two-pass triage via `FACTORY_PM_TRIAGE_MODEL` (Haiku fast-path; escalates to Sonnet only when triage requests changes)
+- [x] Deferred subtask routing bug — `route_after_grinding` now loops back to `assign_grinders` when pending subtasks remain
+- [x] Spurious `task.assigned` restart from subtask transitions — webhook_server checks `data["parent_task"]` and ignores `task.assigned` for subtask pages
+- [x] E2B sandbox disk optimisation — `git clone --depth 1` + `pip install --no-cache-dir` in grinder_agent.py
+- [x] Orchestrator dep install in grinder — `pip install -e '.[dev]'` added to bootstrap (GrinderBootstrap PR #126)
 
 **Key files:** `orchestrator/factory/cost.py` (new), `orchestrator/factory/nodes/assign.py`, `orchestrator/factory/agents/pm_agent.py`, `orchestrator/factory/agents/grinder_agent.py`, `orchestrator/factory/integrations/`
 

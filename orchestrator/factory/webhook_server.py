@@ -38,8 +38,7 @@ async def _clear_stuck_grinders(graph, config: dict, page_name: str) -> None:
         stuck = {
             s["id"]
             for s in subtasks
-            if s["id"] in active
-            and s.get("status") in ("pending", "changes_requested")
+            if s["id"] in active and s.get("status") in ("pending", "changes_requested")
         }
         if not stuck:
             return

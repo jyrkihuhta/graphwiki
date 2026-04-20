@@ -320,7 +320,9 @@ async def test_review_with_pm_approved() -> None:
     github_client.get_pr_diff = AsyncMock(return_value="diff --git ...")
 
     mock_settings = MagicMock()
-    mock_settings.pm_triage_model = ""  # disable triage so mock responses aren't consumed
+    mock_settings.pm_triage_model = (
+        ""  # disable triage so mock responses aren't consumed
+    )
     mock_settings.pm_review_model = "claude-sonnet-4-6"
     mock_settings.anthropic_api_key = "test-key"
     mock_settings.pm_review_max_diff_lines = 500
@@ -385,7 +387,9 @@ async def test_review_with_pm_changes_requested() -> None:
     github_client.get_pr_diff = AsyncMock(return_value="diff --git ...")
 
     mock_settings = MagicMock()
-    mock_settings.pm_triage_model = ""  # disable triage so mock responses aren't consumed
+    mock_settings.pm_triage_model = (
+        ""  # disable triage so mock responses aren't consumed
+    )
     mock_settings.pm_review_model = "claude-sonnet-4-6"
     mock_settings.anthropic_api_key = "test-key"
     mock_settings.pm_review_max_diff_lines = 500

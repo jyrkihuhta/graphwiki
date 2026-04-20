@@ -159,7 +159,9 @@ async def test_pipeline_happy_path_reaches_done() -> None:
         ),
         patch(
             "factory.nodes.grind.grind_subtask",
-            new=AsyncMock(return_value={"subtask": grinder_result, "incremental_cost_usd": 0.0}),
+            new=AsyncMock(
+                return_value={"subtask": grinder_result, "incremental_cost_usd": 0.0}
+            ),
         ),
         patch(
             "factory.nodes.pm_review.MeshWikiClient",
@@ -242,7 +244,9 @@ async def test_pipeline_grind_failure_triggers_escalate_then_abandon() -> None:
         ),
         patch(
             "factory.nodes.grind.grind_subtask",
-            new=AsyncMock(return_value={"subtask": failed_result, "incremental_cost_usd": 0.0}),
+            new=AsyncMock(
+                return_value={"subtask": failed_result, "incremental_cost_usd": 0.0}
+            ),
         ),
         patch(
             "factory.nodes.escalate.MeshWikiClient",
@@ -299,10 +303,12 @@ async def test_pipeline_pm_review_requests_changes_reruns_grinder() -> None:
         ),
         patch(
             "factory.nodes.grind.grind_subtask",
-            new=AsyncMock(side_effect=[
-                {"subtask": review_result, "incremental_cost_usd": 0.0},
-                {"subtask": regrind_result, "incremental_cost_usd": 0.0},
-            ]),
+            new=AsyncMock(
+                side_effect=[
+                    {"subtask": review_result, "incremental_cost_usd": 0.0},
+                    {"subtask": regrind_result, "incremental_cost_usd": 0.0},
+                ]
+            ),
         ),
         patch(
             "factory.nodes.pm_review.MeshWikiClient",
@@ -360,7 +366,9 @@ async def test_finalize_calls_transition_to_done() -> None:
         patch("factory.nodes.grind.MeshWikiClient", return_value=meshwiki),
         patch(
             "factory.nodes.grind.grind_subtask",
-            new=AsyncMock(return_value={"subtask": grinder_result, "incremental_cost_usd": 0.0}),
+            new=AsyncMock(
+                return_value={"subtask": grinder_result, "incremental_cost_usd": 0.0}
+            ),
         ),
         patch("factory.nodes.pm_review.MeshWikiClient", return_value=meshwiki),
         patch("factory.nodes.pm_review.GitHubClient", return_value=github),

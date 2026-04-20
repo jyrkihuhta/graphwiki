@@ -62,7 +62,9 @@ async def pm_review_node(state: FactoryState) -> dict:
                 )
                 updated_subtasks.append(updated_subtask)
                 try:
-                    await meshwiki_client.transition_task(subtask["wiki_page"], "failed")
+                    await meshwiki_client.transition_task(
+                        subtask["wiki_page"], "failed"
+                    )
                 except Exception as transition_exc:
                     logger.warning(
                         "pm_review: failed to transition %s to failed: %s",

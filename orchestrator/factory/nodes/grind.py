@@ -16,15 +16,22 @@ async def grind_node(state: FactoryState) -> dict:
 
     Looks up the subtask identified by ``_current_subtask_id`` in state,
     invokes the grinder agentic loop, and returns a partial state update
-    with the updated subtasks list and active_grinders.
+    with the updated subtasks list and ``active_grinders``.
+
+    ``active_grinders`` is updated by appending the current subtask ID.  The
+    ``_merge_active_grinders`` reducer unions these single-element additions
+    across parallel branches so no concurrent write clobbers another branch's
+    update.  The full reset of ``active_grinders`` happens in
+    ``collect_results_node``, which runs serially after all parallel branches
+    join (and can therefore safely return an empty list to clear the field).
 
     Args:
         state: Current FactoryState, must contain ``_current_subtask_id``.
 
     Returns:
         Partial state update with ``subtasks`` list where the current
-        subtask is replaced by the updated version from the grinder,
-        and ``active_grinders`` with the subtask ID removed.
+        subtask is replaced by the updated version from the grinder, and
+        ``active_grinders`` updated to include the current subtask ID.
     """
     subtask_id = state.get("_current_subtask_id")
     subtask = next(
@@ -60,7 +67,7 @@ async def grind_node(state: FactoryState) -> dict:
                     subtask["wiki_page"],
                     exc,
                 )
-            return {"subtasks": [updated]}
+            return {"subtasks": [updated], "active_grinders": [subtask_id]}
 
         result = await grind_subtask(state, subtask, meshwiki_client)
         updated = result["subtask"]
@@ -94,4 +101,5 @@ async def grind_node(state: FactoryState) -> dict:
     return {
         "subtasks": [updated],
         "incremental_costs_usd": [incremental_cost],
+        "active_grinders": [subtask_id],
     }

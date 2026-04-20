@@ -74,9 +74,7 @@ async def escalate_node(state: FactoryState) -> dict:
         error_context: str | None = None
         if retriable:
             decision = "retry"
-        elif len(failed_subtasks) >= math.ceil(
-            max(1, len(state["subtasks"])) / 2
-        ):
+        elif len(failed_subtasks) >= math.ceil(max(1, len(state["subtasks"])) / 2):
             # Majority failed with no retries left — likely a bad decomposition.
             decision = "redecompose"
             error_context = (

@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
-from factory.nodes.assign import route_grinders
+import pytest
+
+from factory.nodes.assign import assign_grinders_node, route_grinders
+from factory.nodes.grind import grind_node
 from factory.state import FactoryState, SubTask
 
 
@@ -17,6 +20,7 @@ def _make_subtask(
     return SubTask(
         id=subtask_id,
         wiki_page=f"{subtask_id}_page",
+        parent_task="Task_0042_test",
         title=f"Subtask {subtask_id}",
         description="Do the thing.",
         status=status,
@@ -50,13 +54,14 @@ def _make_state(
         requirements="Build something.",
         subtasks=subtasks,
         decomposition_approved=True,
-        active_grinders=active_ids,
+        active_grinders=list(active_ids),
         completed_subtask_ids=[],
         failed_subtask_ids=[],
         pm_messages=[],
         human_approval_response=None,
         human_feedback=None,
         cost_usd=0.0,
+        incremental_costs_usd=[],
         graph_status="grinding",
         error=None,
         escalation_decision=None,
@@ -145,29 +150,131 @@ class TestRouteGrindersConcurrencyCap:
             assert len(dispatched) == 1
 
 
-class TestActiveGrindersCleanup:
-    """grind_node removes subtask id from active_grinders after completion."""
+class TestAssignGrindersNodeIsNoOp:
+    """assign_grinders_node returns an empty dict (no-op before fan-out).
 
-    def test_active_grinders_removal_on_completion(self) -> None:
-        """Simulate grinder completion: subtask ID should be removable from active list."""
-        active = ["task-a", "task-b"]
-        active.remove("task-a")
-        assert active == ["task-b"]
+    The fan-out to parallel grinder branches is handled entirely by
+    route_grinders.  assign_grinders_node only exists because LangGraph
+    requires a node (not a routing function) to own the conditional edge.
+    """
 
-    def test_active_grinders_removal_idempotent(self) -> None:
-        """Removing a non-existent ID should not raise."""
-        active = ["task-a"]
-        if "task-b" in active:
-            active.remove("task-b")
-        assert active == ["task-a"]
+    def test_returns_empty_dict(self) -> None:
+        """assign_grinders_node always returns {}."""
+        state = _make_state(["t1", "t2"], [])
+        result = assign_grinders_node(state)
+        assert result == {}
 
-    def test_active_grinders_list_behavior(self) -> None:
-        """active_grinders should behave as a simple list of IDs."""
-        active: list[str] = []
-        active.append("t1")
-        active.append("t2")
-        assert len(active) == 2
-        active.remove("t1")
-        assert len(active) == 1
-        assert "t1" not in active
-        assert "t2" in active
+    def test_returns_empty_dict_when_at_cap(self) -> None:
+        """assign_grinders_node returns {} even when at concurrency cap."""
+        with patch("factory.nodes.assign.FACTORY_MAX_CONCURRENT_SANDBOXES", 1):
+            state = _make_state(["t2", "t3"], ["t1"])
+            result = assign_grinders_node(state)
+            assert result == {}
+
+    def test_returns_empty_dict_when_nothing_pending(self) -> None:
+        """assign_grinders_node returns {} when there are no pending subtasks."""
+        state = _make_state([], [])
+        result = assign_grinders_node(state)
+        assert result == {}
+
+
+class TestGrindNodeAddsToActive:
+    """grind_node adds its subtask ID to active_grinders for crash-recovery tracking.
+
+    The _merge_active_grinders reducer unions single-element additions from
+    parallel branches.  collect_results_node resets active_grinders to []
+    after all parallel branches join.
+    """
+
+    @staticmethod
+    def _mock_meshwiki_client(transition_return=None):
+        """Return an AsyncMock MeshWikiClient configured as a context manager."""
+        mock_client = AsyncMock()
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=None)
+        mock_client.transition_task = AsyncMock(return_value=transition_return or {})
+        return mock_client
+
+    @pytest.mark.asyncio
+    async def test_adds_subtask_id_on_success(self) -> None:
+        """grind_node includes its own ID in active_grinders after a successful run."""
+        subtask = _make_subtask("t1")
+        state = _make_state([], [])
+        state["subtasks"] = [subtask]
+        state["_current_subtask_id"] = "t1"  # type: ignore[typeddict-unknown-key]
+
+        updated_subtask = {
+            **subtask,
+            "status": "review",
+            "pr_url": "https://github.com/o/r/pull/1",
+        }
+        mock_client = self._mock_meshwiki_client()
+
+        with (
+            patch("factory.nodes.grind.MeshWikiClient", return_value=mock_client),
+            patch(
+                "factory.nodes.grind.grind_subtask",
+                new=AsyncMock(
+                    return_value={
+                        "subtask": updated_subtask,
+                        "incremental_cost_usd": 0.0,
+                    }
+                ),
+            ),
+        ):
+            result = await grind_node(state)
+
+        assert "active_grinders" in result
+        assert "t1" in result["active_grinders"]
+
+    @pytest.mark.asyncio
+    async def test_adds_subtask_id_on_failure(self) -> None:
+        """grind_node includes its ID in active_grinders even when the run fails."""
+        subtask = _make_subtask("t1")
+        state = _make_state([], [])
+        state["subtasks"] = [subtask]
+        state["_current_subtask_id"] = "t1"  # type: ignore[typeddict-unknown-key]
+
+        failed_subtask = {**subtask, "status": "failed", "error_log": ["boom"]}
+        mock_client = self._mock_meshwiki_client()
+
+        with (
+            patch("factory.nodes.grind.MeshWikiClient", return_value=mock_client),
+            patch(
+                "factory.nodes.grind.grind_subtask",
+                new=AsyncMock(
+                    return_value={
+                        "subtask": failed_subtask,
+                        "incremental_cost_usd": 0.0,
+                    }
+                ),
+            ),
+        ):
+            result = await grind_node(state)
+
+        assert "active_grinders" in result
+        assert "t1" in result["active_grinders"]
+
+    @pytest.mark.asyncio
+    async def test_active_grinders_is_single_element_list(self) -> None:
+        """grind_node returns a single-element list for the reducer to union safely."""
+        subtask = _make_subtask("t1")
+        state = _make_state([], [])
+        state["subtasks"] = [subtask]
+        state["_current_subtask_id"] = "t1"  # type: ignore[typeddict-unknown-key]
+
+        done_subtask = {**subtask, "status": "review"}
+        mock_client = self._mock_meshwiki_client()
+
+        with (
+            patch("factory.nodes.grind.MeshWikiClient", return_value=mock_client),
+            patch(
+                "factory.nodes.grind.grind_subtask",
+                new=AsyncMock(
+                    return_value={"subtask": done_subtask, "incremental_cost_usd": 0.0}
+                ),
+            ),
+        ):
+            result = await grind_node(state)
+
+        assert result["active_grinders"] == ["t1"]

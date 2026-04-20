@@ -12,6 +12,8 @@ from __future__ import annotations
 from factory.state import (
     FactoryState,
     SubTask,
+    _append_cost,
+    _merge_active_grinders,
     _merge_subtasks,
     _union_ids,
 )
@@ -19,6 +21,44 @@ from factory.state import (
 # ---------------------------------------------------------------------------
 # Reducer unit tests
 # ---------------------------------------------------------------------------
+
+
+def test_merge_active_grinders_unions_nonempty() -> None:
+    """Non-empty update is unioned into current — parallel branches can safely add IDs."""
+    result = _merge_active_grinders(["id-1"], ["id-2"])
+    assert set(result) == {"id-1", "id-2"}
+
+
+def test_merge_active_grinders_deduplicates() -> None:
+    """Duplicate IDs are removed after a union."""
+    result = _merge_active_grinders(["id-1", "id-2"], ["id-1"])
+    assert result.count("id-1") == 1
+    assert "id-2" in result
+
+
+def test_merge_active_grinders_empty_update_resets() -> None:
+    """Empty update list signals a full reset — used by collect_results_node."""
+    result = _merge_active_grinders(["id-1", "id-2"], [])
+    assert result == []
+
+
+def test_merge_active_grinders_both_empty_stays_empty() -> None:
+    """Union of two empty lists returns empty."""
+    result = _merge_active_grinders([], [])
+    assert result == []
+
+
+def test_merge_active_grinders_parallel_add_semantics() -> None:
+    """Simulate two parallel grind_node branches each adding their own ID.
+
+    Branch A returns active_grinders=["task-001"].
+    Branch B returns active_grinders=["task-002"].
+
+    After fan-in via two reducer applications, both IDs must be present.
+    """
+    after_a = _merge_active_grinders([], ["task-001"])
+    after_b = _merge_active_grinders(after_a, ["task-002"])
+    assert set(after_b) == {"task-001", "task-002"}
 
 
 def test_union_ids_merges_two_lists() -> None:
@@ -32,6 +72,34 @@ def test_union_ids_handles_empty_lists() -> None:
     assert set(_union_ids([], ["task-001"])) == {"task-001"}
     assert set(_union_ids(["task-002"], [])) == {"task-002"}
     assert set(_union_ids([], [])) == set()
+
+
+def test_append_cost_accumulates() -> None:
+    """Incremental cost lists are concatenated by the reducer."""
+    assert _append_cost([0.001, 0.002], [0.003]) == [0.001, 0.002, 0.003]
+
+
+def test_append_cost_empty_current() -> None:
+    """Starting from an empty list appends the update."""
+    assert _append_cost([], [0.005]) == [0.005]
+
+
+def test_append_cost_empty_update() -> None:
+    """An empty update leaves the current list unchanged."""
+    assert _append_cost([0.01], []) == [0.01]
+
+
+def test_append_cost_parallel_branches_sum_correctly() -> None:
+    """Simulates two parallel grind branches each adding their cost delta.
+
+    After fan-in via two reducer applications, all three cost entries must
+    be present and their sum matches the expected total.
+    """
+    after_a = _append_cost([], [0.001])  # decompose phase
+    after_b = _append_cost(after_a, [0.002])  # grind branch A
+    after_c = _append_cost(after_b, [0.003])  # grind branch B
+    assert after_c == [0.001, 0.002, 0.003]
+    assert abs(sum(after_c) - 0.006) < 1e-9
 
 
 def test_merge_subtasks_last_status_wins_per_id() -> None:
@@ -237,7 +305,9 @@ def test_fanin_delta_return_preserves_concurrent_status_updates() -> None:
     after_a = _merge_subtasks(initial, [failed_01])
 
     # Branch B returns only its delta: sub-02 in review
-    review_02 = SubTask(**{**sub_02, "status": "review", "pr_url": "https://github.com/o/r/pull/2"})
+    review_02 = SubTask(
+        **{**sub_02, "status": "review", "pr_url": "https://github.com/o/r/pull/2"}
+    )
     final = _merge_subtasks(after_a, [review_02])
 
     by_id = {s["id"]: s for s in final}
