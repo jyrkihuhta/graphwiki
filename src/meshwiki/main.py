@@ -337,10 +337,12 @@ def build_page_tree_sync(pages: list[Page]) -> list[dict]:
             wiki_roots.append(root)
             continue
         extra = page.metadata.model_extra or {}
-        page_type = extra.get("type") or (page.metadata.model_extra or {}).get("type")
-        if page_type == "epic":
+        page_type = extra.get("type")
+        is_factory = extra.get("assignee") == "factory"
+        has_children = bool(children_of.get(root.name))
+        if page_type == "epic" or (is_factory and has_children and not page_type):
             epic_roots.append(root)
-        elif page_type == "task" and not extra.get("parent_task"):
+        elif (page_type == "task" or is_factory) and not extra.get("parent_task"):
             standalone_task_roots.append(root)
         else:
             wiki_roots.append(root)
