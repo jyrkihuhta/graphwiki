@@ -10,6 +10,7 @@
     <script>(function(){var t=localStorage.getItem('meshwiki-theme');if(t==='dark'){var l=document.getElementById('hljs-theme');if(l)l.href='https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css';}})()</script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
     <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    <script src="/static/js/hover_card.js"></script>
 </head>
 <body>
     {% macro render_tree(nodes, level=0) %}
@@ -223,5 +224,6 @@
     </script>
     {% block extra_css %}{% endblock %}
     {% block extra_scripts %}{% endblock %}
+    <div id="wiki-hover-card" class="hover-card" style="display:none"></div>
 </body>
 </html>

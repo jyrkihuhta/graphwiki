@@ -807,6 +807,15 @@ async def save_page(request: Request, name: str, content: str = Form("")):
 # ========== Editor API ==========
 
 
+@app.get("/api/pages/{name:path}/preview", response_class=HTMLResponse)
+async def api_page_preview(name: str):
+    """Render a page for hover card preview."""
+    page = await storage.get_page(name)
+    if page is None:
+        return HTMLResponse("")
+    return HTMLResponse(page.content)
+
+
 @app.post("/api/preview", response_class=HTMLResponse)
 async def api_preview(content: str = Form("")):
     """Render markdown preview for the editor."""
