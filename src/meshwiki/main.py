@@ -995,6 +995,10 @@ async def ws_terminal(websocket: WebSocket, name: str):
 
     Replays the full buffer to late-joining clients, then streams new chunks
     as they arrive.  Multiple concurrent connections are supported.
+
+    When ``auth_enabled`` is True the client must hold a valid session cookie
+    (obtained via the normal /login flow).  Unauthenticated connections are
+    rejected with close code 1008 (policy violation) before any output is sent.
     """
     from meshwiki.core.terminal_sessions import (
         get_session,
@@ -1002,6 +1006,12 @@ async def ws_terminal(websocket: WebSocket, name: str):
         subscribe,
         unsubscribe,
     )
+
+    if settings.auth_enabled:
+        session = websocket.scope.get("session", {})
+        if not session.get("authenticated"):
+            await websocket.close(code=1008)
+            return
 
     await websocket.accept()
     name = resolve_session_name(name)
