@@ -14,6 +14,7 @@ from .nodes import (
     grind_node,
     human_review_code_node,
     merge_check_node,
+    pm_diagnose_node,
     pm_review_node,
     route_grinders,
     task_intake_node,
@@ -66,6 +67,10 @@ def route_after_grinding(state: FactoryState) -> list[Send] | str:
         return "escalate"
 
     if subtask["status"] == "failed":
+        # First failure: let PM diagnose and rewrite the task before retrying.
+        # Subsequent failures (attempt > 0) escalate immediately.
+        if subtask.get("attempt", 0) == 0:
+            return [Send("pm_diagnose", {**state, "_current_subtask_id": subtask_id})]
         return "escalate"
 
     # Subtask completed — fan out to its own pm_review immediately.
@@ -155,6 +160,7 @@ def build_graph(checkpointer):
     graph.add_node("assign_grinders", assign_grinders_node)
     graph.add_node("grind", grind_node)
     graph.add_node("pm_review", pm_review_node)
+    graph.add_node("pm_diagnose", pm_diagnose_node)
     graph.add_node("human_review_code", human_review_code_node)
     graph.add_node("merge_check", merge_check_node)
     graph.add_node("finalize", finalize_node)
@@ -179,6 +185,22 @@ def build_graph(checkpointer):
         {
             "escalate": "escalate",
         },
+    )
+
+    # After PM diagnosis, re-grind the same subtask with the revised description.
+    # If PM returned empty, _current_subtask_id is still set so route_after_grinding
+    # will escalate on the next failure (attempt > 0).
+    graph.add_conditional_edges(
+        "pm_diagnose",
+        lambda state: (
+            [Send("grind", {**state, "_current_subtask_id": state.get("_current_subtask_id")})]
+            if next(
+                (s for s in state["subtasks"] if s["id"] == state.get("_current_subtask_id")),
+                {},
+            ).get("status") == "pending"
+            else "escalate"
+        ),
+        {"escalate": "escalate"},
     )
 
     graph.add_conditional_edges(

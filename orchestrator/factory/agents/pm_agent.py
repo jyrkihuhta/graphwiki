@@ -812,3 +812,70 @@ async def review_with_pm(
         "feedback": feedback,
         "incremental_cost_usd": incremental_cost_usd,
     }
+
+
+async def diagnose_with_pm(
+    subtask: "SubTask",
+    terminal_log: str,
+    meshwiki_client: "MeshWikiClient",
+) -> dict[str, Any]:
+    """Ask the PM to diagnose a grinder failure and rewrite the task description.
+
+    Sends the terminal log and current task description to the PM in a single
+    non-tool-use message and asks it to produce a revised description that will
+    unblock the grinder on retry.
+
+    Args:
+        subtask: The failed SubTask.
+        terminal_log: Raw terminal output from the failed grinder run.
+        meshwiki_client: Client for reading the subtask wiki page.
+
+    Returns:
+        Dict with ``revised_description`` (str) and ``incremental_cost_usd`` (float).
+    """
+    settings = get_settings()
+    client = anthropic.AsyncAnthropic(
+        api_key=settings.anthropic_api_key or None, timeout=600.0
+    )
+
+    page = await meshwiki_client.get_page(subtask["wiki_page"])
+    wiki_content = page.get("content", "") if page else ""
+
+    user_message = (
+        f"## Failed subtask: {subtask['title']}\n\n"
+        f"**Current description / acceptance criteria:**\n{subtask.get('description', '')}\n\n"
+        f"**Wiki page content:**\n{wiki_content}\n\n"
+        f"**Terminal log from failed grinder run (last attempt):**\n```\n{terminal_log[-6000:]}\n```\n\n"
+        "Diagnose why the grinder failed and produce a revised task description that will "
+        "unblock the next retry. Rewrite the acceptance criteria to remove impossible "
+        "constraints (e.g. unavailable tools, wrong test frameworks) and add explicit "
+        "guidance based on what went wrong. Be concrete and actionable.\n\n"
+        "Reply with ONLY the revised description/acceptance criteria — no preamble, "
+        "no explanation, just the updated text the grinder should receive."
+    )
+
+    response = await _messages_create_with_retry(
+        client,
+        model=settings.pm_decompose_model,
+        max_tokens=2048,
+        system=PM_SYSTEM_PROMPT,
+        messages=[{"role": "user", "content": user_message}],
+    )
+
+    incremental_cost_usd = tokens_to_usd(
+        model=settings.pm_decompose_model,
+        input_tokens=response.usage.input_tokens,
+        output_tokens=response.usage.output_tokens,
+    )
+
+    revised = ""
+    for block in response.content:
+        if hasattr(block, "text"):
+            revised += block.text
+
+    logger.info(
+        "diagnose_with_pm: produced revised description for subtask %s (%d chars)",
+        subtask["id"],
+        len(revised),
+    )
+    return {"revised_description": revised.strip(), "incremental_cost_usd": incremental_cost_usd}

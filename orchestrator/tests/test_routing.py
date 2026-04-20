@@ -101,9 +101,17 @@ class TestRouteAfterGrinding:
         assert result[0].node == "pm_review"
         assert result[0].arg["_current_subtask_id"] == sub["id"]
 
-    def test_failed_subtask_escalates(self) -> None:
-        """A failed subtask routes to escalate."""
-        sub = _make_subtask(status="failed")
+    def test_failed_subtask_first_attempt_diagnoses(self) -> None:
+        """First failure (attempt=0) routes to pm_diagnose for PM-assisted retry."""
+        sub = _make_subtask(status="failed", attempt=0)
+        state = _make_state(subtasks=[sub], _current_subtask_id=sub["id"])
+        result = route_after_grinding(state)
+        assert isinstance(result, list) and len(result) == 1
+        assert result[0].node == "pm_diagnose"
+
+    def test_failed_subtask_second_attempt_escalates(self) -> None:
+        """Subsequent failures (attempt>0) escalate immediately."""
+        sub = _make_subtask(status="failed", attempt=1)
         state = _make_state(subtasks=[sub], _current_subtask_id=sub["id"])
         assert route_after_grinding(state) == "escalate"
 

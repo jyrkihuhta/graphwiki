@@ -73,7 +73,7 @@ class Settings(BaseSettings):
         2.0  # FACTORY_BOOKKEEPER_STALE_HOURS — age threshold for stuck in_progress tasks
     )
     terminal_log_max_chars: int = (
-        10000  # FACTORY_TERMINAL_LOG_MAX_CHARS — max chars to persist from terminal output
+        25000  # FACTORY_TERMINAL_LOG_MAX_CHARS — max chars to persist from terminal output
     )
     terminal_review_interval_seconds: int = (
         3600  # FACTORY_TERMINAL_REVIEW_INTERVAL_SECONDS — how often the terminal review bot runs
