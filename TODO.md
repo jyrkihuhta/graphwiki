@@ -131,7 +131,7 @@ Fix correctness and reliability issues in the v1 orchestrator.
 - [x] **F8.7** Unit tests for routing functions — `route_after_grinding`, `route_grinders` file-overlap, `route_after_pm_review`
 
 **Performance**
-- [ ] **F8.8** Pre-bake Python deps into E2B template — `pip install -e '.[dev]'` runs from scratch every grind session; baking deps into the `meshwiki-grinder` E2B template snapshot would make this near-instant and eliminate a large chunk of per-run disk/time overhead (requires rebuilding the template via `e2b template build`)
+- [x] **F8.8** Pre-bake Python deps into E2B template — `pip install -e '.[dev]'` runs from scratch every grind session; baking deps into the `meshwiki-grinder` E2B template snapshot would make this near-instant and eliminate a large chunk of per-run disk/time overhead (requires rebuilding the template via `e2b template build`)
 
 **Security**
 - [ ] **F8.9** GitHub webhook secret on staging — `MESHWIKI_GITHUB_WEBHOOK_SECRET` is empty in staging env, so HMAC verification is skipped; anyone can POST fake "PR merged" events to trigger task page transitions

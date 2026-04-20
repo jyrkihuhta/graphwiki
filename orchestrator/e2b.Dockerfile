@@ -29,7 +29,8 @@ RUN pip install --no-cache-dir \
 # Pre-bake meshwiki + orchestrator Python dependencies so runtime pip installs are fast.
 # Clone, install deps (non-editable), delete clone. The runtime `pip install -e .` will
 # skip downloading packages that are already installed.
-RUN git clone --depth 1 https://github.com/jhuhta/meshwiki.git /tmp/meshwiki-prebake \
-    && pip install --no-cache-dir "/tmp/meshwiki-prebake/src[dev]" \
-    && pip install --no-cache-dir "/tmp/meshwiki-prebake/orchestrator[dev]" \
+ARG GITHUB_TOKEN
+RUN git clone --depth 1 https://x-access-token:${GITHUB_TOKEN}@github.com/jyrkihuhta/meshwiki.git /tmp/meshwiki-prebake \
+    && pip install --no-cache-dir /tmp/meshwiki-prebake \
+    && pip install --no-cache-dir /tmp/meshwiki-prebake/orchestrator \
     && rm -rf /tmp/meshwiki-prebake
