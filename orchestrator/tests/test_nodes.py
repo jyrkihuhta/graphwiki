@@ -322,7 +322,10 @@ async def test_pm_review_node_approved() -> None:
         status="review",
         pr_number=10,
     )
-    state = _make_state(subtasks=[review_subtask])
+    state = _make_state(
+        subtasks=[review_subtask],
+        _current_subtask_id=review_subtask["id"],
+    )
 
     mock_meshwiki = _mock_client_for_cm(AsyncMock())
     mock_meshwiki.get_page = AsyncMock(return_value={"content": "criteria"})
@@ -354,7 +357,10 @@ async def test_pm_review_node_changes_requested() -> None:
         status="review",
         pr_number=11,
     )
-    state = _make_state(subtasks=[review_subtask])
+    state = _make_state(
+        subtasks=[review_subtask],
+        _current_subtask_id=review_subtask["id"],
+    )
 
     mock_meshwiki = _mock_client_for_cm(AsyncMock())
     mock_meshwiki.get_page = AsyncMock(return_value=None)
@@ -381,14 +387,17 @@ async def test_pm_review_node_changes_requested() -> None:
 
 
 @pytest.mark.asyncio
-async def test_pm_review_node_skips_non_review_subtasks() -> None:
-    """pm_review_node leaves subtasks not in 'review' status unchanged."""
+async def test_pm_review_node_missing_subtask_id_returns_empty() -> None:
+    """pm_review_node returns empty dict when _current_subtask_id is not found."""
     pending_subtask = _make_subtask(
         wiki_page="Task_0042_Sub_01",
         title="Pending",
         status="pending",
     )
-    state = _make_state(subtasks=[pending_subtask])
+    state = _make_state(
+        subtasks=[pending_subtask],
+        _current_subtask_id="nonexistent-id",
+    )
 
     mock_meshwiki = _mock_client_for_cm(AsyncMock())
     mock_github = _mock_client_for_cm(AsyncMock())
@@ -403,9 +412,197 @@ async def test_pm_review_node_skips_non_review_subtasks() -> None:
     ):
         result = await pm_review_node(state)
 
-    # review_with_pm should never be called for non-review subtasks
+    # review_with_pm should never be called when subtask is not found
     mock_review.assert_not_awaited()
-    assert result["subtasks"][0]["status"] == "pending"
+    assert result == {}
+
+
+@pytest.mark.asyncio
+async def test_pm_review_node_reviews_only_current_subtask() -> None:
+    """pm_review_node reviews only the subtask identified by _current_subtask_id.
+
+    With the fan-out design, each pm_review instance handles exactly one subtask
+    and returns a single-element delta list (not the full subtasks list).
+    """
+    sub_01 = _make_subtask(
+        wiki_page="Task_0042_Sub_01", title="Sub 01", status="review"
+    )
+    sub_02 = _make_subtask(
+        wiki_page="Task_0042_Sub_02", title="Sub 02", status="review"
+    )
+    state = _make_state(
+        subtasks=[sub_01, sub_02],
+        _current_subtask_id=sub_01["id"],
+    )
+
+    mock_meshwiki = _mock_client_for_cm(AsyncMock())
+    mock_github = _mock_client_for_cm(AsyncMock())
+
+    with (
+        patch("factory.nodes.pm_review.MeshWikiClient", return_value=mock_meshwiki),
+        patch("factory.nodes.pm_review.GitHubClient", return_value=mock_github),
+        patch(
+            "factory.nodes.pm_review.review_with_pm",
+            new=AsyncMock(return_value={"decision": "approved", "feedback": "LGTM"}),
+        ),
+    ):
+        result = await pm_review_node(state)
+
+    # Returns only the reviewed subtask as a delta — _merge_subtasks handles fan-in.
+    assert len(result["subtasks"]) == 1
+    assert result["subtasks"][0]["id"] == sub_01["id"]
+    assert result["subtasks"][0]["status"] == "merged"
+
+
+@pytest.mark.asyncio
+async def test_pm_review_node_approved_appends_to_parent_task_page() -> None:
+    """pm_review_node appends an approval log entry to the parent task wiki page."""
+    review_subtask = _make_subtask(
+        wiki_page="Task_0042_Sub_01",
+        title="Sub 01",
+        status="review",
+        pr_number=10,
+    )
+    state = _make_state(
+        subtasks=[review_subtask],
+        _current_subtask_id=review_subtask["id"],
+        task_wiki_page="Task_0042_test",
+    )
+
+    mock_meshwiki = _mock_client_for_cm(AsyncMock())
+    mock_meshwiki.get_page = AsyncMock(return_value={"content": "existing content"})
+    mock_meshwiki.append_to_page = AsyncMock()
+
+    mock_github = _mock_client_for_cm(AsyncMock())
+
+    with (
+        patch("factory.nodes.pm_review.MeshWikiClient", return_value=mock_meshwiki),
+        patch("factory.nodes.pm_review.GitHubClient", return_value=mock_github),
+        patch(
+            "factory.nodes.pm_review.review_with_pm",
+            new=AsyncMock(
+                return_value={
+                    "decision": "approved",
+                    "feedback": "Code is clean, tests pass.",
+                }
+            ),
+        ),
+    ):
+        await pm_review_node(state)
+
+    # append_to_page should be called twice: once for the subtask page, once for
+    # the parent task page.
+    assert mock_meshwiki.append_to_page.await_count == 2
+
+    # The second call should target the parent task page.
+    parent_call = mock_meshwiki.append_to_page.call_args_list[1]
+    parent_page_arg = parent_call[0][0]
+    parent_content_arg = parent_call[0][1]
+
+    assert parent_page_arg == "Task_0042_test"
+    assert "### PM Review — Sub 01" in parent_content_arg
+    assert "✅ Approved" in parent_content_arg
+    assert "Code is clean, tests pass." in parent_content_arg
+
+
+@pytest.mark.asyncio
+async def test_pm_review_node_changes_requested_appends_to_parent_task_page() -> None:
+    """pm_review_node appends a rejection log entry to the parent task wiki page."""
+    review_subtask = _make_subtask(
+        wiki_page="Task_0042_Sub_02",
+        title="Sub 02",
+        status="review",
+        pr_number=11,
+    )
+    state = _make_state(
+        subtasks=[review_subtask],
+        _current_subtask_id=review_subtask["id"],
+        task_wiki_page="Task_0042_test",
+    )
+
+    mock_meshwiki = _mock_client_for_cm(AsyncMock())
+    mock_meshwiki.get_page = AsyncMock(return_value={"content": "existing content"})
+    mock_meshwiki.append_to_page = AsyncMock()
+    mock_meshwiki.transition_task = AsyncMock(return_value={})
+
+    mock_github = _mock_client_for_cm(AsyncMock())
+
+    with (
+        patch("factory.nodes.pm_review.MeshWikiClient", return_value=mock_meshwiki),
+        patch("factory.nodes.pm_review.GitHubClient", return_value=mock_github),
+        patch(
+            "factory.nodes.pm_review.review_with_pm",
+            new=AsyncMock(
+                return_value={
+                    "decision": "changes_requested",
+                    "feedback": "Missing error handling for the 404 case.",
+                }
+            ),
+        ),
+    ):
+        await pm_review_node(state)
+
+    # append_to_page should be called twice: once for the subtask page, once for
+    # the parent task page.
+    assert mock_meshwiki.append_to_page.await_count == 2
+
+    # The second call should target the parent task page.
+    parent_call = mock_meshwiki.append_to_page.call_args_list[1]
+    parent_page_arg = parent_call[0][0]
+    parent_content_arg = parent_call[0][1]
+
+    assert parent_page_arg == "Task_0042_test"
+    assert "### PM Review — Sub 02" in parent_content_arg
+    assert "❌ Changes requested" in parent_content_arg
+    assert "Missing error handling for the 404 case." in parent_content_arg
+    assert "**Attempt:**" in parent_content_arg
+
+
+@pytest.mark.asyncio
+async def test_pm_review_node_parent_append_failure_does_not_block() -> None:
+    """pm_review_node swallows errors from appending to the parent task page."""
+    review_subtask = _make_subtask(
+        wiki_page="Task_0042_Sub_01",
+        title="Sub 01",
+        status="review",
+        pr_number=10,
+    )
+    state = _make_state(
+        subtasks=[review_subtask],
+        _current_subtask_id=review_subtask["id"],
+        task_wiki_page="Task_0042_test",
+    )
+
+    call_count = 0
+
+    async def _append_side_effect(
+        page_name: str, content: str, **_kwargs: object
+    ) -> None:
+        nonlocal call_count
+        call_count += 1
+        if page_name == "Task_0042_test":
+            raise RuntimeError("wiki unavailable")
+
+    mock_meshwiki = _mock_client_for_cm(AsyncMock())
+    mock_meshwiki.get_page = AsyncMock(return_value={"content": "existing content"})
+    mock_meshwiki.append_to_page = AsyncMock(side_effect=_append_side_effect)
+
+    mock_github = _mock_client_for_cm(AsyncMock())
+
+    with (
+        patch("factory.nodes.pm_review.MeshWikiClient", return_value=mock_meshwiki),
+        patch("factory.nodes.pm_review.GitHubClient", return_value=mock_github),
+        patch(
+            "factory.nodes.pm_review.review_with_pm",
+            new=AsyncMock(return_value={"decision": "approved", "feedback": "LGTM"}),
+        ),
+    ):
+        # Should not raise even though appending to the parent page fails.
+        result = await pm_review_node(state)
+
+    assert result["subtasks"][0]["status"] == "merged"
+    # Both append calls were attempted (subtask page succeeded, parent page failed).
+    assert call_count == 2
 
 
 # ---------------------------------------------------------------------------
