@@ -116,6 +116,70 @@ async def task_intake_node(state: FactoryState) -> dict:
         skip_decomposition,
     )
 
+    if not skip_decomposition:
+        # Check for pre-seeded subtask pages (manually created before dispatch).
+        # If found, use them directly and skip PM decomposition.
+        async with MeshWikiClient() as mc:
+            pre_seeded = await mc.list_tasks(
+                parent_task=task_wiki_page, assignee="factory"
+            )
+        planned_subtasks = [
+            t for t in pre_seeded
+            if (t.get("metadata") or {}).get("status") == "planned"
+        ]
+        if planned_subtasks:
+            subtasks: list[SubTask] = []
+            for t_data in planned_subtasks:
+                t_meta = t_data.get("metadata") or {}
+                t_name: str = t_data["name"]
+                async with MeshWikiClient() as mc:
+                    t_page = await mc.get_page(t_name)
+                t_content = (t_page or {}).get("content", "") if t_page else ""
+                t_acceptance = str(t_meta.get("acceptance_criteria") or "")
+                description = (
+                    f"{t_acceptance}\n\n{t_content}".strip()
+                    if t_acceptance
+                    else t_content
+                )
+                raw_budget = t_meta.get("token_budget")
+                token_budget: int = 50000
+                try:
+                    token_budget = int(raw_budget)
+                except (ValueError, TypeError, Exception):
+                    pass
+                st: SubTask = {
+                    "id": t_name,
+                    "wiki_page": t_name,
+                    "title": str(t_meta.get("title") or t_name),
+                    "description": description,
+                    "status": "pending",
+                    "attempt": 0,
+                    "max_attempts": 3,
+                    "error_log": [],
+                    "files_touched": [],
+                    "token_budget": token_budget,
+                    "tokens_used": 0,
+                    "assigned_grinder": None,
+                    "branch_name": None,
+                    "pr_url": None,
+                    "pr_number": None,
+                    "review_feedback": None,
+                }
+                subtasks.append(st)
+            logger.info(
+                "task_intake: found %d pre-seeded subtask(s) for '%s' — skipping PM decomposition",
+                len(subtasks),
+                title,
+            )
+            return {
+                "title": title,
+                "requirements": requirements,
+                "task_repo": task_repo,
+                "subtasks": subtasks,
+                "decomposition_approved": True,
+                "graph_status": "grinding",
+            }
+
     if skip_decomposition:
         # Build a single SubTask from the parent task itself
         files_touched: list[str] = []

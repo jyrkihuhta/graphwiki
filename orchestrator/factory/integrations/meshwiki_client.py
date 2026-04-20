@@ -149,6 +149,7 @@ class MeshWikiClient:
         status: str | None = None,
         assignee: str | None = None,
         repo: str | None = None,
+        parent_task: str | None = None,
     ) -> list[dict]:
         """List task pages with optional filters.
 
@@ -156,6 +157,7 @@ class MeshWikiClient:
             status: Filter by task status (e.g. ``"planned"``, ``"in_progress"``).
             assignee: Filter by assignee field (e.g. ``"factory"``).
             repo: Filter by repo frontmatter field (e.g. ``"owner/name"``).
+            parent_task: Filter by parent_task field (returns subtasks of an epic).
 
         Returns:
             List of task dicts with ``name`` and ``metadata`` keys.
@@ -168,6 +170,8 @@ class MeshWikiClient:
             params["assignee"] = assignee
         if repo is not None:
             params["repo"] = repo
+        if parent_task is not None:
+            params["parent_task"] = parent_task
         resp = await self._client.get(url, params=params)
         resp.raise_for_status()
         return resp.json()

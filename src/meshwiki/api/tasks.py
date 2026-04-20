@@ -39,7 +39,7 @@ async def list_tasks(
     for page in pages:
         extra = page.metadata.model_extra or {}
 
-        if extra.get("type") != "task":
+        if extra.get("type") not in ("task", "epic"):
             continue
         if status is not None and extra.get("status") != status:
             continue
