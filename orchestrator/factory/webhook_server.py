@@ -14,6 +14,7 @@ from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 
 from .bots.bookkeeper import BookkeeperBot
 from .bots.registry import BotRegistry
+from .bots.terminal_review import TerminalReviewBot
 from .config import get_settings, validate_settings
 from .graph import build_graph
 from .integrations.meshwiki_client import MeshWikiClient
@@ -137,6 +138,7 @@ async def lifespan(app: FastAPI):
     # Build bot registry
     bot_registry = BotRegistry()
     bot_registry.register(BookkeeperBot())
+    bot_registry.register(TerminalReviewBot())
     app.state.bot_registry = bot_registry
 
     async with AsyncSqliteSaver.from_conn_string(settings.checkpoint_db) as saver:

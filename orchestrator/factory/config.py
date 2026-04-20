@@ -72,6 +72,18 @@ class Settings(BaseSettings):
     bookkeeper_stale_hours: float = (
         2.0  # FACTORY_BOOKKEEPER_STALE_HOURS — age threshold for stuck in_progress tasks
     )
+    terminal_log_max_chars: int = (
+        10000  # FACTORY_TERMINAL_LOG_MAX_CHARS — max chars to persist from terminal output
+    )
+    terminal_review_interval_seconds: int = (
+        3600  # FACTORY_TERMINAL_REVIEW_INTERVAL_SECONDS — how often the terminal review bot runs
+    )
+    terminal_review_batch_size: int = (
+        5  # FACTORY_TERMINAL_REVIEW_BATCH_SIZE — max pages to analyze per run
+    )
+    terminal_review_model: str = (
+        "claude-haiku-4-5-20251001"  # FACTORY_TERMINAL_REVIEW_MODEL — LLM model for analysis
+    )
 
     model_config = SettingsConfigDict(env_prefix="FACTORY_")
 

@@ -498,6 +498,83 @@ class GrinderToolExecutor:
         return f"Task {page_name} transitioned to {status}"
 
 
+def _strip_ansi(text: str) -> str:
+    """Remove ANSI colour/escape codes from *text*.
+
+    Uses a simple regex so no extra dependencies are required.
+
+    Args:
+        text: Raw terminal text, possibly containing ANSI escape sequences.
+
+    Returns:
+        Text with ANSI codes removed.
+    """
+    import re as _re
+
+    return _re.sub(r"\x1b\[[0-9;]*[A-Za-z]", "", text)
+
+
+def _truncate_log(text: str, max_chars: int) -> str:
+    """Return the last *max_chars* characters of *text*.
+
+    Args:
+        text: Full terminal log text.
+        max_chars: Maximum number of characters to keep (tail of the log).
+
+    Returns:
+        Truncated text (last ``max_chars`` characters), or the full text if
+        it is already shorter.
+    """
+    if max_chars <= 0:
+        return ""
+    if len(text) <= max_chars:
+        return text
+    return text[-max_chars:]
+
+
+async def _persist_terminal_log(
+    meshwiki_client: "MeshWikiClient",
+    wiki_page: str,
+    raw_output: str,
+    max_chars: int,
+) -> None:
+    """Append a collapsible terminal log block to the subtask wiki page.
+
+    This is fire-and-forget — any exception is logged but never re-raised so
+    that a wiki write failure cannot block the grinder.
+
+    Args:
+        meshwiki_client: Async client for the MeshWiki JSON API.
+        wiki_page: Name of the subtask wiki page to append to.
+        raw_output: Raw PTY/terminal output (may contain ANSI codes).
+        max_chars: Maximum number of characters to keep from the tail of the log.
+    """
+    try:
+        clean = _strip_ansi(raw_output)
+        truncated = _truncate_log(clean, max_chars)
+        block = (
+            "## Terminal Log\n\n"
+            "<details>\n"
+            "<summary>Full terminal output (click to expand)</summary>\n\n"
+            "```\n"
+            f"{truncated}\n"
+            "```\n\n"
+            "</details>"
+        )
+        await meshwiki_client.append_to_page(wiki_page, block)
+        logger.info(
+            "grinder: persisted terminal log (%d chars) to %s",
+            len(truncated),
+            wiki_page,
+        )
+    except Exception as exc:
+        logger.warning(
+            "grinder: failed to persist terminal log to %s (non-critical): %s",
+            wiki_page,
+            exc,
+        )
+
+
 async def grind_subtask_e2b(
     state: FactoryState,
     subtask: SubTask,
@@ -598,6 +675,8 @@ async def grind_subtask_e2b(
     branch_name = f"factory/{subtask['id']}"
     status = "failed"
     sandbox_cost: float = 0.0
+    _pty_chunks: list[str] = []
+    wiki_page: str = subtask["wiki_page"]
 
     # Expose E2B_API_KEY so AsyncSandbox.create() picks it up from the environment
     os.environ["E2B_API_KEY"] = settings.e2b_api_key
@@ -633,8 +712,6 @@ async def grind_subtask_e2b(
         # Bootstrap commands use on_stdout/on_stderr (plain-text lines).
         # Kilo runs inside a PTY; on_data delivers raw terminal bytes (ANSI etc.).
 
-        wiki_page = subtask["wiki_page"]
-
         async def _on_stdout(line: str) -> None:
             await meshwiki_client.relay_terminal(wiki_page, line + "\r\n")
 
@@ -644,9 +721,7 @@ async def grind_subtask_e2b(
                 wiki_page, f"\x1b[33m{line}\x1b[0m\r\n"
             )
 
-        # Accumulate raw PTY output so we can extract the PR URL afterwards.
-        _pty_chunks: list[str] = []
-
+        # _pty_chunks is initialised before the try block so it is always available.
         async def _on_pty_data(data: bytes) -> None:
             text = data.decode("utf-8", errors="replace")
             _pty_chunks.append(text)
@@ -764,6 +839,19 @@ async def grind_subtask_e2b(
                 await sbx.kill()
             except Exception:
                 pass
+
+    # Persist terminal log to the subtask wiki page (fire-and-forget).
+    raw_pty = "".join(_pty_chunks)
+    terminal_log_text = _truncate_log(
+        _strip_ansi(raw_pty), settings.terminal_log_max_chars
+    )
+    subtask["terminal_log"] = terminal_log_text
+    await _persist_terminal_log(
+        meshwiki_client,
+        wiki_page,
+        raw_pty,
+        settings.terminal_log_max_chars,
+    )
 
     subtask.update(
         {

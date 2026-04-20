@@ -572,6 +572,7 @@ async def test_grind_subtask_e2b_extracts_pr_url() -> None:
         github_repo="owner/repo",
         minimax_api_key="mm-test",
         grinder_model="MiniMax-M2.7",
+        terminal_log_max_chars=10000,
     )
 
     with patch("factory.agents.grinder_agent.get_settings", return_value=mock_settings):
@@ -603,6 +604,7 @@ async def test_grind_subtask_e2b_no_pr_url_fails() -> None:
         github_repo="owner/repo",
         minimax_api_key="mm-test",
         grinder_model="MiniMax-M2.7",
+        terminal_log_max_chars=10000,
     )
 
     with patch("factory.agents.grinder_agent.get_settings", return_value=mock_settings):
@@ -629,6 +631,7 @@ async def test_grind_subtask_e2b_sandbox_error() -> None:
         github_repo="owner/repo",
         minimax_api_key="mm-test",
         grinder_model="MiniMax-M2.7",
+        terminal_log_max_chars=10000,
     )
 
     with patch("factory.agents.grinder_agent.get_settings", return_value=mock_settings):
