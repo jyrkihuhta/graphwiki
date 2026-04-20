@@ -740,8 +740,9 @@ async def grind_subtask_e2b(
             on_stderr=_on_stderr,
         )
 
-        # Clone repo (shallow clone of the base branch so grinders start from the latest work)
-        repo = settings.github_repo
+        # Clone repo — prefer task_repo from state (set by task_intake from `repo:` frontmatter),
+        # fall back to FACTORY_GITHUB_REPO for backwards compatibility with existing tasks.
+        repo = state.get("task_repo") or settings.github_repo
         clone_url = (
             f"https://x-access-token:{settings.github_token}@github.com/{repo}.git"
         )

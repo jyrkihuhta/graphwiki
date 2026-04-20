@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 
+from ..config import get_settings
 from ..integrations.meshwiki_client import MeshWikiClient
 from ..state import FactoryState, SubTask
 
@@ -98,6 +99,13 @@ async def task_intake_node(state: FactoryState) -> dict:
     title: str = metadata.get("title", task_wiki_page)
     requirements: str = page.get("content", "")
 
+    # Resolve target repo — prefer `repo:` frontmatter, fall back to FACTORY_DEFAULT_REPO
+    # then FACTORY_GITHUB_REPO so existing tasks without the field keep working.
+    settings = get_settings()
+    task_repo: str = (
+        metadata.get("repo") or settings.default_repo or settings.github_repo
+    )
+
     # Normalise: metadata values from YAML may come back as booleans or strings
     raw_skip = metadata.get("skip_decomposition", False)
     skip_decomposition: bool = raw_skip is True or str(raw_skip).lower() == "true"
@@ -147,6 +155,7 @@ async def task_intake_node(state: FactoryState) -> dict:
         return {
             "title": title,
             "requirements": requirements,
+            "task_repo": task_repo,
             "subtasks": [subtask],
             "decomposition_approved": True,
             "graph_status": "grinding",
@@ -155,5 +164,6 @@ async def task_intake_node(state: FactoryState) -> dict:
     return {
         "title": title,
         "requirements": requirements,
+        "task_repo": task_repo,
         "graph_status": "decomposing",
     }

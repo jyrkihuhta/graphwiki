@@ -29,6 +29,7 @@ async def list_tasks(
     assignee: str | None = None,
     parent_task: str | None = None,
     priority: str | None = None,
+    repo: str | None = None,
     storage: FileStorage = Depends(get_storage),
 ) -> list[dict]:
     """List task pages with optional filters."""
@@ -47,6 +48,8 @@ async def list_tasks(
         if parent_task is not None and extra.get("parent_task") != parent_task:
             continue
         if priority is not None and extra.get("priority") != priority:
+            continue
+        if repo is not None and extra.get("repo") != repo:
             continue
 
         results.append(

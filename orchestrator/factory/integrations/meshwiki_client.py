@@ -144,16 +144,30 @@ class MeshWikiClient:
         except Exception as exc:
             logger.debug("terminal relay failed (non-critical): %s", exc)
 
-    async def list_tasks(self, status: str | None = None) -> list[dict]:
-        """
-        List task pages, optionally filtered by status.
+    async def list_tasks(
+        self,
+        status: str | None = None,
+        assignee: str | None = None,
+        repo: str | None = None,
+    ) -> list[dict]:
+        """List task pages with optional filters.
 
-        Returns a list of task dicts.
+        Args:
+            status: Filter by task status (e.g. ``"planned"``, ``"in_progress"``).
+            assignee: Filter by assignee field (e.g. ``"factory"``).
+            repo: Filter by repo frontmatter field (e.g. ``"owner/name"``).
+
+        Returns:
+            List of task dicts with ``name`` and ``metadata`` keys.
         """
         url = f"{self._base_url}/api/v1/tasks"
         params: dict[str, str] = {}
         if status is not None:
             params["status"] = status
+        if assignee is not None:
+            params["assignee"] = assignee
+        if repo is not None:
+            params["repo"] = repo
         resp = await self._client.get(url, params=params)
         resp.raise_for_status()
         return resp.json()

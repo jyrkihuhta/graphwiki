@@ -128,6 +128,10 @@ class FactoryState(TypedDict):
     error: str | None
     escalation_decision: Literal["retry", "redecompose", "abandon"] | None
 
+    # Target repo for git clone — read from task frontmatter `repo:` field; falls
+    # back to FACTORY_GITHUB_REPO when absent.  Set once by task_intake_node.
+    task_repo: str | None
+
     # Per-branch routing (ephemeral — set by Send() and echoed by grind/pm_review)
     # Used by route_after_grinding and route_after_pm_review to identify which
     # subtask this branch is operating on.  Not a persistent field; each branch

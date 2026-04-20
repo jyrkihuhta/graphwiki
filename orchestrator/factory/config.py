@@ -84,6 +84,21 @@ class Settings(BaseSettings):
     terminal_review_model: str = (
         "claude-haiku-4-5-20251001"  # FACTORY_TERMINAL_REVIEW_MODEL — LLM model for analysis
     )
+    scheduler_enabled: bool = (
+        False  # FACTORY_SCHEDULER_ENABLED — enable autonomous backlog scheduler
+    )
+    scheduler_interval_seconds: int = (
+        60  # FACTORY_SCHEDULER_INTERVAL_SECONDS — scheduler tick cadence
+    )
+    max_concurrent_parent_tasks: int = (
+        3  # FACTORY_MAX_CONCURRENT_PARENT_TASKS — global cap across all repos
+    )
+    minimax_token_threshold: int = (
+        0  # FACTORY_MINIMAX_TOKEN_THRESHOLD — pause dispatch below this remaining-token count; 0=disabled
+    )
+    default_repo: str = (
+        ""  # FACTORY_DEFAULT_REPO — fallback repo when task has no `repo:` frontmatter field
+    )
 
     model_config = SettingsConfigDict(env_prefix="FACTORY_")
 
