@@ -333,6 +333,36 @@ async def receive_webhook(
         )
         return {"status": "resumed"}
 
+    if event == "task.rework":
+        # CI fixer bot detected a failure and transitioned the task back to
+        # in_progress. Resume the graph so the PM re-dispatches the grinder
+        # with the CI failure context from the wiki page.
+        if data.get("parent_task"):
+            logger.debug(
+                "webhook: ignoring task.rework for subtask %s (parent_task=%s)",
+                page_name,
+                data["parent_task"],
+            )
+            return {"status": "ignored", "reason": "subtask managed by parent graph"}
+        graph = request.app.state.graph
+        config = {"configurable": {"thread_id": page_name}}
+        asyncio.create_task(
+            graph.ainvoke(
+                {
+                    "human_approval_response": "changes_requested",
+                    "human_feedback": (
+                        "CI failure detected on the PR. "
+                        "See the ## CI Failure section on the wiki task page for "
+                        "root cause and suggested fix, then push a corrected commit."
+                    ),
+                },
+                config=config,
+            ),
+            name=f"graph:{page_name}:rework",
+        )
+        logger.info("webhook: resuming graph for CI rework on %s", page_name)
+        return {"status": "rework"}
+
     if event == "task.pr_merged":
         # The GitHub→MeshWiki→orchestrator loop completes here.
         # The grind node will have already been notified; this event is

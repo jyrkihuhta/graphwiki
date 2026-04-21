@@ -116,6 +116,7 @@ async def test_find_candidates_returns_valid_entry():
     assert result[0]["task_name"] == "TaskOK"
     assert result[0]["pr_number"] == 7
     assert result[0]["attempts"] == 1
+    assert result[0]["has_parent"] is False
 
 
 # ---------------------------------------------------------------------------
@@ -134,7 +135,7 @@ async def test_process_skips_when_no_failed_checks():
     )
     anthropic_client = AsyncMock()
 
-    item = {"task_name": "MyTask", "pr_number": 1, "attempts": 0}
+    item = {"task_name": "MyTask", "pr_number": 1, "attempts": 0, "has_parent": False}
     acted = await bot._process(item, wiki, gh, anthropic_client)
     assert acted is False
     anthropic_client.messages.create.assert_not_called()
@@ -178,7 +179,8 @@ async def test_process_posts_comment_and_annotates_wiki():
     anthropic_client = AsyncMock()
     anthropic_client.messages.create = AsyncMock(return_value=mock_resp)
 
-    item = {"task_name": "MyTask", "pr_number": 5, "attempts": 0}
+    wiki.transition_task = AsyncMock()
+    item = {"task_name": "MyTask", "pr_number": 5, "attempts": 0, "has_parent": False}
     acted = await bot._process(item, wiki, gh, anthropic_client)
 
     assert acted is True
@@ -190,3 +192,72 @@ async def test_process_posts_comment_and_annotates_wiki():
     wiki.append_to_page.assert_awaited_once()
     kwargs = wiki.append_to_page.call_args
     assert kwargs[1]["frontmatter_updates"]["ci_fix_attempts"] == 1
+
+    # retryable + first attempt + standalone → rework transition
+    wiki.transition_task.assert_awaited_once_with("MyTask", "in_progress")
+
+
+@pytest.mark.asyncio
+async def test_process_no_rework_on_last_attempt():
+    bot = CIFixerBot(interval_seconds=120)
+    wiki = AsyncMock()
+    wiki.append_to_page = AsyncMock()
+    wiki.transition_task = AsyncMock()
+    gh = AsyncMock()
+    gh.get_pr = AsyncMock(return_value={"head": {"sha": "deadbeef"}})
+    gh.get_check_runs = AsyncMock(
+        return_value=[
+            {
+                "conclusion": "failure",
+                "name": "Python tests",
+                "details_url": "",
+                "output": {"title": "err", "summary": "fail", "text": ""},
+            }
+        ]
+    )
+    gh.create_pr_comment = AsyncMock()
+    mock_resp = MagicMock()
+    mock_resp.content = [MagicMock(text=(
+        "CATEGORY: import_error\nRETRYABLE: yes\n"
+        "ROOT_CAUSE: x\nSUGGESTED_FIX: y\n"
+    ))]
+    anthropic_client = AsyncMock()
+    anthropic_client.messages.create = AsyncMock(return_value=mock_resp)
+
+    # attempts=1 == max_attempts-1 (cap=2) → last attempt, no transition
+    item = {"task_name": "MyTask", "pr_number": 5, "attempts": 1, "has_parent": False}
+    await bot._process(item, wiki, gh, anthropic_client)
+    wiki.transition_task.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_process_no_rework_for_subtask():
+    bot = CIFixerBot(interval_seconds=120)
+    wiki = AsyncMock()
+    wiki.append_to_page = AsyncMock()
+    wiki.transition_task = AsyncMock()
+    gh = AsyncMock()
+    gh.get_pr = AsyncMock(return_value={"head": {"sha": "deadbeef"}})
+    gh.get_check_runs = AsyncMock(
+        return_value=[
+            {
+                "conclusion": "failure",
+                "name": "Python tests",
+                "details_url": "",
+                "output": {"title": "err", "summary": "fail", "text": ""},
+            }
+        ]
+    )
+    gh.create_pr_comment = AsyncMock()
+    mock_resp = MagicMock()
+    mock_resp.content = [MagicMock(text=(
+        "CATEGORY: import_error\nRETRYABLE: yes\n"
+        "ROOT_CAUSE: x\nSUGGESTED_FIX: y\n"
+    ))]
+    anthropic_client = AsyncMock()
+    anthropic_client.messages.create = AsyncMock(return_value=mock_resp)
+
+    # has_parent=True → subtask, no rework transition
+    item = {"task_name": "EpicTask", "pr_number": 9, "attempts": 0, "has_parent": True}
+    await bot._process(item, wiki, gh, anthropic_client)
+    wiki.transition_task.assert_not_called()

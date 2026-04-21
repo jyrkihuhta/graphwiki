@@ -138,8 +138,14 @@ class CIFixerBot(BaseBot):
             if attempts >= self._max_attempts:
                 logger.debug("ci-fixer: %s reached max attempts (%d) — skip", name, attempts)
                 continue
+            has_parent = bool(meta.get("parent_task"))
             candidates.append(
-                {"task_name": name, "pr_number": pr_number, "attempts": attempts}
+                {
+                    "task_name": name,
+                    "pr_number": pr_number,
+                    "attempts": attempts,
+                    "has_parent": has_parent,
+                }
             )
         return candidates
 
@@ -190,13 +196,25 @@ class CIFixerBot(BaseBot):
         await self._post_pr_comment(gh, pr_number, check_name, analysis, failure_text)
         await self._annotate_wiki_page(wiki, task_name, item["attempts"], check_name, analysis)
 
+        retryable = analysis.get("retryable") == "yes"
+        is_last_attempt = item["attempts"] >= self._max_attempts - 1
+        is_standalone = not item.get("has_parent")
+
+        if retryable and not is_last_attempt and is_standalone:
+            try:
+                await wiki.transition_task(task_name, "in_progress")
+                logger.info("ci-fixer: transitioned %s → in_progress for rework", task_name)
+            except Exception as exc:
+                logger.warning("ci-fixer: could not transition %s for rework: %s", task_name, exc)
+
         logger.info(
-            "ci-fixer: annotated %s (pr=#%d check=%r category=%s retryable=%s)",
+            "ci-fixer: annotated %s (pr=#%d check=%r category=%s retryable=%s rework=%s)",
             task_name,
             pr_number,
             check_name,
             analysis.get("category", "?"),
             analysis.get("retryable", "?"),
+            retryable and not is_last_attempt and is_standalone,
         )
         return True
 
