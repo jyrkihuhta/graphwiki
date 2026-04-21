@@ -44,3 +44,7 @@ class BotRegistry:
         for bot in self._bots:
             await bot.stop()
         logger.info("registry: all bots stopped")
+
+    def get_status(self) -> list[dict]:
+        """Return status snapshots for all registered bots."""
+        return [bot.get_status() for bot in self._bots]

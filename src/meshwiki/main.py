@@ -1005,6 +1005,28 @@ async def factory_live(request: Request):
     )
 
 
+@app.get("/api/factory/status")
+async def factory_status_proxy():
+    """Proxy the orchestrator /status endpoint for the dashboard."""
+    if not settings.factory_enabled or not settings.factory_webhook_url:
+        raise HTTPException(status_code=404, detail="Factory not enabled")
+    import httpx
+
+    orchestrator_base = settings.factory_webhook_url.removesuffix("/webhook")
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.get(f"{orchestrator_base}/status")
+            resp.raise_for_status()
+            return resp.json()
+    except Exception:
+        return {
+            "bots": [],
+            "active_graphs": [],
+            "resources": {},
+            "error": "orchestrator unreachable",
+        }
+
+
 @app.get("/api/graph")
 async def api_graph():
     """Return full graph as JSON for visualization."""

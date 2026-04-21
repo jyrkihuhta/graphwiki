@@ -1,22 +1,14 @@
 (function () {
   "use strict";
 
-  const POLL_MS = 5000;
-  const MAX_FEED = 20;
-
-  const STAGE_COLORS = {
-    planned:     "#6366f1",
-    in_progress: "#0ea5e9",
-    review:      "#f59e0b",
-    merged:      "#10b981",
-    failed:      "#ef4444",
-    rejected:    "#dc2626",
-  };
+  const TASKS_POLL_MS  = 5000;
+  const STATUS_POLL_MS = 8000;
+  const MAX_ACTIVITY   = 30;
 
   // ── State ────────────────────────────────────────────────────────────────
 
-  let feedItems = [];
-  let prevByName = {};
+  var prevByName   = {};
+  var activityLog  = [];
 
   // ── DOM helpers ───────────────────────────────────────────────────────────
 
@@ -26,12 +18,25 @@
     return e;
   }
 
-  function stageTasksEl(id)  { return document.getElementById("fc-tasks-" + id); }
-  function badgeEl(id)       { return document.getElementById("fc-badge-" + id); }
+  function setText(id, text) {
+    var e = document.getElementById(id);
+    if (e) e.textContent = text;
+  }
 
-  // ── Data fetching ─────────────────────────────────────────────────────────
+  function setBody(id, node) {
+    var container = document.getElementById(id);
+    if (!container) return;
+    while (container.firstChild) container.removeChild(container.firstChild);
+    if (Array.isArray(node)) {
+      node.forEach(function (n) { container.appendChild(n); });
+    } else {
+      container.appendChild(node);
+    }
+  }
 
-  function poll() {
+  // ── Tasks API poll ────────────────────────────────────────────────────────
+
+  function pollTasks() {
     var statuses = ["planned", "in_progress", "review", "merged", "failed", "rejected"];
     Promise.all(
       statuses.map(function (s) {
@@ -43,16 +48,14 @@
       var byStatus = {};
       statuses.forEach(function (s, i) { byStatus[s] = results[i] || []; });
       detectTransitions(byStatus);
-      render(byStatus);
-      drawPaths();
+      renderPipeline(byStatus);
       var updEl = document.getElementById("fc-updated");
       if (updEl) {
         var now = new Date();
-        updEl.textContent =
-          "Updated " + now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+        updEl.textContent = "Updated " + now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
       }
     }).catch(function () {}).finally(function () {
-      setTimeout(poll, POLL_MS);
+      setTimeout(pollTasks, TASKS_POLL_MS);
     });
   }
 
@@ -63,245 +66,293 @@
     });
     Object.keys(nextByName).forEach(function (name) {
       var status = nextByName[name];
-      var prev = prevByName[name];
+      var prev   = prevByName[name];
       if (prev !== undefined && prev !== status) {
-        feedItems.unshift({ name: name, from: prev, to: status, time: Date.now() });
+        pushActivity({ name: name, from: prev, to: status, time: Date.now() });
       } else if (prev === undefined) {
-        feedItems.unshift({ name: name, from: null, to: status, time: Date.now() });
+        pushActivity({ name: name, from: null, to: status, time: Date.now() });
       }
     });
-    if (feedItems.length > MAX_FEED) feedItems.length = MAX_FEED;
     prevByName = nextByName;
   }
 
-  // ── Rendering ─────────────────────────────────────────────────────────────
+  function pushActivity(item) {
+    activityLog.unshift(item);
+    if (activityLog.length > MAX_ACTIVITY) activityLog.length = MAX_ACTIVITY;
+    renderActivity();
+  }
+
+  // ── Pipeline bar ──────────────────────────────────────────────────────────
+
+  function renderPipeline(byStatus) {
+    setText("fc-count-planned",    String((byStatus.planned    || []).length));
+    setText("fc-count-in_progress",String((byStatus.in_progress|| []).length));
+    setText("fc-count-review",     String((byStatus.review     || []).length));
+    setText("fc-count-merged",     String((byStatus.merged     || []).length));
+    setText("fc-count-failed",     String((byStatus.failed     || []).length));
+    setText("fc-count-rejected",   String((byStatus.rejected   || []).length));
+
+    var progressStage = document.getElementById("fc-pipe-progress");
+    if (progressStage) {
+      var active = (byStatus.in_progress || []).length > 0;
+      progressStage.classList.toggle("fc-pipe-stage--pulsing", active);
+    }
+  }
+
+  // ── Orchestrator status poll ──────────────────────────────────────────────
+
+  function pollStatus() {
+    fetch("/api/factory/status")
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (data) {
+        if (!data) return;
+        renderGraphs(data.active_graphs || []);
+        renderBots(data.bots || []);
+        renderResources(data.resources || {});
+      })
+      .catch(function () {})
+      .finally(function () {
+        setTimeout(pollStatus, STATUS_POLL_MS);
+      });
+  }
+
+  // ── Active graphs panel ───────────────────────────────────────────────────
+
+  var GRAPH_STATUS_LABELS = {
+    intake:       "Intake",
+    decomposing:  "Decomposing",
+    dispatching:  "Dispatching",
+    grinding:     "Grinding",
+    reviewing:    "Reviewing",
+    completed:    "Completed",
+    failed:       "Failed",
+    escalated:    "Escalated",
+  };
+
+  function renderGraphs(graphs) {
+    setText("fc-graphs-badge", String(graphs.length));
+    if (!graphs.length) {
+      setBody("fc-graphs-body", makeEmpty("No active graphs"));
+      return;
+    }
+    setBody("fc-graphs-body", graphs.map(buildGraphRow));
+  }
+
+  function buildGraphRow(g) {
+    var row = el("div", "fc-graph-row");
+
+    var header = el("div", "fc-graph-header");
+    var titleEl = el("span", "fc-graph-title");
+    titleEl.textContent = truncate(g.title || g.thread_id, 36);
+    header.appendChild(titleEl);
+    var statusBadge = el("span", "fc-graph-status fc-graph-status--" + (g.graph_status || "unknown"));
+    statusBadge.textContent = GRAPH_STATUS_LABELS[g.graph_status] || g.graph_status;
+    header.appendChild(statusBadge);
+    row.appendChild(header);
+
+    var meta = el("div", "fc-graph-meta");
+
+    // Subtask progress bar
+    var total = g.subtasks_total || 0;
+    var done  = (g.subtasks_completed || 0) + (g.subtasks_failed || 0);
+    if (total > 0) {
+      var progressWrap = el("div", "fc-progress-wrap");
+      var bar = el("div", "fc-progress-bar");
+      var pct = Math.round((done / total) * 100);
+      bar.style.width = pct + "%";
+      progressWrap.appendChild(bar);
+      meta.appendChild(progressWrap);
+
+      var subtaskLabel = el("span", "fc-graph-stat");
+      subtaskLabel.textContent = done + "/" + total + " subtasks";
+      meta.appendChild(subtaskLabel);
+    }
+
+    if (g.active_grinders > 0) {
+      var grinderEl = el("span", "fc-graph-stat fc-graph-stat--active");
+      grinderEl.textContent = g.active_grinders + " grinder" + (g.active_grinders !== 1 ? "s" : "");
+      meta.appendChild(grinderEl);
+    }
+
+    if (g.cost_usd > 0) {
+      var costEl = el("span", "fc-graph-stat fc-graph-stat--cost");
+      costEl.textContent = "$" + g.cost_usd.toFixed(3);
+      meta.appendChild(costEl);
+    }
+
+    row.appendChild(meta);
+    return row;
+  }
+
+  // ── Bots panel ────────────────────────────────────────────────────────────
+
+  function renderBots(bots) {
+    setText("fc-bots-badge", String(bots.length));
+    if (!bots.length) {
+      setBody("fc-bots-body", makeEmpty("No bots registered"));
+      return;
+    }
+    setBody("fc-bots-body", bots.map(buildBotRow));
+  }
+
+  function buildBotRow(bot) {
+    var row = el("div", "fc-bot-row");
+
+    var header = el("div", "fc-bot-header");
+    var dot = el("span", "fc-bot-dot " + (bot.running ? "fc-bot-dot--running" : "fc-bot-dot--stopped"));
+    header.appendChild(dot);
+    var nameEl = el("span", "fc-bot-name");
+    nameEl.textContent = bot.name;
+    header.appendChild(nameEl);
+    if (bot.last_ran_at) {
+      var ago = el("span", "fc-bot-ago");
+      ago.textContent = timeAgo(bot.last_ran_at * 1000);
+      header.appendChild(ago);
+    }
+    row.appendChild(header);
+
+    var stats = el("div", "fc-bot-stats");
+
+    var runsEl = el("span", "fc-bot-stat");
+    runsEl.textContent = bot.total_runs + " runs";
+    stats.appendChild(runsEl);
+
+    var actionsEl = el("span", "fc-bot-stat");
+    actionsEl.textContent = bot.total_actions + " actions";
+    stats.appendChild(actionsEl);
+
+    if (bot.last_details) {
+      var detailEl = el("span", "fc-bot-detail");
+      detailEl.textContent = truncate(bot.last_details, 48);
+      stats.appendChild(detailEl);
+    }
+
+    row.appendChild(stats);
+    return row;
+  }
+
+  // ── Resources panel ───────────────────────────────────────────────────────
+
+  function renderResources(res) {
+    if (!Object.keys(res).length) {
+      setBody("fc-resources-body", makeEmpty("Orchestrator unreachable"));
+      return;
+    }
+
+    var rows = [
+      buildResourceRow("Parent tasks",    res.active_parent_tasks,     res.max_concurrent_parent_tasks),
+      buildResourceRow("Grinders",        res.active_grinders,         res.max_concurrent_sandboxes),
+      buildResourceDollar("Session cost", res.total_cost_usd),
+    ];
+
+    setBody("fc-resources-body", rows);
+  }
+
+  function buildResourceRow(label, current, cap) {
+    var row = el("div", "fc-res-row");
+    var labelEl = el("span", "fc-res-label");
+    labelEl.textContent = label;
+    row.appendChild(labelEl);
+
+    var right = el("span", "fc-res-right");
+    var valEl = el("span", "fc-res-value");
+    valEl.textContent = (current !== null && current !== undefined) ? String(current) : "—";
+    right.appendChild(valEl);
+
+    if (cap !== null && cap !== undefined) {
+      var capEl = el("span", "fc-res-cap");
+      capEl.textContent = "/ " + cap;
+      right.appendChild(capEl);
+
+      // Gauge bar
+      if (typeof current === "number" && current >= 0) {
+        var wrap = el("div", "fc-gauge-wrap");
+        var fill = el("div", "fc-gauge-fill");
+        var pct  = cap > 0 ? Math.min(100, Math.round((current / cap) * 100)) : 0;
+        fill.style.width = pct + "%";
+        if (pct >= 80) fill.classList.add("fc-gauge-fill--warn");
+        wrap.appendChild(fill);
+        row.appendChild(wrap);
+      }
+    }
+
+    row.appendChild(right);
+    return row;
+  }
+
+  function buildResourceDollar(label, value) {
+    var row = el("div", "fc-res-row");
+    var labelEl = el("span", "fc-res-label");
+    labelEl.textContent = label;
+    row.appendChild(labelEl);
+    var right = el("span", "fc-res-right");
+    var valEl = el("span", "fc-res-value");
+    valEl.textContent = (value !== null && value !== undefined) ? "$" + value.toFixed(4) : "—";
+    right.appendChild(valEl);
+    row.appendChild(right);
+    return row;
+  }
+
+  // ── Activity panel ────────────────────────────────────────────────────────
+
+  function renderActivity() {
+    if (!activityLog.length) {
+      setBody("fc-activity-body", makeEmpty("Watching for transitions…"));
+      return;
+    }
+    setBody("fc-activity-body", activityLog.map(buildActivityItem));
+  }
+
+  function buildActivityItem(item) {
+    var wrap = el("div", "fc-activity-item");
+
+    var nameEl = el("span", "fc-activity-name");
+    nameEl.textContent = truncate(item.name, 28);
+    wrap.appendChild(nameEl);
+
+    if (item.from) {
+      wrap.appendChild(buildStatusBadge(item.from));
+      var arr = el("span", "fc-activity-arrow");
+      arr.textContent = "→";
+      wrap.appendChild(arr);
+    }
+    wrap.appendChild(buildStatusBadge(item.to));
+
+    var ago = el("span", "fc-activity-ago");
+    ago.textContent = timeAgo(item.time);
+    wrap.appendChild(ago);
+
+    return wrap;
+  }
+
+  function buildStatusBadge(s) {
+    var b = el("span", "fc-status-badge fc-status-badge--" + s);
+    b.textContent = s.replace("_", " ");
+    return b;
+  }
+
+  // ── Utilities ─────────────────────────────────────────────────────────────
+
+  function truncate(str, max) {
+    return str.length > max ? str.slice(0, max - 1) + "…" : str;
+  }
 
   function timeAgo(ms) {
     var s = Math.floor((Date.now() - ms) / 1000);
-    if (s < 60) return "just now";
+    if (s < 5)    return "just now";
+    if (s < 60)   return s + "s ago";
     if (s < 3600) return Math.floor(s / 60) + "m ago";
     return Math.floor(s / 3600) + "h ago";
   }
 
-  function shortName(name) {
-    return name.length > 32 ? name.slice(0, 30) + "…" : name;
-  }
-
-  function buildTaskCard(task, status) {
-    var meta = task.metadata || {};
-    var card = el("div", "fc-card fc-card--" + status);
-    card.title = task.name;
-
-    var nameDiv = el("div", "fc-card-name");
-    nameDiv.textContent = shortName(task.name);
-    card.appendChild(nameDiv);
-
-    var metaDiv = el("div", "fc-card-meta");
-    var dot = el("span", "fc-card-dot");
-    var typeSpan = el("span");
-    typeSpan.textContent = meta.type === "epic" ? "epic" : meta.parent_task ? "subtask" : "task";
-    metaDiv.appendChild(dot);
-    metaDiv.appendChild(typeSpan);
-
-    if (meta.modified) {
-      var sep = el("span");
-      sep.textContent = "·";
-      var timeSpan = el("span");
-      timeSpan.textContent = new Date(meta.modified).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-      metaDiv.appendChild(sep);
-      metaDiv.appendChild(timeSpan);
-    }
-    card.appendChild(metaDiv);
-    return card;
-  }
-
-  function buildEmptyMsg(text) {
+  function makeEmpty(text) {
     var d = el("div", "fc-empty");
     d.textContent = text;
     return d;
   }
 
-  function buildOutcomeRow(cls, label, count) {
-    var row = el("div", "fc-outcome-row fc-outcome-row--" + cls);
-    var countEl = el("div", "fc-outcome-count");
-    countEl.textContent = String(count);
-    var labelEl = el("div", "fc-outcome-label");
-    labelEl.textContent = label;
-    row.appendChild(countEl);
-    row.appendChild(labelEl);
-    return row;
-  }
-
-  function buildStatusBadge(s) {
-    var b = el("span", "fc-feed-status fc-feed-status--" + s);
-    b.textContent = s.replace("_", " ");
-    return b;
-  }
-
-  function render(byStatus) {
-    var planned    = byStatus.planned     || [];
-    var inProgress = byStatus.in_progress || [];
-    var review     = byStatus.review      || [];
-    var merged     = byStatus.merged      || [];
-    var failed     = byStatus.failed      || [];
-    var rejected   = byStatus.rejected    || [];
-
-    // Backlog
-    setStage("planned", planned.length ? planned.map(function (t) {
-      return buildTaskCard(t, "planned");
-    }) : [buildEmptyMsg("No tasks queued")]);
-
-    // In Progress — epics first
-    var ordered = inProgress
-      .filter(function (t) { return (t.metadata || {}).type === "epic"; })
-      .concat(inProgress.filter(function (t) { return (t.metadata || {}).type !== "epic"; }));
-    setStage("in_progress", ordered.length ? ordered.map(function (t) {
-      return buildTaskCard(t, "in_progress");
-    }) : [buildEmptyMsg("Idle")]);
-
-    // Review
-    setStage("review", review.length ? review.map(function (t) {
-      return buildTaskCard(t, "review");
-    }) : [buildEmptyMsg("No open PRs")]);
-
-    // Outcomes
-    setStage("outcomes", [
-      buildOutcomeRow("merged",   "✓ Merged",    merged.length),
-      buildOutcomeRow("review",   "◎ Awaiting",  review.length),
-      buildOutcomeRow("failed",   "✗ Failed",    failed.length),
-      buildOutcomeRow("rejected", "⊘ Rejected",  rejected.length),
-    ]);
-
-    setBadge("planned",    planned.length);
-    setBadge("in_progress",inProgress.length);
-    setBadge("review",     review.length);
-    setBadge("outcomes",   merged.length + failed.length + rejected.length);
-
-    var progressStage = document.getElementById("fc-stage-in_progress");
-    if (progressStage) {
-      progressStage.classList.toggle("fc-stage--active", inProgress.length > 0);
-    }
-
-    renderFeed();
-  }
-
-  function setStage(id, nodes) {
-    var container = stageTasksEl(id);
-    if (!container) return;
-    while (container.firstChild) container.removeChild(container.firstChild);
-    nodes.forEach(function (n) { container.appendChild(n); });
-  }
-
-  function setBadge(id, count) {
-    var b = badgeEl(id);
-    if (b) b.textContent = String(count);
-  }
-
-  function renderFeed() {
-    var container = document.getElementById("fc-feed-scroll");
-    if (!container) return;
-    while (container.firstChild) container.removeChild(container.firstChild);
-
-    if (!feedItems.length) {
-      var hint = el("span");
-      hint.style.cssText = "font-size:0.72rem;color:#475569";
-      hint.textContent = "Watching for transitions…";
-      container.appendChild(hint);
-      return;
-    }
-
-    feedItems.forEach(function (item) {
-      var wrap = el("div", "fc-feed-item");
-
-      var nameEl = el("span", "fc-feed-name");
-      nameEl.textContent = shortName(item.name);
-      wrap.appendChild(nameEl);
-
-      if (item.from) {
-        wrap.appendChild(buildStatusBadge(item.from));
-        var arr = el("span");
-        arr.textContent = " → ";
-        arr.style.color = "#475569";
-        wrap.appendChild(arr);
-      }
-      wrap.appendChild(buildStatusBadge(item.to));
-
-      var ago = el("span");
-      ago.style.cssText = "color:#334155;margin-left:0.25rem";
-      ago.textContent = timeAgo(item.time);
-      wrap.appendChild(ago);
-
-      container.appendChild(wrap);
-    });
-  }
-
-  // ── SVG paths ─────────────────────────────────────────────────────────────
-
-  var CONNECTIONS = [
-    ["fc-stage-planned",     "fc-stage-in_progress", STAGE_COLORS.planned],
-    ["fc-stage-in_progress", "fc-stage-review",      STAGE_COLORS.in_progress],
-    ["fc-stage-review",      "fc-stage-outcomes",    STAGE_COLORS.merged],
-  ];
-
-  function drawPaths() {
-    var svgEl = document.getElementById("fc-svg");
-    if (!svgEl) return;
-    var svgRect = svgEl.getBoundingClientRect();
-
-    // Build SVG markup for paths + particles using safe SVG DOM
-    while (svgEl.firstChild) svgEl.removeChild(svgEl.firstChild);
-
-    var NS = "http://www.w3.org/2000/svg";
-
-    CONNECTIONS.forEach(function (conn, idx) {
-      var fromEl = document.getElementById(conn[0]);
-      var toEl   = document.getElementById(conn[1]);
-      var color  = conn[2];
-      if (!fromEl || !toEl) return;
-
-      var fR = fromEl.getBoundingClientRect();
-      var tR = toEl.getBoundingClientRect();
-      var x1 = fR.right  - svgRect.left;
-      var y1 = fR.top + fR.height / 2 - svgRect.top;
-      var x2 = tR.left   - svgRect.left;
-      var y2 = tR.top + tR.height / 2 - svgRect.top;
-      var cx = (x1 + x2) / 2;
-
-      var pathId = "fc-conn-" + idx;
-      var path = document.createElementNS(NS, "path");
-      path.setAttribute("id", pathId);
-      path.setAttribute("class", "fc-path");
-      path.setAttribute("d", "M" + x1 + "," + y1 + " C" + cx + "," + y1 + " " + cx + "," + y2 + " " + x2 + "," + y2);
-      path.setAttribute("stroke", color);
-      path.setAttribute("stroke-width", "1.5");
-      svgEl.appendChild(path);
-
-      // Three staggered particles per connection
-      [0, 0.33, 0.66].forEach(function (offset, pi) {
-        var dur = (2.2 + pi * 0.4).toFixed(1);
-        var begin = (offset * parseFloat(dur)).toFixed(2);
-
-        var circle = document.createElementNS(NS, "circle");
-        circle.setAttribute("class", "fc-particle");
-        circle.setAttribute("r", "3");
-        circle.setAttribute("fill", color);
-
-        var motion = document.createElementNS(NS, "animateMotion");
-        motion.setAttribute("dur", dur + "s");
-        motion.setAttribute("begin", begin + "s");
-        motion.setAttribute("repeatCount", "indefinite");
-
-        var mpath = document.createElementNS(NS, "mpath");
-        mpath.setAttributeNS("http://www.w3.org/1999/xlink", "href", "#" + pathId);
-        motion.appendChild(mpath);
-        circle.appendChild(motion);
-        svgEl.appendChild(circle);
-      });
-    });
-  }
-
   // ── Init ──────────────────────────────────────────────────────────────────
 
-  window.addEventListener("resize", drawPaths);
-  poll();
+  pollTasks();
+  pollStatus();
 })();

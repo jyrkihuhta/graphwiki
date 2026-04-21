@@ -40,6 +40,10 @@ class BaseBot(ABC):
     def __init__(self) -> None:
         self._task: asyncio.Task | None = None
         self._stop_event = asyncio.Event()
+        self.total_runs: int = 0
+        self.total_actions: int = 0
+        self.last_result: BotResult | None = None
+        self._last_ran_wall: float | None = None
 
     @abstractmethod
     async def run(self) -> BotResult:
@@ -75,6 +79,10 @@ class BaseBot(ABC):
             try:
                 result = await self.run()
                 elapsed = time.monotonic() - started
+                self.total_runs += 1
+                self.total_actions += result.actions_taken
+                self.last_result = result
+                self._last_ran_wall = time.time()
                 logger.info(
                     "bot[%s]: ran in %.2fs — actions=%d errors=%d%s",
                     self.name,
@@ -106,3 +114,18 @@ class BaseBot(ABC):
             except asyncio.TimeoutError:
                 # Normal case: interval elapsed, go around again.
                 pass
+
+    def get_status(self) -> dict:
+        """Return a serialisable status snapshot for the dashboard."""
+        result = self.last_result
+        return {
+            "name": self.name,
+            "interval_seconds": self.interval_seconds,
+            "total_runs": self.total_runs,
+            "total_actions": self.total_actions,
+            "running": self._task is not None and not self._task.done(),
+            "last_ran_at": self._last_ran_wall,
+            "last_actions": result.actions_taken if result else None,
+            "last_errors": result.errors if result else [],
+            "last_details": result.details if result else "",
+        }

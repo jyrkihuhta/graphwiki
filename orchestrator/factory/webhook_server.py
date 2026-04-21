@@ -6,6 +6,7 @@ import asyncio
 import hashlib
 import hmac
 import logging
+import time
 from contextlib import asynccontextmanager
 from typing import Any
 
@@ -157,6 +158,8 @@ async def lifespan(app: FastAPI):
 
     async with AsyncSqliteSaver.from_conn_string(settings.checkpoint_db) as saver:
         app.state.graph = build_graph(saver)
+        app.state.saver = saver
+        app.state.settings = settings
         logger.info(
             "factory: graph initialised with SQLite checkpointer at %s",
             settings.checkpoint_db,
@@ -239,6 +242,84 @@ def _build_initial_state(page_name: str, data: dict[str, Any]) -> FactoryState:
 async def health() -> dict[str, str]:
     """Liveness probe."""
     return {"status": "ok"}
+
+
+@app.get("/status")
+async def status(request: Request) -> dict:
+    """Dashboard status: bots, active graph threads, resource usage."""
+    bot_registry: BotRegistry = request.app.state.bot_registry
+    graph = request.app.state.graph
+    settings = request.app.state.settings
+
+    # ── Active asyncio graph tasks ────────────────────────────────────────────
+    running_tasks = {
+        t.get_name(): t
+        for t in asyncio.all_tasks()
+        if t.get_name().startswith("graph:") and not t.done()
+    }
+    # Collect unique thread IDs — "graph:<page>" and "graph:<page>:resume" etc.
+    active_thread_ids: set[str] = set()
+    for task_name in running_tasks:
+        parts = task_name.split(":", 2)
+        if len(parts) >= 2:
+            active_thread_ids.add(parts[1])
+
+    # ── Read LangGraph state for each active thread ───────────────────────────
+    active_graphs: list[dict] = []
+    total_cost_usd: float = 0.0
+    total_grinders: int = 0
+
+    for thread_id in sorted(active_thread_ids):
+        try:
+            config = {"configurable": {"thread_id": thread_id}}
+            snapshot = await graph.aget_state(config)
+            if snapshot is None:
+                continue
+            v = snapshot.values
+            subtasks: list[dict] = list(v.get("subtasks") or [])
+            completed = list(v.get("completed_subtask_ids") or [])
+            failed = list(v.get("failed_subtask_ids") or [])
+            active_grinders: list[str] = list(v.get("active_grinders") or [])
+            cost: float = float(v.get("cost_usd") or 0.0)
+            total_cost_usd += cost
+            total_grinders += len(active_grinders)
+            active_graphs.append(
+                {
+                    "thread_id": thread_id,
+                    "title": v.get("title", thread_id),
+                    "graph_status": v.get("graph_status", "unknown"),
+                    "subtasks_total": len(subtasks),
+                    "subtasks_completed": len(completed),
+                    "subtasks_failed": len(failed),
+                    "active_grinders": len(active_grinders),
+                    "cost_usd": cost,
+                }
+            )
+        except Exception as exc:
+            logger.debug("status: could not read state for %s: %s", thread_id, exc)
+
+    # ── Resources ─────────────────────────────────────────────────────────────
+    resources = {
+        "max_concurrent_parent_tasks": settings.max_concurrent_parent_tasks,
+        "active_parent_tasks": len(active_thread_ids),
+        "active_grinders": total_grinders,
+        "max_concurrent_sandboxes": None,  # filled below
+        "total_cost_usd": round(total_cost_usd, 4),
+    }
+    # Pull sandbox cap from module-level constant
+    try:
+        from .config import FACTORY_MAX_CONCURRENT_SANDBOXES
+
+        resources["max_concurrent_sandboxes"] = FACTORY_MAX_CONCURRENT_SANDBOXES
+    except Exception:
+        resources["max_concurrent_sandboxes"] = None
+
+    return {
+        "bots": bot_registry.get_status(),
+        "active_graphs": active_graphs,
+        "resources": resources,
+        "generated_at": time.time(),
+    }
 
 
 @app.post("/webhook")
