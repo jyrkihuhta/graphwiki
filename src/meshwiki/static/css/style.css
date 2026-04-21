@@ -12,6 +12,8 @@
     --color-border: #e5e5e5;
     --color-danger: #dc3545;
     --color-danger-hover: #bb2d3b;
+    --color-warning: #f59e0b;
+    --color-success: #16a34a;
     --color-success-bg: #dcfce7;
     --color-success-text: #166534;
     --color-shadow: rgba(0, 0, 0, 0.1);
@@ -32,6 +34,8 @@
     --color-border: #3f3f46;
     --color-danger: #ef4444;
     --color-danger-hover: #dc2626;
+    --color-warning: #f59e0b;
+    --color-success: #16a34a;
     --color-success-bg: #064e3b;
     --color-success-text: #6ee7b7;
     --color-shadow: rgba(0, 0, 0, 0.4);
@@ -210,6 +214,44 @@ body {
     color: var(--color-text-muted);
     text-decoration: line-through;
     text-decoration-color: var(--color-border);
+}
+
+.task-status {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    margin-left: 6px;
+    flex-shrink: 0;
+    vertical-align: middle;
+}
+
+.task-status--in_progress {
+    background: var(--color-primary);
+    animation: task-status-pulse 1.2s ease-in-out infinite;
+}
+
+.task-status--review {
+    background: var(--color-warning);
+}
+
+.task-status--planned {
+    background: var(--color-text-muted);
+}
+
+.task-status--done,
+.task-status--merged {
+    background: var(--color-success);
+}
+
+.task-status--failed,
+.task-status--rejected {
+    background: var(--color-danger);
+}
+
+@keyframes task-status-pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.5; transform: scale(0.85); }
 }
 
 .page-tree-summary--section {
