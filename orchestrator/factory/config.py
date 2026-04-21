@@ -105,6 +105,18 @@ class Settings(BaseSettings):
     pm_openrouter_model: str = (
         "anthropic/claude-sonnet-4-5"  # FACTORY_PM_OPENROUTER_MODEL — model to use via OpenRouter
     )
+    ci_fixer_enabled: bool = (
+        False  # FACTORY_CI_FIXER_ENABLED — enable the CI fixer bot
+    )
+    ci_fixer_interval_seconds: int = (
+        120  # FACTORY_CI_FIXER_INTERVAL_SECONDS — how often to scan for failing CI
+    )
+    ci_fixer_max_attempts: int = (
+        2  # FACTORY_CI_FIXER_MAX_ATTEMPTS — max annotation attempts per PR
+    )
+    ci_fixer_model: str = (
+        "claude-haiku-4-5-20251001"  # FACTORY_CI_FIXER_MODEL — LLM for failure analysis
+    )
 
     model_config = SettingsConfigDict(env_prefix="FACTORY_")
 

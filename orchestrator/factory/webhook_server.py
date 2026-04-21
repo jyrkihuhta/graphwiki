@@ -13,6 +13,7 @@ from fastapi import FastAPI, Header, HTTPException, Request
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 
 from .bots.bookkeeper import BookkeeperBot
+from .bots.ci_fixer import CIFixerBot
 from .bots.registry import BotRegistry
 from .bots.scheduler import SchedulerBot
 from .bots.terminal_review import TerminalReviewBot
@@ -145,6 +146,12 @@ async def lifespan(app: FastAPI):
         logger.info(
             "factory: scheduler bot enabled (interval=%ds)",
             settings.scheduler_interval_seconds,
+        )
+    if settings.ci_fixer_enabled:
+        bot_registry.register(CIFixerBot())
+        logger.info(
+            "factory: ci-fixer bot enabled (interval=%ds)",
+            settings.ci_fixer_interval_seconds,
         )
     app.state.bot_registry = bot_registry
 

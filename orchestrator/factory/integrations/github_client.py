@@ -227,6 +227,70 @@ class GitHubClient:
         return resp.json()
 
 
+    async def list_open_prs(self, head_prefix: str = "factory/") -> list[dict]:
+        """List open PRs whose head branch starts with *head_prefix*.
+
+        Args:
+            head_prefix: Branch name prefix to filter on (default ``"factory/"``).
+
+        Returns:
+            List of PR objects from the GitHub API.
+        """
+        url = f"/repos/{self._repo}/pulls"
+        resp = await self._client.get(
+            url,
+            headers=self._headers(),
+            params={"state": "open", "per_page": 100},
+        )
+        resp.raise_for_status()
+        return [
+            pr for pr in resp.json()
+            if pr.get("head", {}).get("ref", "").startswith(head_prefix)
+        ]
+
+    async def get_check_runs(self, sha: str) -> list[dict]:
+        """Get all check runs for a commit SHA.
+
+        Args:
+            sha: Full commit SHA.
+
+        Returns:
+            List of check run objects from the GitHub Checks API.
+        """
+        url = f"/repos/{self._repo}/commits/{sha}/check-runs"
+        resp = await self._client.get(
+            url,
+            headers=self._headers(),
+            params={"per_page": 100},
+        )
+        resp.raise_for_status()
+        return resp.json().get("check_runs", [])
+
+    async def get_job_log(self, job_id: int) -> str:
+        """Fetch the plain-text log for a GitHub Actions job.
+
+        Follows the redirect that GitHub returns and returns the log as text.
+
+        Args:
+            job_id: GitHub Actions job ID.
+
+        Returns:
+            Log content as a string (may be large).
+        """
+        url = f"/repos/{self._repo}/actions/jobs/{job_id}/logs"
+        # GitHub returns a 302 redirect to a pre-signed URL for the log.
+        client = httpx.AsyncClient(timeout=30.0, follow_redirects=True)
+        try:
+            resp = await client.get(
+                f"{_BASE_URL}{url}",
+                headers={**self._headers(), "Accept": "application/vnd.github+json"},
+            )
+            resp.raise_for_status()
+            return resp.text
+        finally:
+            await client.aclose()
+
+
 def _extract_pr_number(pr_url: str) -> int | None:
     """Extract a PR number from a GitHub PR URL.
 
