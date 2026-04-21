@@ -32,6 +32,9 @@
                 <summary class="page-tree-summary">
                     <span class="page-tree-expand-icon">›</span>
                     <a href="/page/{{ node.name.replace(' ', '_') }}" class="page-tree-link{{ ' page-tree-link--done' if is_done else '' }}">{{ node.title }}</a>
+                    {% if node.status %}
+                    <span class="task-status task-status--{{ node.status }}" aria-label="{{ node.status }}"></span>
+                    {% endif %}
                 </summary>
                 {{ render_tree(node.children, level + 1) }}
             </details>
@@ -39,6 +42,9 @@
             {% set is_done = node.status in ('done', 'merged', 'failed', 'rejected') %}
             <div class="page-tree-leaf">
                 <a href="/page/{{ node.name.replace(' ', '_') }}" class="page-tree-link{{ ' page-tree-link--done' if is_done else '' }}">{{ node.title }}</a>
+                {% if node.status %}
+                <span class="task-status task-status--{{ node.status }}" aria-label="{{ node.status }}"></span>
+                {% endif %}
             </div>
             {% endif %}
         </li>

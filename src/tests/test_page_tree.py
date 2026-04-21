@@ -336,3 +336,16 @@ def test_status_propagated_from_frontmatter():
 def test_status_defaults_to_empty_string():
     tree = build_page_tree_sync([_page("NoStatus")])
     assert tree[0]["status"] == ""
+
+
+def test_factory_task_node_has_status_in_tree():
+    """A factory task node includes status field in the tree JSON."""
+    pages = [
+        _page("Epic_001", children=["Task_001"]),
+        _page("Task_001", status="in_progress", assignee="factory"),
+    ]
+    tree = build_page_tree_sync(pages)
+    factory_section = next(n for n in tree if n.get("section"))
+    task_node = next(n for n in factory_section["children"] if n["name"] == "Task_001")
+    assert "status" in task_node
+    assert task_node["status"] == "in_progress"
