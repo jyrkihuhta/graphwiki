@@ -14,9 +14,14 @@
     failed: "Failed", escalated: "Escalated",
   };
 
-  var STAGE_COLORS = {
-    planned: "#6366f1", in_progress: "#0ea5e9", review: "#f59e0b", outcomes: "#10b981",
+  var STATUS_COLORS = {
+    intake: "#818cf8", decomposing: "#fbbf24", dispatching: "#38bdf8",
+    grinding: "#0ea5e9", reviewing: "#f59e0b", completed: "#34d399",
+    failed: "#f87171", escalated: "#f87171", unknown: "#475569",
   };
+
+  // LangGraph states shown in the track (in order)
+  var LG_STATES = ["intake", "decomposing", "dispatching", "grinding", "reviewing"];
 
   // ── DOM helpers ───────────────────────────────────────────────────────────
 
@@ -26,11 +31,7 @@
     return e;
   }
   function svgEl(tag) { return document.createElementNS("http://www.w3.org/2000/svg", tag); }
-
-  function setText(id, text) {
-    var e = document.getElementById(id);
-    if (e) e.textContent = text;
-  }
+  function setText(id, text) { var e = document.getElementById(id); if (e) e.textContent = text; }
 
   function setBody(id, nodes) {
     var c = document.getElementById(id);
@@ -52,7 +53,12 @@
       var by = {};
       statuses.forEach(function (s, i) { by[s] = results[i] || []; });
       detectTransitions(by);
-      renderPipeline(by);
+      // Update anchor counts
+      setText("fc-count-planned",    String((by.planned     || []).length));
+      setText("fc-count-in_progress",String((by.in_progress || []).length));
+      setText("fc-count-merged",     String((by.merged      || []).length));
+      setText("fc-count-failed",     String((by.failed      || []).length));
+      setText("fc-count-rejected",   String((by.rejected    || []).length));
       var u = document.getElementById("fc-updated");
       if (u) u.textContent = "Updated " + new Date().toLocaleTimeString([], {hour:"2-digit",minute:"2-digit",second:"2-digit"});
     }).catch(function () {}).finally(function () { setTimeout(pollTasks, TASKS_POLL_MS); });
@@ -77,28 +83,106 @@
     renderActivity();
   }
 
-  // ── Pipeline ──────────────────────────────────────────────────────────────
+  // ── Status API poll ───────────────────────────────────────────────────────
 
-  function renderPipeline(by) {
-    setText("fc-count-planned",    String((by.planned     || []).length));
-    setText("fc-count-in_progress",String((by.in_progress || []).length));
-    setText("fc-count-review",     String((by.review      || []).length));
-    setText("fc-count-merged",     String((by.merged      || []).length));
-    setText("fc-count-failed",     String((by.failed      || []).length));
-    setText("fc-count-rejected",   String((by.rejected    || []).length));
+  function pollStatus() {
+    fetch("/api/factory/status")
+      .then(function (r) {
+        if (r.status === 404) return null;        // factory disabled
+        return r.ok ? r.json() : null;
+      })
+      .then(function (data) {
+        var pill = document.getElementById("fc-orch-pill");
+        if (!data) {
+          if (pill) { pill.textContent = "orchestrator offline"; pill.className = "fc-orch-pill fc-orch-pill--offline"; }
+          // Leave KPIs as "—"
+          return;
+        }
+        if (data.error) {
+          if (pill) { pill.textContent = "orchestrator unreachable"; pill.className = "fc-orch-pill fc-orch-pill--offline"; }
+        } else {
+          if (pill) { pill.textContent = "orchestrator online"; pill.className = "fc-orch-pill fc-orch-pill--online"; }
+        }
 
-    var node = document.getElementById("fc-node-in_progress");
-    if (node) node.classList.toggle("fc-node--active", (by.in_progress || []).length > 0);
+        var res   = data.resources || {};
+        var graphs = data.active_graphs || [];
+        var grinders = res.active_grinders;
+        var cost     = res.total_cost_usd;
+        var cap      = res.max_concurrent_parent_tasks;
+        var active   = res.active_parent_tasks || 0;
 
-    drawPaths();
+        setText("fc-kpi-grinders", grinders != null ? String(grinders) : "—");
+        setText("fc-kpi-cost",     cost     != null ? "$" + cost.toFixed(3) : "—");
+        setText("fc-kpi-cap",      cap      != null ? String(Math.max(0, cap - active)) : "—");
+
+        updateLangGraphTrack(graphs);
+        renderGraphs(graphs);
+        renderBots(data.bots || []);
+        drawPaths();
+      })
+      .catch(function () {
+        var pill = document.getElementById("fc-orch-pill");
+        if (pill) { pill.textContent = "orchestrator offline"; pill.className = "fc-orch-pill fc-orch-pill--offline"; }
+      })
+      .finally(function () { setTimeout(pollStatus, STATUS_POLL_MS); });
   }
 
-  // ── SVG animated paths between pipeline nodes ─────────────────────────────
+  // ── LangGraph track ───────────────────────────────────────────────────────
 
+  function updateLangGraphTrack(graphs) {
+    // Clear all nodes
+    LG_STATES.forEach(function (s) {
+      var dot   = document.getElementById("fc-lgd-" + s);
+      var pills = document.getElementById("fc-lgt-" + s);
+      if (dot) { dot.className = "fc-lg-dot"; dot.style.background = ""; dot.style.boxShadow = ""; }
+      if (pills) { while (pills.firstChild) pills.removeChild(pills.firstChild); }
+    });
+    var grinderEl = document.getElementById("fc-lg-grinders");
+    if (grinderEl) grinderEl.textContent = "";
+
+    var totalGrinders = 0;
+
+    graphs.forEach(function (g) {
+      var state = g.graph_status;
+      if (LG_STATES.indexOf(state) === -1) return;
+
+      var color = STATUS_COLORS[state] || "#64748b";
+      var dot   = document.getElementById("fc-lgd-" + state);
+      var pills = document.getElementById("fc-lgt-" + state);
+
+      if (dot) {
+        dot.className = "fc-lg-dot fc-lg-dot--active";
+        dot.style.background  = color;
+        dot.style.boxShadow   = "0 0 14px " + color + "99";
+        dot.style.borderColor = color;
+      }
+
+      if (pills) {
+        var pill = el("span", "fc-lg-pill");
+        pill.textContent = truncate(g.title || g.thread_id, 20);
+        pill.style.background  = hexToRgba(color, 0.15);
+        pill.style.color       = color;
+        pill.style.borderColor = hexToRgba(color, 0.3);
+        pills.appendChild(pill);
+      }
+
+      if (state === "grinding") totalGrinders += g.active_grinders || 0;
+    });
+
+    if (grinderEl && totalGrinders > 0) {
+      grinderEl.textContent = "⚙ " + totalGrinders + " running";
+      grinderEl.style.display = "";
+    } else if (grinderEl) {
+      grinderEl.style.display = "none";
+    }
+  }
+
+  // ── SVG animated paths ────────────────────────────────────────────────────
+
+  // Connect: backlog anchor → first LG node, last LG node → outcomes anchor
   var CONNECTIONS = [
-    ["fc-node-planned",     "fc-node-in_progress", STAGE_COLORS.planned],
-    ["fc-node-in_progress", "fc-node-review",      STAGE_COLORS.in_progress],
-    ["fc-node-review",      "fc-node-outcomes",    STAGE_COLORS.outcomes],
+    ["fc-node-planned",   "fc-lgn-intake",   "#6366f1"],
+    ["fc-lgn-reviewing",  "fc-node-outcomes", "#10b981"],
   ];
 
   function drawPaths() {
@@ -110,8 +194,8 @@
     CONNECTIONS.forEach(function (conn, idx) {
       var fromEl = document.getElementById(conn[0]);
       var toEl   = document.getElementById(conn[1]);
-      var color  = conn[2];
       if (!fromEl || !toEl) return;
+      var color = conn[2];
 
       var fR = fromEl.getBoundingClientRect();
       var tR = toEl.getBoundingClientRect();
@@ -130,20 +214,17 @@
       path.setAttribute("stroke-width", "1.5");
       svg.appendChild(path);
 
-      [0, 0.33, 0.66].forEach(function (offset, pi) {
-        var dur = (2.5 + pi * 0.5).toFixed(1);
+      [0, 0.4, 0.7].forEach(function (offset, pi) {
+        var dur = (2.8 + pi * 0.6).toFixed(1);
         var begin = (offset * parseFloat(dur)).toFixed(2);
-
         var circle = svgEl("circle");
         circle.setAttribute("class", "fc-particle");
         circle.setAttribute("r", "3");
         circle.setAttribute("fill", color);
-
         var motion = svgEl("animateMotion");
         motion.setAttribute("dur", dur + "s");
         motion.setAttribute("begin", begin + "s");
         motion.setAttribute("repeatCount", "indefinite");
-
         var mpath = svgEl("mpath");
         mpath.setAttributeNS("http://www.w3.org/1999/xlink", "href", "#" + pathId);
         motion.appendChild(mpath);
@@ -153,66 +234,7 @@
     });
   }
 
-  // ── Status API poll ───────────────────────────────────────────────────────
-
-  function pollStatus() {
-    fetch("/api/factory/status")
-      .then(function (r) { return r.ok ? r.json() : null; })
-      .then(function (data) {
-        if (!data) return;
-        var res = data.resources || {};
-        var graphs = data.active_graphs || [];
-        setText("fc-kpi-graphs",   String(graphs.length));
-        setText("fc-kpi-grinders", String(res.active_grinders || 0));
-        setText("fc-kpi-cost",     "$" + ((res.total_cost_usd || 0).toFixed(3)));
-        var cap = res.max_concurrent_parent_tasks, active = res.active_parent_tasks || 0;
-        setText("fc-kpi-cap", cap != null ? String(Math.max(0, cap - active)) : "—");
-        renderGraphs(graphs);
-        renderBots(data.bots || []);
-      })
-      .catch(function () {})
-      .finally(function () { setTimeout(pollStatus, STATUS_POLL_MS); });
-  }
-
   // ── Graph cards ───────────────────────────────────────────────────────────
-
-  var STATUS_COLORS = {
-    intake: "#818cf8", decomposing: "#fbbf24", dispatching: "#38bdf8",
-    grinding: "#0ea5e9", reviewing: "#f59e0b", completed: "#34d399",
-    failed: "#f87171", escalated: "#f87171",
-  };
-
-  function buildRing(pct, color) {
-    var r = 20, cx = 24, cy = 24;
-    var circ = 2 * Math.PI * r;
-    var offset = circ * (1 - Math.min(pct, 100) / 100);
-
-    var svg = svgEl("svg");
-    svg.setAttribute("width", "48");
-    svg.setAttribute("height", "48");
-    svg.setAttribute("viewBox", "0 0 48 48");
-    svg.setAttribute("class", "fc-ring");
-
-    var bg = svgEl("circle");
-    bg.setAttribute("cx", String(cx)); bg.setAttribute("cy", String(cy));
-    bg.setAttribute("r", String(r)); bg.setAttribute("fill", "none");
-    bg.setAttribute("stroke", "rgba(255,255,255,0.06)");
-    bg.setAttribute("stroke-width", "3");
-    svg.appendChild(bg);
-
-    var arc = svgEl("circle");
-    arc.setAttribute("cx", String(cx)); arc.setAttribute("cy", String(cy));
-    arc.setAttribute("r", String(r)); arc.setAttribute("fill", "none");
-    arc.setAttribute("stroke", color || "#0ea5e9");
-    arc.setAttribute("stroke-width", "3");
-    arc.setAttribute("stroke-dasharray", String(circ));
-    arc.setAttribute("stroke-dashoffset", String(offset));
-    arc.setAttribute("stroke-linecap", "round");
-    arc.setAttribute("transform", "rotate(-90 " + cx + " " + cy + ")");
-    svg.appendChild(arc);
-
-    return svg;
-  }
 
   function renderGraphs(graphs) {
     setText("fc-graphs-badge", String(graphs.length));
@@ -221,13 +243,14 @@
   }
 
   function buildGraphCard(g) {
-    var total  = g.subtasks_total || 0;
-    var done   = (g.subtasks_completed || 0) + (g.subtasks_failed || 0);
-    var pct    = total > 0 ? Math.round(done / total * 100) : 0;
-    var color  = STATUS_COLORS[g.graph_status] || "#64748b";
+    var total = g.subtasks_total || 0;
+    var done  = (g.subtasks_completed || 0) + (g.subtasks_failed || 0);
+    var pct   = total > 0 ? Math.round(done / total * 100) : 0;
+    var color = STATUS_COLORS[g.graph_status] || "#64748b";
 
     var card = el("div", "fc-graph-card");
 
+    // Ring
     var ringWrap = el("div", "fc-ring-wrap");
     ringWrap.appendChild(buildRing(pct, color));
     var pctLabel = el("div", "fc-ring-pct");
@@ -235,14 +258,15 @@
     ringWrap.appendChild(pctLabel);
     card.appendChild(ringWrap);
 
+    // Info
     var info = el("div", "fc-graph-info");
+
     var title = el("div", "fc-graph-title");
     title.textContent = truncate(g.title || g.thread_id, 28);
     info.appendChild(title);
 
-    var badge = el("span", "fc-graph-status fc-graph-status--" + (g.graph_status || "unknown"));
-    badge.textContent = GRAPH_STATUS_LABELS[g.graph_status] || g.graph_status;
-    info.appendChild(badge);
+    // Mini LangGraph track for this card
+    info.appendChild(buildMiniTrack(g.graph_status));
 
     var stats = el("div", "fc-graph-stats");
     if (total > 0) {
@@ -265,6 +289,61 @@
     return card;
   }
 
+  function buildMiniTrack(currentStatus) {
+    var track = el("div", "fc-mini-track");
+    var all = ["intake","decomposing","dispatching","grinding","reviewing","completed"];
+    var currentIdx = all.indexOf(currentStatus);
+    if (currentIdx < 0 && (currentStatus === "failed" || currentStatus === "escalated")) currentIdx = 5;
+
+    all.forEach(function (s, i) {
+      var dot = el("span", "fc-mini-dot");
+      if (i < currentIdx) {
+        dot.classList.add("fc-mini-dot--done");
+      } else if (i === currentIdx) {
+        dot.classList.add("fc-mini-dot--active");
+        dot.style.background  = STATUS_COLORS[currentStatus] || "#64748b";
+        dot.style.boxShadow   = "0 0 8px " + (STATUS_COLORS[currentStatus] || "#64748b") + "99";
+      }
+      dot.title = s;
+      track.appendChild(dot);
+      if (i < all.length - 1) {
+        var line = el("span", "fc-mini-line");
+        if (i < currentIdx) line.classList.add("fc-mini-line--done");
+        track.appendChild(line);
+      }
+    });
+
+    var statusLabel = el("span", "fc-mini-label");
+    statusLabel.textContent = GRAPH_STATUS_LABELS[currentStatus] || currentStatus;
+    statusLabel.style.color = STATUS_COLORS[currentStatus] || "#64748b";
+    track.appendChild(statusLabel);
+
+    return track;
+  }
+
+  function buildRing(pct, color) {
+    var r = 20, cx = 24, cy = 24;
+    var circ = 2 * Math.PI * r;
+    var svg = svgEl("svg");
+    svg.setAttribute("width","48"); svg.setAttribute("height","48");
+    svg.setAttribute("viewBox","0 0 48 48"); svg.setAttribute("class","fc-ring");
+    var bg = svgEl("circle");
+    bg.setAttribute("cx",String(cx)); bg.setAttribute("cy",String(cy));
+    bg.setAttribute("r",String(r)); bg.setAttribute("fill","none");
+    bg.setAttribute("stroke","rgba(255,255,255,0.06)"); bg.setAttribute("stroke-width","3");
+    svg.appendChild(bg);
+    var arc = svgEl("circle");
+    arc.setAttribute("cx",String(cx)); arc.setAttribute("cy",String(cy));
+    arc.setAttribute("r",String(r)); arc.setAttribute("fill","none");
+    arc.setAttribute("stroke", color); arc.setAttribute("stroke-width","3");
+    arc.setAttribute("stroke-dasharray",String(circ));
+    arc.setAttribute("stroke-dashoffset",String(circ * (1 - Math.min(pct,100)/100)));
+    arc.setAttribute("stroke-linecap","round");
+    arc.setAttribute("transform","rotate(-90 "+cx+" "+cy+")");
+    svg.appendChild(arc);
+    return svg;
+  }
+
   // ── Bots ──────────────────────────────────────────────────────────────────
 
   function renderBots(bots) {
@@ -275,30 +354,21 @@
 
   function buildBotRow(bot) {
     var row = el("div", "fc-bot-row");
-
     var dot = el("span", "fc-bot-dot " + (bot.running ? "fc-bot-dot--on" : "fc-bot-dot--off"));
     row.appendChild(dot);
-
-    var name = el("span", "fc-bot-name");
-    name.textContent = bot.name;
+    var name = el("span", "fc-bot-name"); name.textContent = bot.name;
     row.appendChild(name);
-
     var stats = el("span", "fc-bot-stats");
     stats.textContent = bot.total_runs + "r · " + bot.total_actions + "a";
     row.appendChild(stats);
-
     if (bot.last_ran_at) {
-      var ago = el("span", "fc-bot-ago");
-      ago.textContent = timeAgo(bot.last_ran_at * 1000);
+      var ago = el("span", "fc-bot-ago"); ago.textContent = timeAgo(bot.last_ran_at * 1000);
       row.appendChild(ago);
     }
-
     if (bot.last_details) {
-      var det = el("div", "fc-bot-detail");
-      det.textContent = truncate(bot.last_details, 44);
+      var det = el("div", "fc-bot-detail"); det.textContent = truncate(bot.last_details, 44);
       row.appendChild(det);
     }
-
     return row;
   }
 
@@ -309,29 +379,17 @@
     if (!c) return;
     while (c.firstChild) c.removeChild(c.firstChild);
     if (!activityLog.length) {
-      var hint = el("span", "fc-activity-hint");
-      hint.textContent = "Watching for transitions…";
-      c.appendChild(hint);
-      return;
+      var hint = el("span", "fc-activity-hint"); hint.textContent = "Watching for transitions…";
+      c.appendChild(hint); return;
     }
     activityLog.forEach(function (item) {
       var wrap = el("span", "fc-activity-item");
-
-      var name = el("span", "fc-activity-name");
-      name.textContent = truncate(item.name, 24);
+      var name = el("span", "fc-activity-name"); name.textContent = truncate(item.name, 24);
       wrap.appendChild(name);
-
-      if (item.from) {
-        wrap.appendChild(buildBadge(item.from));
-        var arr = el("span", "fc-activity-arrow"); arr.textContent = "→";
-        wrap.appendChild(arr);
-      }
+      if (item.from) { wrap.appendChild(buildBadge(item.from)); var arr = el("span","fc-activity-arrow"); arr.textContent="→"; wrap.appendChild(arr); }
       wrap.appendChild(buildBadge(item.to));
-
-      var ago = el("span", "fc-activity-ago");
-      ago.textContent = timeAgo(item.time);
+      var ago = el("span", "fc-activity-ago"); ago.textContent = timeAgo(item.time);
       wrap.appendChild(ago);
-
       c.appendChild(wrap);
     });
   }
@@ -344,7 +402,7 @@
 
   // ── Utilities ─────────────────────────────────────────────────────────────
 
-  function truncate(s, n) { return s.length > n ? s.slice(0, n - 1) + "…" : s; }
+  function truncate(s, n) { return s.length > n ? s.slice(0, n-1) + "…" : s; }
 
   function timeAgo(ms) {
     var s = Math.floor((Date.now() - ms) / 1000);
@@ -354,8 +412,11 @@
     return Math.floor(s / 3600) + "h";
   }
 
-  function makeEmpty(text) {
-    var d = el("div", "fc-empty"); d.textContent = text; return d;
+  function makeEmpty(text) { var d = el("div","fc-empty"); d.textContent=text; return d; }
+
+  function hexToRgba(hex, alpha) {
+    var r = parseInt(hex.slice(1,3),16), g = parseInt(hex.slice(3,5),16), b = parseInt(hex.slice(5,7),16);
+    return "rgba(" + r + "," + g + "," + b + "," + alpha + ")";
   }
 
   // ── Init ──────────────────────────────────────────────────────────────────
