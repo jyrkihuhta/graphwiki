@@ -21,6 +21,7 @@ from __future__ import annotations
 import logging
 import time
 
+from ..agents.pm_agent import anthropic_blocked_seconds_remaining
 from ..config import get_settings
 from ..integrations.meshwiki_client import MeshWikiClient
 from ..integrations.minimax_client import MiniMaxUsageClient
@@ -130,6 +131,31 @@ class SchedulerBot(BaseBot):
                         ),
                     )
 
+            # ── 2b. Check Anthropic availability ─────────────────────────
+            blocked_secs = anthropic_blocked_seconds_remaining()
+            if blocked_secs > 0:
+                if not settings.openrouter_api_key and not settings.minimax_api_key:
+                    elapsed = time.monotonic() - started
+                    logger.warning(
+                        "scheduler: Anthropic circuit breaker active (%.0fs remaining), "
+                        "no fallback configured — pausing dispatch",
+                        blocked_secs,
+                    )
+                    return BotResult(
+                        ran_at=started,
+                        actions_taken=0,
+                        errors=[],
+                        details=(
+                            f"anthropic_blocked={blocked_secs:.0f}s no_fallback "
+                            f"elapsed={elapsed:.2f}s"
+                        ),
+                    )
+                logger.info(
+                    "scheduler: Anthropic circuit breaker active (%.0fs remaining), "
+                    "using fallback provider",
+                    blocked_secs,
+                )
+
             # ── 3. Fetch planned tasks ────────────────────────────────────
             try:
                 planned = await wiki.list_tasks(status="planned", assignee="factory")
@@ -170,9 +196,14 @@ class SchedulerBot(BaseBot):
                     errors.append(err)
 
         elapsed = time.monotonic() - started
+        blocked_secs = anthropic_blocked_seconds_remaining()
+        details = f"active={n_active}/{cap} dispatched={actions} elapsed={elapsed:.2f}s"
+        if blocked_secs > 0:
+            provider = "openrouter" if settings.openrouter_api_key else "minimax"
+            details += f" anthropic_blocked={blocked_secs:.0f}s fallback={provider}"
         return BotResult(
             ran_at=started,
             actions_taken=actions,
             errors=errors,
-            details=f"active={n_active}/{cap} dispatched={actions} elapsed={elapsed:.2f}s",
+            details=details,
         )

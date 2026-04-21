@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import time
 import uuid
 from typing import TYPE_CHECKING, Any
 
@@ -20,6 +21,43 @@ if TYPE_CHECKING:
     from ..integrations.meshwiki_client import MeshWikiClient
 
 logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Anthropic circuit breaker
+# ---------------------------------------------------------------------------
+# When Anthropic returns a billing/hard-limit error we block further calls
+# for a cooldown window.  The scheduler and PM callers check this before
+# dispatching so we don't burn E2B slots on work that can't be reviewed.
+
+_anthropic_blocked_until: float = 0.0
+
+
+def _is_anthropic_blocked() -> bool:
+    return time.monotonic() < _anthropic_blocked_until
+
+
+def anthropic_blocked_seconds_remaining() -> float:
+    """Return seconds remaining on the Anthropic circuit breaker (0 = not blocked)."""
+    return max(0.0, _anthropic_blocked_until - time.monotonic())
+
+
+def _block_anthropic(seconds: float = 900.0) -> None:
+    global _anthropic_blocked_until
+    _anthropic_blocked_until = time.monotonic() + seconds
+    logger.warning(
+        "pm_agent: Anthropic circuit breaker engaged — blocked for %.0fs", seconds
+    )
+
+
+def _is_billing_error(exc: anthropic.APIStatusError) -> bool:
+    """Return True if the error is a hard billing/spend limit (not a transient overload)."""
+    if exc.status_code == 402:
+        return True
+    if exc.status_code == 429:
+        msg = str(exc).lower()
+        return any(w in msg for w in ("credit", "spend", "billing", "quota", "limit"))
+    return False
+
 
 PM_SYSTEM_PROMPT = """
 You are the PM/Architect for MeshWiki, an autonomous software development factory.
@@ -292,59 +330,8 @@ def _anthropic_tools_to_openai(tools: list[dict[str, Any]]) -> list[dict[str, An
     ]
 
 
-async def _messages_create_with_retry(
-    client: anthropic.AsyncAnthropic,
-    *,
-    max_overload_attempts: int = 5,
-    **kwargs: Any,
-) -> Any:
-    """Call client.messages.create with extended retry for 529 overloaded errors.
-
-    The SDK's built-in retry uses short waits (~0.4s, 0.8s) which aren't
-    sufficient for real Anthropic overload events. This wrapper retries up to
-    ``max_overload_attempts`` times with 30-second exponential backoff (30s,
-    60s, 120s, 240s, 480s). If all attempts are exhausted, falls back to
-    MiniMax via OpenAI-compatible API if ``FACTORY_MINIMAX_API_KEY`` is set.
-    All other errors are re-raised immediately.
-    """
-    last_exc: BaseException | None = None
-    for attempt in range(max_overload_attempts):
-        try:
-            return await client.messages.create(**kwargs)
-        except anthropic.APIStatusError as exc:
-            if exc.status_code == 529 and attempt < max_overload_attempts - 1:
-                wait = 30 * (2**attempt)
-                logger.warning(
-                    "pm_agent: Anthropic API overloaded (529), retrying in %ds "
-                    "(attempt %d/%d)",
-                    wait,
-                    attempt + 1,
-                    max_overload_attempts,
-                )
-                await asyncio.sleep(wait)
-                last_exc = exc
-            else:
-                raise
-
-    # All Anthropic retries exhausted — fall back to MiniMax if available.
-    settings = get_settings()
-    if not settings.minimax_api_key:
-        raise last_exc  # type: ignore[misc]
-
-    import openai  # optional dependency; only needed for MiniMax fallback
-
-    logger.warning(
-        "pm_agent: Anthropic overloaded after %d attempts, falling back to MiniMax",
-        max_overload_attempts,
-    )
-
-    minimax_client = openai.AsyncOpenAI(
-        api_key=settings.minimax_api_key,
-        base_url="https://api.minimax.io/v1",
-        timeout=60.0,
-    )
-
-    # Convert messages: Anthropic tool_result blocks → OpenAI tool role messages.
+def _convert_to_oai_messages(kwargs: dict[str, Any]) -> list[dict[str, Any]]:
+    """Convert Anthropic-style messages/system to OpenAI chat format."""
     oai_messages: list[dict[str, Any]] = []
     for msg in kwargs.get("messages", []):
         if msg["role"] == "assistant":
@@ -385,22 +372,118 @@ async def _messages_create_with_retry(
                         oai_messages.append({"role": "user", "content": str(block)})
             else:
                 oai_messages.append({"role": "user", "content": content})
-
     system = kwargs.get("system", "")
     if system:
         oai_messages.insert(0, {"role": "system", "content": system})
+    return oai_messages
 
+
+async def _call_openai_compatible(
+    *,
+    api_key: str,
+    base_url: str,
+    model: str,
+    timeout: float = 120.0,
+    extra_headers: dict[str, str] | None = None,
+    **kwargs: Any,
+) -> Any:
+    """Call an OpenAI-compatible endpoint with Anthropic-style kwargs."""
+    import openai
+
+    client = openai.AsyncOpenAI(
+        api_key=api_key,
+        base_url=base_url,
+        timeout=timeout,
+        default_headers=extra_headers or {},
+    )
+    oai_messages = _convert_to_oai_messages(kwargs)
     oai_tools = _anthropic_tools_to_openai(kwargs.get("tools", []))
-    oai_resp = await minimax_client.chat.completions.create(
-        model="MiniMax-M2.7",
+    oai_resp = await client.chat.completions.create(
+        model=model,
         max_tokens=kwargs.get("max_tokens", 4096),
         messages=oai_messages,
         tools=oai_tools if oai_tools else openai.NOT_GIVEN,
         tool_choice="auto" if oai_tools else openai.NOT_GIVEN,
     )
-
-    # Wrap OpenAI response in a duck-typed object matching Anthropic's interface.
     return _OpenAIResponseAdapter(oai_resp)
+
+
+async def _messages_create_with_retry(
+    client: anthropic.AsyncAnthropic,
+    *,
+    max_overload_attempts: int = 5,
+    **kwargs: Any,
+) -> Any:
+    """Call client.messages.create with retry, circuit breaker, and provider fallback.
+
+    Retry strategy:
+    - 529 overloaded: up to ``max_overload_attempts`` times with 30s backoff.
+    - 402/429 billing: trip the circuit breaker and fall through to fallbacks.
+    - Circuit breaker active: skip Anthropic entirely on this call.
+
+    Fallback chain (first available wins):
+    1. OpenRouter (``FACTORY_OPENROUTER_API_KEY``)
+    2. MiniMax (``FACTORY_MINIMAX_API_KEY``)
+    """
+    settings = get_settings()
+    last_exc: BaseException | None = None
+
+    if not _is_anthropic_blocked():
+        for attempt in range(max_overload_attempts):
+            try:
+                return await client.messages.create(**kwargs)
+            except anthropic.APIStatusError as exc:
+                if exc.status_code == 529 and attempt < max_overload_attempts - 1:
+                    wait = 30 * (2**attempt)
+                    logger.warning(
+                        "pm_agent: Anthropic overloaded (529), retrying in %ds "
+                        "(attempt %d/%d)",
+                        wait,
+                        attempt + 1,
+                        max_overload_attempts,
+                    )
+                    await asyncio.sleep(wait)
+                    last_exc = exc
+                elif _is_billing_error(exc):
+                    _block_anthropic(seconds=900.0)
+                    last_exc = exc
+                    break  # fall through to fallback chain
+                else:
+                    raise
+    else:
+        logger.info("pm_agent: Anthropic circuit breaker active — using fallback")
+
+    # ── Fallback 1: OpenRouter ────────────────────────────────────────────────
+    if settings.openrouter_api_key:
+        logger.warning(
+            "pm_agent: falling back to OpenRouter (model=%s)", settings.pm_openrouter_model
+        )
+        return await _call_openai_compatible(
+            api_key=settings.openrouter_api_key,
+            base_url="https://openrouter.ai/api/v1",
+            model=settings.pm_openrouter_model,
+            timeout=120.0,
+            extra_headers={
+                "HTTP-Referer": settings.meshwiki_url,
+                "X-Title": "MeshWiki Factory",
+            },
+            **kwargs,
+        )
+
+    # ── Fallback 2: MiniMax ───────────────────────────────────────────────────
+    if settings.minimax_api_key:
+        logger.warning("pm_agent: falling back to MiniMax")
+        return await _call_openai_compatible(
+            api_key=settings.minimax_api_key,
+            base_url="https://api.minimax.io/v1",
+            model="MiniMax-M2.7",
+            timeout=60.0,
+            **kwargs,
+        )
+
+    if last_exc is not None:
+        raise last_exc  # type: ignore[misc]
+    raise RuntimeError("No Anthropic, OpenRouter, or MiniMax API key configured")
 
 
 def _build_subtask(tool_input: dict[str, Any], parent_thread_id: str) -> SubTask:

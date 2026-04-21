@@ -99,6 +99,12 @@ class Settings(BaseSettings):
     default_repo: str = (
         ""  # FACTORY_DEFAULT_REPO — fallback repo when task has no `repo:` frontmatter field
     )
+    openrouter_api_key: str = (
+        ""  # FACTORY_OPENROUTER_API_KEY — fallback PM provider when Anthropic is unavailable
+    )
+    pm_openrouter_model: str = (
+        "anthropic/claude-sonnet-4-5"  # FACTORY_PM_OPENROUTER_MODEL — model to use via OpenRouter
+    )
 
     model_config = SettingsConfigDict(env_prefix="FACTORY_")
 

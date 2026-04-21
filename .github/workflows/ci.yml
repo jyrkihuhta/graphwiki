@@ -416,6 +416,7 @@ jobs:
           FACTORY_GITHUB_TOKEN: ${{ secrets.FACTORY_GITHUB_TOKEN }}
           FACTORY_MINIMAX_API_KEY: ${{ secrets.FACTORY_MINIMAX_API_KEY }}
           FACTORY_SCHEDULER_ENABLED: ${{ secrets.FACTORY_SCHEDULER_ENABLED }}
+          FACTORY_OPENROUTER_API_KEY: ${{ secrets.FACTORY_OPENROUTER_API_KEY }}
         run: |
           {
             printf '%s\n' \
@@ -432,6 +433,7 @@ jobs:
               "FACTORY_PR_BASE_BRANCH=staging" \
               "FACTORY_AUTO_MERGE=true"
             [ -n "${FACTORY_ANTHROPIC_API_KEY}" ] && echo "FACTORY_ANTHROPIC_API_KEY=${FACTORY_ANTHROPIC_API_KEY}"
+            [ -n "${FACTORY_OPENROUTER_API_KEY}" ] && echo "FACTORY_OPENROUTER_API_KEY=${FACTORY_OPENROUTER_API_KEY}"
           } | ssh "${VPS_USER}@${VPS_HOST}" "
             cat > /opt/meshwiki/orchestrator-staging.env.new
             if grep -q FACTORY_ANTHROPIC_API_KEY /opt/meshwiki/orchestrator-staging.env.new; then
@@ -557,6 +559,7 @@ jobs:
           FACTORY_E2B_API_KEY: ${{ secrets.FACTORY_E2B_API_KEY }}
           FACTORY_GITHUB_TOKEN: ${{ secrets.FACTORY_GITHUB_TOKEN }}
           FACTORY_MINIMAX_API_KEY: ${{ secrets.FACTORY_MINIMAX_API_KEY }}
+          FACTORY_OPENROUTER_API_KEY: ${{ secrets.FACTORY_OPENROUTER_API_KEY }}
         run: |
           {
             printf '%s\n' \
@@ -570,6 +573,7 @@ jobs:
               "FACTORY_HOST=0.0.0.0" \
               "FACTORY_PORT=8001"
             [ -n "${FACTORY_ANTHROPIC_API_KEY}" ] && echo "FACTORY_ANTHROPIC_API_KEY=${FACTORY_ANTHROPIC_API_KEY}"
+            [ -n "${FACTORY_OPENROUTER_API_KEY}" ] && echo "FACTORY_OPENROUTER_API_KEY=${FACTORY_OPENROUTER_API_KEY}"
           } | ssh "${VPS_USER}@${VPS_HOST}" "
             cat > /opt/meshwiki/orchestrator.env.new
             if grep -q FACTORY_ANTHROPIC_API_KEY /opt/meshwiki/orchestrator.env.new; then
