@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 
 from ..agents.pm_agent import SubTask, decompose_with_pm
+from ..config import get_settings
 from ..integrations.meshwiki_client import MeshWikiClient
 from ..state import FactoryState
 
@@ -87,9 +89,13 @@ async def decompose_node(state: FactoryState) -> dict:
     Returns:
         Partial state update with ``subtasks`` and ``graph_status``.
     """
+    settings = get_settings()
     logger.info(
         "decompose: decomposing task %s", state.get("task_wiki_page", "<unknown>")
     )
+
+    if settings.dry_run:
+        return await _decompose_dry_run(state, settings.dry_run_step_delay_seconds)
 
     async with MeshWikiClient() as meshwiki_client:
         result = await decompose_with_pm(state, meshwiki_client, None)
@@ -167,4 +173,46 @@ async def decompose_node(state: FactoryState) -> dict:
         "subtasks": dispatched,
         "graph_status": "dispatching",
         "incremental_costs_usd": [incremental_cost],
+    }
+
+
+async def _decompose_dry_run(state: FactoryState, delay: float) -> dict:
+    """Return a single canned subtask without calling the PM agent."""
+    parent_task = state.get("task_wiki_page", "dry-run-task")
+    title = state.get("title") or parent_task
+    subtask_id = f"{parent_task}/DRY001"
+    subtask_page = subtask_id
+
+    logger.info(
+        "decompose: DRY RUN — simulating decomposition for %s (delay=%.1fs)",
+        parent_task,
+        delay,
+    )
+    await asyncio.sleep(delay)
+
+    subtask: SubTask = SubTask(
+        id=subtask_id,
+        title=f"[dry-run] {title}",
+        wiki_page=subtask_page,
+        token_budget=1000,
+        status="pending",
+        parent_task=parent_task,
+    )
+
+    async with MeshWikiClient() as meshwiki_client:
+        page_content = _build_subtask_page(subtask, parent_task)
+        try:
+            await meshwiki_client.create_page(subtask_page, page_content)
+        except Exception as exc:
+            logger.warning("decompose dry-run: failed to create subtask page: %s", exc)
+
+        try:
+            await meshwiki_client.transition_task(parent_task, "decomposed")
+        except Exception as exc:
+            logger.warning("decompose dry-run: failed to transition parent task: %s", exc)
+
+    return {
+        "subtasks": [subtask],
+        "graph_status": "dispatching",
+        "incremental_costs_usd": [0.0],
     }

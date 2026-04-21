@@ -15,6 +15,7 @@ from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 
 from .bots.bookkeeper import BookkeeperBot
 from .bots.ci_fixer import CIFixerBot
+from .bots.insight import InsightBot
 from .bots.registry import BotRegistry
 from .bots.scheduler import SchedulerBot
 from .bots.terminal_review import TerminalReviewBot
@@ -153,6 +154,12 @@ async def lifespan(app: FastAPI):
         logger.info(
             "factory: ci-fixer bot enabled (interval=%ds)",
             settings.ci_fixer_interval_seconds,
+        )
+    if settings.insight_enabled:
+        bot_registry.register(InsightBot())
+        logger.info(
+            "factory: insight bot enabled (interval=%ds)",
+            settings.insight_interval_seconds,
         )
     app.state.bot_registry = bot_registry
 

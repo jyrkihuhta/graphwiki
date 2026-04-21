@@ -623,6 +623,7 @@ async def grind_subtask_e2b(
     base_branch = settings.pr_base_branch
     review_feedback = subtask.get("review_feedback") or ""
     is_rework = bool(review_feedback)
+    subtask_id = subtask["id"]
 
     if is_rework:
         branch_instruction = (
@@ -647,6 +648,16 @@ async def grind_subtask_e2b(
         )
         rework_section = ""
 
+    if is_rework:
+        step9_cmd = "gh pr view --json url --jq .url  # print existing PR URL"
+        step9_verb = "Update the existing PR"
+    else:
+        step9_cmd = (
+            f'gh pr create --base {base_branch} --head factory/{subtask_id}'
+            f' --title "[Factory] ..." --body "..."'
+        )
+        step9_verb = "Create a PR"
+
     task_prompt = (
         f"You are working on the MeshWiki project (FastAPI + Python 3.12 + Rust graph engine). "
         f"Implement the following task and open a GitHub PR when done.\n\n"
@@ -657,16 +668,16 @@ async def grind_subtask_e2b(
         f"1. Explore the codebase to understand context\n"
         f"{branch_instruction}"
         f"3. Implement the changes with tests\n"
-        f"4. Run: black src/ && isort --profile black src/ && ruff check src/\n"
-        f"   (Tools are installed globally in the sandbox — do NOT use .venv/bin/ prefix.)\n"
+        f"4. Run autofix on Python files only: black src/ && isort --profile black src/ && ruff check src/\n"
+        f"   (Tools are installed globally — do NOT use .venv/bin/ prefix. black/isort are for .py files ONLY; do not run them on .js, .css, or other file types.)\n"
         f"5. Run: python -m pytest src/tests/ -x -q\n"
         f"6. Fix any lint/test failures\n"
         f"7. Commit your changes\n"
         f"8. Rebase onto the latest {base_branch} to avoid merge conflicts:\n"
         f"   git fetch origin && git rebase origin/{base_branch}\n"
-        f"   Resolve any conflicts, then: git push --force-with-lease\n"
-        f"9. {'Update the existing PR' if is_rework else 'Create a PR'} targeting {base_branch}: "
-        f"{'gh pr view --json url --jq .url  # print existing PR URL' if is_rework else f'gh pr create --base {base_branch} --title \"[Factory] ...\" --body \"...\"'}\n"
+        f"   Resolve any conflicts, then push: git push -u origin HEAD\n"
+        f"   (Use 'git push -u origin HEAD' — do NOT use --force-with-lease; the branch may have no upstream tracking yet.)\n"
+        f"9. {step9_verb} targeting {base_branch}: {step9_cmd}\n"
         f"   The PR title MUST start with '[Factory] ' so it is clearly identified as automated.\n"
         f"10. Print the PR URL on the last line of your output"
     )
@@ -677,6 +688,21 @@ async def grind_subtask_e2b(
     sandbox_cost: float = 0.0
     _pty_chunks: list[str] = []
     wiki_page: str = subtask["wiki_page"]
+
+    # ── Dry-run short-circuit ─────────────────────────────────────────────
+    if settings.dry_run:
+        logger.info(
+            "e2b grinder: DRY RUN — simulating grind for %s (delay=%.1fs)",
+            subtask["id"],
+            settings.dry_run_step_delay_seconds,
+        )
+        await asyncio.sleep(settings.dry_run_step_delay_seconds)
+        subtask.update({
+            "status": "review",
+            "branch_name": branch_name,
+            "pr_url": f"https://github.com/dry-run/fake/pull/0",
+        })
+        return {"subtask": subtask, "incremental_cost_usd": 0.0}
 
     # Expose E2B_API_KEY so AsyncSandbox.create() picks it up from the environment
     os.environ["E2B_API_KEY"] = settings.e2b_api_key

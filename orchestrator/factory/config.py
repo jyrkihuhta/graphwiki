@@ -105,6 +105,12 @@ class Settings(BaseSettings):
     pm_openrouter_model: str = (
         "anthropic/claude-sonnet-4-5"  # FACTORY_PM_OPENROUTER_MODEL — model to use via OpenRouter
     )
+    dry_run: bool = (
+        False  # FACTORY_DRY_RUN — skip E2B sandbox and LLM calls; use short sleeps instead
+    )
+    dry_run_step_delay_seconds: float = (
+        3.0  # FACTORY_DRY_RUN_STEP_DELAY_SECONDS — simulated delay per pipeline step
+    )
     ci_fixer_enabled: bool = (
         False  # FACTORY_CI_FIXER_ENABLED — enable the CI fixer bot
     )
@@ -116,6 +122,15 @@ class Settings(BaseSettings):
     )
     ci_fixer_model: str = (
         "claude-haiku-4-5-20251001"  # FACTORY_CI_FIXER_MODEL — LLM for failure analysis
+    )
+    insight_enabled: bool = (
+        False  # FACTORY_INSIGHT_ENABLED — enable weekly insight/proposal bot
+    )
+    insight_interval_seconds: int = (
+        604800  # FACTORY_INSIGHT_INTERVAL_SECONDS — weekly by default
+    )
+    insight_model: str = (
+        "claude-haiku-4-5-20251001"  # FACTORY_INSIGHT_MODEL — LLM for synthesis
     )
 
     model_config = SettingsConfigDict(env_prefix="FACTORY_")

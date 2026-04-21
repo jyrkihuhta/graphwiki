@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from datetime import datetime, timezone
 
@@ -45,6 +46,10 @@ async def pm_review_node(state: FactoryState) -> dict:
         subtask["title"],
         state.get("task_wiki_page", "<unknown>"),
     )
+
+    settings = get_settings()
+    if settings.dry_run:
+        return await _pm_review_dry_run(state, subtask, settings.dry_run_step_delay_seconds)
 
     async with MeshWikiClient() as meshwiki_client, GitHubClient() as github_client:
         incremental_cost: float = 0.0
@@ -193,5 +198,40 @@ async def pm_review_node(state: FactoryState) -> dict:
     return {
         "subtasks": [updated_subtask],
         "incremental_costs_usd": [incremental_cost],
+        "_current_subtask_id": subtask_id,
+    }
+
+
+async def _pm_review_dry_run(
+    state: FactoryState,
+    subtask: SubTask,
+    delay: float,
+) -> dict:
+    """Auto-approve a subtask without calling the PM agent."""
+    subtask_id = subtask["id"]
+    logger.info(
+        "pm_review: DRY RUN — auto-approving subtask %s (delay=%.1fs)",
+        subtask_id,
+        delay,
+    )
+    await asyncio.sleep(delay)
+
+    timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    pm_section = (
+        f"## PM Review — {timestamp}\n\n"
+        f"✅ **Approved** _(dry-run — no actual review performed)_\n"
+    )
+
+    updated_subtask = SubTask(**{**subtask, "status": "merged", "review_feedback": None})
+
+    async with MeshWikiClient() as meshwiki_client:
+        try:
+            await meshwiki_client.append_to_page(subtask["wiki_page"], pm_section)
+        except Exception as exc:
+            logger.warning("pm_review dry-run: failed to append review note: %s", exc)
+
+    return {
+        "subtasks": [updated_subtask],
+        "incremental_costs_usd": [0.0],
         "_current_subtask_id": subtask_id,
     }
