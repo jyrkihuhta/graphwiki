@@ -46,7 +46,7 @@
   function pollTasks() {
     var statuses = ["planned", "in_progress", "review", "merged", "failed", "rejected"];
     Promise.all(statuses.map(function (s) {
-      return fetch("/api/v1/tasks?assignee=factory&status=" + s)
+      return fetch("/api/factory/tasks?status=" + s)
         .then(function (r) { return r.ok ? r.json() : []; })
         .catch(function () { return []; });
     })).then(function (results) {

@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Callable
 
 from fastapi import (
+    Depends,
     FastAPI,
     Form,
     HTTPException,
@@ -35,6 +36,7 @@ from meshwiki.auth import (
 from meshwiki.config import settings
 from meshwiki.core.dependencies import (
     get_revision_store,
+    get_storage,
     set_revision_store,
     set_storage,
 )
@@ -1003,6 +1005,31 @@ async def factory_live(request: Request):
         "factory_live.html",
         get_context(page_tree=None),
     )
+
+
+@app.get("/api/factory/tasks")
+async def factory_tasks(
+    status: str | None = None,
+    storage: FileStorage = Depends(get_storage),
+):
+    """Return factory tasks (all statuses or filtered) without requiring an API key.
+
+    The dashboard JS calls this instead of /api/v1/tasks directly so that
+    the factory_api_key auth requirement doesn't block unauthenticated browsers.
+    """
+    statuses_filter = {status} if status else None
+    pages = await storage.list_pages_with_metadata()
+    results = []
+    for page in pages:
+        extra = page.metadata.model_extra or {}
+        if extra.get("type") not in ("task", "epic"):
+            continue
+        if extra.get("assignee") != "factory":
+            continue
+        if statuses_filter and extra.get("status") not in statuses_filter:
+            continue
+        results.append({"name": page.name, "metadata": page.metadata.model_dump()})
+    return results
 
 
 @app.get("/api/factory/status")
