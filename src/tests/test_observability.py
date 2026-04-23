@@ -135,10 +135,32 @@ async def auth_client(auth_settings):
 
 
 @pytest.mark.asyncio
-async def test_metrics_exempt_from_auth(auth_client):
-    """/metrics must be accessible even when auth is enabled."""
+async def test_metrics_requires_auth(auth_client):
+    """/metrics returns 401 for unauthenticated requests when auth is enabled."""
     resp = await auth_client.get("/metrics")
-    # Should NOT redirect to /login
+    assert resp.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_metrics_accessible_with_bearer_token(
+    auth_client, auth_settings, monkeypatch
+):
+    """/metrics is accessible with a valid Bearer token (for Prometheus scrapers)."""
+    import meshwiki.config as cfg
+    import meshwiki.main
+
+    patched = cfg.Settings(
+        data_dir=auth_settings.data_dir,
+        auth_enabled=True,
+        auth_password="hunter2",
+        session_secret="test-secret-key-32-chars-minimum!",
+        graph_watch=False,
+        factory_api_key="test-scrape-key",
+    )
+    monkeypatch.setattr(meshwiki.main, "settings", patched)
+    resp = await auth_client.get(
+        "/metrics", headers={"Authorization": "Bearer test-scrape-key"}
+    )
     assert resp.status_code == 200
 
 

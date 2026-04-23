@@ -10,12 +10,15 @@ from starlette.requests import Request
 from starlette.responses import RedirectResponse, Response
 
 # Paths that never require authentication
-_PUBLIC_PATHS = frozenset({"/login", "/health/live", "/health/ready", "/metrics"})
+_PUBLIC_PATHS = frozenset({"/login", "/health/live", "/health/ready"})
 _PUBLIC_PREFIXES = (
     "/static/",
     "/api/v1/",
+    # WebSocket endpoints can't handle HTTP redirects — they do their own auth.
     "/ws/",
-    "/api/graph",
+    # /metrics must pass through so the handler can return 401 (not a redirect)
+    # for Prometheus scrapers that can't follow 302s.
+    "/metrics",
     "/api/tasks/",
     "/api/agents/",
 )

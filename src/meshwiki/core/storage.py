@@ -1,6 +1,7 @@
 """Storage abstraction for wiki pages."""
 
 import re
+import uuid as uuid_mod
 from abc import ABC, abstractmethod
 from datetime import datetime
 from pathlib import Path
@@ -187,10 +188,22 @@ class FileStorage(Storage):
         # Parse any frontmatter from the content
         metadata, body = self._parse_frontmatter(content)
 
-        # Update modification time
+        # Carry forward uuid and created from the file on disk when the incoming
+        # content has no frontmatter (e.g. programmatic saves without frontmatter).
+        if path.exists() and (not metadata.created or not metadata.uuid):
+            existing_raw = path.read_text(encoding="utf-8")
+            existing_meta, _ = self._parse_frontmatter(existing_raw)
+            if not metadata.created:
+                metadata.created = existing_meta.created
+            if not metadata.uuid:
+                metadata.uuid = existing_meta.uuid
+
+        # Update modification time; assign stable UUID on first save.
         now = datetime.now()
         if not metadata.created:
             metadata.created = now
+            if not metadata.uuid:
+                metadata.uuid = str(uuid_mod.uuid4())
         metadata.modified = now
 
         # Write with frontmatter

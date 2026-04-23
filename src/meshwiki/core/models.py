@@ -46,6 +46,7 @@ class PageMetadata(BaseModel):
     children: list[str] = Field(default_factory=list)
     created: datetime | None = None
     modified: datetime | None = None
+    uuid: str | None = None
 
 
 class Page(BaseModel):

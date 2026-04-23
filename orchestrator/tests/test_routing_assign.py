@@ -426,9 +426,10 @@ class TestRouteAfterPmReviewExtraEdgeCases:
         assert result == END
 
     def test_skipped_subtask_counts_as_terminal(self) -> None:
-        """'skipped' is not in terminal_statuses; sibling 'skipped' → not all done → END.
+        """'skipped' subtasks (retired by redecompose) count as terminal.
 
-        This tests the exact set: {merged, done, failed}; 'skipped' is outside it.
+        When all active subtasks are done and siblings are skipped, the whole
+        task should proceed to human_review / merge rather than stalling.
         """
         sub1 = _make_subtask("t1", status="merged", files=["src/t1.py"])
         sub2 = _make_subtask("t2", status="skipped", files=["src/t2.py"])
@@ -437,5 +438,5 @@ class TestRouteAfterPmReviewExtraEdgeCases:
         mock_settings.auto_merge = False
         with patch("factory.graph.get_settings", return_value=mock_settings):
             result = route_after_pm_review(state)
-        # 'skipped' not in {"merged", "done", "failed"}, so not all_done → END
-        assert result == END
+        # 'skipped' is in terminal_statuses, so all_done → all_approved
+        assert result == "all_approved"

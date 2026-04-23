@@ -8,9 +8,12 @@ import pytest
 
 from factory.agents.pm_agent import (
     _build_subtask,
+    _OpenAIResponseAdapter,
+    _OpenAIUsageAdapter,
     decompose_with_pm,
     review_with_pm,
 )
+from factory.cost import tokens_to_usd
 from factory.state import FactoryState, SubTask
 
 # ---------------------------------------------------------------------------
@@ -270,6 +273,41 @@ async def test_decompose_reads_wiki_page_via_tool() -> None:
     assert len(subtasks) == 1
 
 
+@pytest.mark.asyncio
+async def test_decompose_with_pm_includes_redecompose_context() -> None:
+    """decompose_with_pm embeds redecompose_context in the user message when provided."""
+    state = _make_state()
+
+    end_turn_response = _make_response(
+        content=[_make_text_block("Nothing to do.")],
+        stop_reason="end_turn",
+    )
+
+    mock_create = AsyncMock(return_value=end_turn_response)
+    mock_messages = MagicMock()
+    mock_messages.create = mock_create
+
+    mock_anthropic_client = MagicMock()
+    mock_anthropic_client.messages = mock_messages
+
+    meshwiki_client = AsyncMock()
+    meshwiki_client.get_page = AsyncMock(return_value=None)
+
+    context = "Previous subtask A failed: command not found: black"
+    with patch(
+        "factory.agents.pm_agent.anthropic.AsyncAnthropic",
+        return_value=mock_anthropic_client,
+    ):
+        await decompose_with_pm(
+            state, meshwiki_client, github_client=None, redecompose_context=context
+        )
+
+    call_kwargs = mock_create.call_args[1]
+    user_content = call_kwargs["messages"][0]["content"]
+    assert "Redecompose Notice" in user_content
+    assert context in user_content
+
+
 # ---------------------------------------------------------------------------
 # review_with_pm
 # ---------------------------------------------------------------------------
@@ -406,3 +444,63 @@ async def test_review_with_pm_changes_requested() -> None:
 
     assert result["decision"] == "changes_requested"
     assert result["feedback"] == "Missing tests for tag deletion."
+
+
+# ---------------------------------------------------------------------------
+# _OpenAIResponseAdapter — model threading + cost pricing
+# ---------------------------------------------------------------------------
+
+
+def _fake_oai_response(
+    content: str = "ok",
+    finish_reason: str = "stop",
+    prompt_tokens: int = 1000,
+    completion_tokens: int = 200,
+):
+    """Build a minimal fake OpenAI ChatCompletion response."""
+    usage = MagicMock()
+    usage.prompt_tokens = prompt_tokens
+    usage.completion_tokens = completion_tokens
+
+    msg = MagicMock()
+    msg.content = content
+    msg.tool_calls = []
+
+    choice = MagicMock()
+    choice.message = msg
+    choice.finish_reason = finish_reason
+
+    resp = MagicMock()
+    resp.choices = [choice]
+    resp.usage = usage
+    return resp
+
+
+def test_openai_response_adapter_model_is_threaded():
+    """_response_model must reflect the model passed at construction, not a class default."""
+    fake = _fake_oai_response()
+    openrouter = _OpenAIResponseAdapter(fake, "anthropic/claude-sonnet-4-5")
+    minimax = _OpenAIResponseAdapter(fake, "MiniMax-M2.7")
+
+    assert openrouter._response_model == "anthropic/claude-sonnet-4-5"
+    assert minimax._response_model == "MiniMax-M2.7"
+    # Different instances must not share the attribute
+    assert openrouter._response_model != minimax._response_model
+
+
+def test_openai_response_adapter_cost_differs_by_model():
+    """OpenRouter-Sonnet and MiniMax costs should differ by ~10× on the same token counts."""
+    fake = _fake_oai_response(prompt_tokens=10_000, completion_tokens=1_000)
+
+    sonnet_adapter = _OpenAIResponseAdapter(fake, "anthropic/claude-sonnet-4-5")
+    minimax_adapter = _OpenAIResponseAdapter(fake, "MiniMax-M2.7")
+
+    sonnet_cost = tokens_to_usd(sonnet_adapter.usage, sonnet_adapter._response_model)
+    minimax_cost = tokens_to_usd(minimax_adapter.usage, minimax_adapter._response_model)
+
+    # Sonnet: 10000*3e-6 + 1000*15e-6 = 0.030 + 0.015 = 0.045
+    assert abs(sonnet_cost - 0.045) < 1e-9
+    # MiniMax: 10000*0.3e-6 + 1000*1.1e-6 = 0.003 + 0.0011 = 0.0041
+    assert abs(minimax_cost - 0.0041) < 1e-9
+    # The ratio should be roughly 10× or more
+    assert sonnet_cost / minimax_cost > 9

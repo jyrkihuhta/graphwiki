@@ -106,26 +106,31 @@ class TestOpenAIResponseAdapter:
         from factory.agents.pm_agent import _OpenAIResponseAdapter
 
         oai = self._make_oai_resp(100, 50)
-        adapter = _OpenAIResponseAdapter(oai)
+        adapter = _OpenAIResponseAdapter(oai, "MiniMax-M2.7")
         assert adapter.usage is not None
         assert adapter.usage.input_tokens == 100
         assert adapter.usage.output_tokens == 50
 
-    def test_response_model_is_minimax(self):
+    def test_response_model_reflects_model_arg(self):
         from factory.agents.pm_agent import _OpenAIResponseAdapter
 
         oai = self._make_oai_resp(100, 50)
-        adapter = _OpenAIResponseAdapter(oai)
-        assert adapter._response_model == "MiniMax-M2.7"
+        assert (
+            _OpenAIResponseAdapter(oai, "MiniMax-M2.7")._response_model
+            == "MiniMax-M2.7"
+        )
+        assert (
+            _OpenAIResponseAdapter(oai, "anthropic/claude-sonnet-4-5")._response_model
+            == "anthropic/claude-sonnet-4-5"
+        )
 
     def test_minimax_fallback_cost_uses_minimax_rates(self):
         """Cost calculated from adapter usage must use MiniMax pricing."""
         from factory.agents.pm_agent import _OpenAIResponseAdapter
 
         oai = self._make_oai_resp(1_000_000, 1_000_000)
-        adapter = _OpenAIResponseAdapter(oai)
-        effective_model = getattr(adapter, "_response_model", "claude-sonnet-4-6")
-        cost = tokens_to_usd(adapter.usage, effective_model)
+        adapter = _OpenAIResponseAdapter(oai, "MiniMax-M2.7")
+        cost = tokens_to_usd(adapter.usage, adapter._response_model)
         minimax_cost = tokens_to_usd(
             SimpleNamespace(input_tokens=1_000_000, output_tokens=1_000_000),
             "MiniMax-M2.7",
@@ -138,7 +143,7 @@ class TestOpenAIResponseAdapter:
         msg = SimpleNamespace(content="hi", tool_calls=[])
         choice = SimpleNamespace(message=msg, finish_reason="stop")
         oai = SimpleNamespace(choices=[choice], usage=None)
-        adapter = _OpenAIResponseAdapter(oai)
+        adapter = _OpenAIResponseAdapter(oai, "MiniMax-M2.7")
         assert adapter.usage is None
 
 

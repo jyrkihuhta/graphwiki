@@ -108,8 +108,15 @@ async def _resume_interrupted_tasks(graph, saver, settings) -> None:
             if not page_name:
                 continue
 
-            config = {"configurable": {"thread_id": page_name}}
+            # Prefer UUID as thread_id; fall back to page name for legacy tasks.
+            task_uuid: str | None = (task.get("metadata") or {}).get("uuid")
+            thread_id = task_uuid or page_name
+            config = {"configurable": {"thread_id": thread_id}}
             checkpoint_tuple = await saver.aget_tuple(config)
+            if checkpoint_tuple is None and task_uuid:
+                # Old checkpoint may be keyed by page name — try that too.
+                config = {"configurable": {"thread_id": page_name}}
+                checkpoint_tuple = await saver.aget_tuple(config)
             if checkpoint_tuple is None:
                 logger.info(
                     "factory: no checkpoint for %s — skipping resume", page_name
@@ -118,8 +125,15 @@ async def _resume_interrupted_tasks(graph, saver, settings) -> None:
 
             await _clear_stuck_grinders(graph, config, page_name)
 
+            # Register the page→thread_id mapping so /status can resolve it.
+            thread_id = config["configurable"]["thread_id"]
+            if hasattr(app, "state") and hasattr(app.state, "page_thread_map"):
+                app.state.page_thread_map[page_name] = thread_id
+
             logger.info(
-                "factory: resuming interrupted task %s from checkpoint", page_name
+                "factory: resuming interrupted task %s from checkpoint (thread_id=%s)",
+                page_name,
+                thread_id,
             )
 
             def _log_exc(t: asyncio.Task, name: str = page_name) -> None:
@@ -167,6 +181,9 @@ async def lifespan(app: FastAPI):
         app.state.graph = build_graph(saver)
         app.state.saver = saver
         app.state.settings = settings
+        # Maps page_name → LangGraph thread_id (UUID); allows /status to look up
+        # the correct checkpoint key even though asyncio task names use page_name.
+        app.state.page_thread_map: dict[str, str] = {}
         logger.info(
             "factory: graph initialised with SQLite checkpointer at %s",
             settings.checkpoint_db,
@@ -214,15 +231,43 @@ def _verify_signature(body: bytes, signature_header: str | None) -> None:
         raise HTTPException(status_code=403, detail="Invalid signature")
 
 
-def _build_initial_state(page_name: str, data: dict[str, Any]) -> FactoryState:
+async def _resolve_thread_id(page_name: str, data: dict[str, Any]) -> str:
+    """Return the stable graph thread_id for *page_name*.
+
+    Prefers the ``uuid`` field from the webhook data payload (MeshWiki embeds
+    page metadata there).  Falls back to fetching the page via the API, then
+    ultimately to the page name itself for legacy pages that have no UUID yet.
+    """
+    if task_uuid := data.get("uuid"):
+        return task_uuid
+    try:
+        settings = get_settings()
+        async with MeshWikiClient(
+            settings.meshwiki_url, settings.meshwiki_api_key
+        ) as mc:
+            page = await mc.get_page(page_name)
+        if page:
+            return page.get("metadata", {}).get("uuid") or page_name
+    except Exception as exc:
+        logger.debug(
+            "factory: could not fetch UUID for %s: %s", page_name, exc
+        )
+    return page_name
+
+
+def _build_initial_state(
+    page_name: str, thread_id: str, data: dict[str, Any]
+) -> FactoryState:
     """Build the initial FactoryState for a new graph thread.
 
     ``skip_decomposition`` is handled by ``task_intake_node`` which reads the
     full page from MeshWiki — no need to inspect the webhook payload here.
     """
+    task_uuid = thread_id if thread_id != page_name else None
     return FactoryState(
-        thread_id=page_name,
+        thread_id=thread_id,
         task_wiki_page=page_name,
+        task_uuid=task_uuid,
         title=data.get("title", page_name),
         requirements=data.get("requirements", ""),
         subtasks=[],
@@ -276,7 +321,13 @@ async def status(request: Request) -> dict:
     total_cost_usd: float = 0.0
     total_grinders: int = 0
 
-    for thread_id in sorted(active_thread_ids):
+    page_thread_map: dict[str, str] = getattr(
+        request.app.state, "page_thread_map", {}
+    )
+    for page_id in sorted(active_thread_ids):
+        # active_thread_ids contains page names (from asyncio task names).
+        # Resolve to the actual LangGraph thread_id (UUID) when available.
+        thread_id = page_thread_map.get(page_id, page_id)
         try:
             config = {"configurable": {"thread_id": thread_id}}
             snapshot = await graph.aget_state(config)
@@ -292,8 +343,8 @@ async def status(request: Request) -> dict:
             total_grinders += len(active_grinders)
             active_graphs.append(
                 {
-                    "thread_id": thread_id,
-                    "title": v.get("title", thread_id),
+                    "thread_id": page_id,  # page name for display
+                    "title": v.get("title", page_id),
                     "graph_status": v.get("graph_status", "unknown"),
                     "subtasks_total": len(subtasks),
                     "subtasks_completed": len(completed),
@@ -303,7 +354,7 @@ async def status(request: Request) -> dict:
                 }
             )
         except Exception as exc:
-            logger.debug("status: could not read state for %s: %s", thread_id, exc)
+            logger.debug("status: could not read state for %s: %s", page_id, exc)
 
     # ── Resources ─────────────────────────────────────────────────────────────
     resources = {
@@ -389,24 +440,29 @@ async def receive_webhook(
             return {"status": "ignored", "reason": "graph already running"}
 
         graph = request.app.state.graph
-        initial_state = _build_initial_state(page_name, data)
-        config = {"configurable": {"thread_id": page_name}}
+        thread_id = await _resolve_thread_id(page_name, data)
+        initial_state = _build_initial_state(page_name, thread_id, data)
+        config = {"configurable": {"thread_id": thread_id}}
 
         def _log_exc(t: asyncio.Task, name: str = page_name) -> None:
             if not t.cancelled() and (exc := t.exception()):
                 logger.error("graph task %s failed: %s", name, exc, exc_info=exc)
 
+        request.app.state.page_thread_map[page_name] = thread_id
         task = asyncio.create_task(
             graph.ainvoke(initial_state, config=config),
             name=f"graph:{page_name}",
         )
         task.add_done_callback(_log_exc)
-        logger.info("webhook: started graph task for %s", page_name)
+        logger.info(
+            "webhook: started graph task for %s (thread_id=%s)", page_name, thread_id
+        )
         return {"status": "started"}
 
     if event == "task.approved":
         graph = request.app.state.graph
-        config = {"configurable": {"thread_id": page_name}}
+        thread_id = await _resolve_thread_id(page_name, data)
+        config = {"configurable": {"thread_id": thread_id}}
         approval = data.get("approval", "approve")
         feedback = data.get("feedback")
         asyncio.create_task(
@@ -433,7 +489,8 @@ async def receive_webhook(
             )
             return {"status": "ignored", "reason": "subtask managed by parent graph"}
         graph = request.app.state.graph
-        config = {"configurable": {"thread_id": page_name}}
+        thread_id = await _resolve_thread_id(page_name, data)
+        config = {"configurable": {"thread_id": thread_id}}
         asyncio.create_task(
             graph.ainvoke(
                 {

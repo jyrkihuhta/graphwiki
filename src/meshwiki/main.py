@@ -3,6 +3,7 @@
 import asyncio
 import json
 import re
+import secrets
 import time
 import uuid
 from contextlib import asynccontextmanager
@@ -1055,8 +1056,10 @@ async def factory_status_proxy():
 
 
 @app.get("/api/graph")
-async def api_graph():
+async def api_graph(request: Request):
     """Return full graph as JSON for visualization."""
+    if settings.auth_enabled and not request.session.get("authenticated"):
+        raise HTTPException(status_code=401, detail="Authentication required")
     engine = get_engine()
     if engine is None:
         return {"nodes": [], "links": []}
@@ -1104,6 +1107,11 @@ async def api_graph():
 @app.websocket("/ws/graph")
 async def ws_graph(websocket: WebSocket):
     """WebSocket endpoint for real-time graph events."""
+    if settings.auth_enabled:
+        session = websocket.scope.get("session", {})
+        if not session.get("authenticated"):
+            await websocket.close(code=1008)
+            return
     await websocket.accept()
     client_id, queue = manager.connect()
     try:
@@ -1271,8 +1279,20 @@ async def health_ready():
 
 
 @app.get("/metrics")
-async def metrics_endpoint():
-    """Prometheus metrics endpoint — exempt from auth."""
+async def metrics_endpoint(request: Request):
+    """Prometheus metrics endpoint.
+
+    When ``auth_enabled`` is True, requires either a valid session cookie or
+    an ``Authorization: Bearer <MESHWIKI_API_KEY>`` header so Prometheus
+    scrapers can authenticate without a browser session.
+    """
+    if settings.auth_enabled:
+        authed = request.session.get("authenticated")
+        if not authed:
+            auth_header = request.headers.get("Authorization", "")
+            token = auth_header.removeprefix("Bearer ").strip()
+            if not token or not secrets.compare_digest(token, settings.factory_api_key):
+                raise HTTPException(status_code=401, detail="Authentication required")
     engine = get_engine()
     if engine is not None:
         try:

@@ -17,6 +17,10 @@ MODEL_RATES: dict[str, tuple[float, float]] = {
     # Claude 4.x models (current defaults)
     "claude-sonnet-4-6": (3e-6, 15e-6),
     "claude-haiku-4-5-20251001": (0.8e-6, 4e-6),
+    # OpenRouter-namespaced Anthropic models (same rates, different slug)
+    "anthropic/claude-sonnet-4-5": (3e-6, 15e-6),
+    "anthropic/claude-sonnet-4": (3e-6, 15e-6),
+    "anthropic/claude-haiku-4-5": (0.8e-6, 4e-6),
     # MiniMax models
     "MiniMax-M2.7": (0.3e-6, 1.1e-6),
     # Legacy models kept for historical cost records

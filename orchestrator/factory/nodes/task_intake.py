@@ -98,6 +98,7 @@ async def task_intake_node(state: FactoryState) -> dict:
 
     title: str = metadata.get("title", task_wiki_page)
     requirements: str = page.get("content", "")
+    task_uuid: str | None = metadata.get("uuid") or None
 
     # Resolve target repo — prefer `repo:` frontmatter, fall back to FACTORY_DEFAULT_REPO
     # then FACTORY_GITHUB_REPO so existing tasks without the field keep working.
@@ -125,7 +126,8 @@ async def task_intake_node(state: FactoryState) -> dict:
             )
         _done = {"done", "merged", "failed", "rejected"}
         active_subtasks = [
-            t for t in pre_seeded
+            t
+            for t in pre_seeded
             if (t.get("metadata") or {}).get("status") not in _done
         ]
         if active_subtasks:
@@ -151,6 +153,7 @@ async def task_intake_node(state: FactoryState) -> dict:
                 st: SubTask = {
                     "id": t_name,
                     "wiki_page": t_name,
+                    "parent_task": task_wiki_page,
                     "title": str(t_meta.get("title") or t_name),
                     "description": description,
                     "status": "pending",
@@ -158,6 +161,7 @@ async def task_intake_node(state: FactoryState) -> dict:
                     "max_attempts": 3,
                     "error_log": [],
                     "files_touched": [],
+                    "acceptance_criteria": [t_acceptance] if t_acceptance else [],
                     "token_budget": token_budget,
                     "tokens_used": 0,
                     "assigned_grinder": None,
@@ -165,6 +169,7 @@ async def task_intake_node(state: FactoryState) -> dict:
                     "pr_url": None,
                     "pr_number": None,
                     "review_feedback": None,
+                    "code_skeleton": None,
                 }
                 subtasks.append(st)
             logger.info(
@@ -176,6 +181,7 @@ async def task_intake_node(state: FactoryState) -> dict:
                 "title": title,
                 "requirements": requirements,
                 "task_repo": task_repo,
+                "task_uuid": task_uuid,
                 "subtasks": subtasks,
                 "decomposition_approved": True,
                 "graph_status": "grinding",
@@ -201,6 +207,7 @@ async def task_intake_node(state: FactoryState) -> dict:
         subtask: SubTask = {
             "id": task_wiki_page,
             "wiki_page": task_wiki_page,
+            "parent_task": task_wiki_page,
             "title": title,
             "description": requirements,
             "status": "pending",
@@ -208,6 +215,7 @@ async def task_intake_node(state: FactoryState) -> dict:
             "max_attempts": 3,
             "error_log": [],
             "files_touched": files_touched,
+            "acceptance_criteria": [],
             "token_budget": token_budget,
             "tokens_used": 0,
             "assigned_grinder": None,
@@ -215,12 +223,14 @@ async def task_intake_node(state: FactoryState) -> dict:
             "pr_url": None,
             "pr_number": None,
             "review_feedback": None,
+            "code_skeleton": None,
         }
 
         return {
             "title": title,
             "requirements": requirements,
             "task_repo": task_repo,
+            "task_uuid": task_uuid,
             "subtasks": [subtask],
             "decomposition_approved": True,
             "graph_status": "grinding",
@@ -230,5 +240,6 @@ async def task_intake_node(state: FactoryState) -> dict:
         "title": title,
         "requirements": requirements,
         "task_repo": task_repo,
+        "task_uuid": task_uuid,
         "graph_status": "decomposing",
     }

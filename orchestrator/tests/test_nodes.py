@@ -719,6 +719,78 @@ async def test_task_intake_direct_grind_boolean_flag() -> None:
     assert result["subtasks"][0]["files_touched"] == []  # default
 
 
+@pytest.mark.asyncio
+async def test_task_intake_direct_grind_subtask_has_all_required_keys() -> None:
+    """skip_decomposition SubTask must populate all SubTask TypedDict fields."""
+    state = _make_state()
+    mock_page = {
+        "name": "Task_0042_test",
+        "content": "Do it.",
+        "metadata": {
+            "title": "T",
+            "status": "planned",
+            "skip_decomposition": True,
+            "assignee": "factory",
+        },
+    }
+    mock_client = _mock_client_for_cm(AsyncMock())
+    mock_client.get_page = AsyncMock(return_value=mock_page)
+
+    with patch("factory.nodes.task_intake.MeshWikiClient", return_value=mock_client):
+        result = await task_intake_node(state)
+
+    subtask = result["subtasks"][0]
+    missing = SubTask.__required_keys__ - set(subtask.keys())
+    assert not missing, f"SubTask missing required keys: {missing}"
+
+
+@pytest.mark.asyncio
+async def test_task_intake_pre_seeded_subtask_has_all_required_keys() -> None:
+    """Pre-seeded SubTask must populate all SubTask TypedDict fields."""
+    state = _make_state()
+    parent_page = {
+        "name": "Task_0042_test",
+        "content": "Requirements.",
+        "metadata": {"title": "Parent", "status": "planned", "assignee": "factory"},
+    }
+    subtask_list = [
+        {
+            "name": "Task_0042_test_TASK001_foo",
+            "metadata": {
+                "title": "Sub one",
+                "status": "pending",
+                "assignee": "factory",
+                "acceptance_criteria": "It works",
+            },
+        }
+    ]
+    subtask_page = {"name": "Task_0042_test_TASK001_foo", "content": "Do the thing."}
+
+    call_count = 0
+
+    async def _get_page(name):
+        nonlocal call_count
+        call_count += 1
+        if name == "Task_0042_test_TASK001_foo":
+            return subtask_page
+        return parent_page
+
+    mock_client = _mock_client_for_cm(AsyncMock())
+    mock_client.get_page = AsyncMock(side_effect=_get_page)
+    mock_client.list_tasks = AsyncMock(return_value=subtask_list)
+
+    with patch("factory.nodes.task_intake.MeshWikiClient", return_value=mock_client):
+        result = await task_intake_node(state)
+
+    assert result["graph_status"] == "grinding"
+    subtask = result["subtasks"][0]
+    missing = SubTask.__required_keys__ - set(subtask.keys())
+    assert not missing, f"Pre-seeded SubTask missing required keys: {missing}"
+    assert subtask["parent_task"] == "Task_0042_test"
+    assert subtask["acceptance_criteria"] == ["It works"]
+    assert subtask["code_skeleton"] is None
+
+
 # ---------------------------------------------------------------------------
 # collect_results_node
 # ---------------------------------------------------------------------------
@@ -1304,6 +1376,133 @@ async def test_escalate_redecompose_when_majority_failed() -> None:
     assert result["graph_status"] == "escalated"
     assert "error" in result
     assert "failed" in result["error"].lower()
+    # All old subtasks become skipped so the next decompose starts fresh.
+    assert all(s["status"] == "skipped" for s in result["subtasks"])
+    # PM gets failure context.
+    assert "redecompose_context" in result
+    assert result["redecompose_context"]
+    # Attempt counter incremented.
+    assert result["redecompose_attempt"] == 1
+
+
+@pytest.mark.asyncio
+async def test_escalate_redecompose_cap_becomes_abandon() -> None:
+    """escalate_node switches to 'abandon' once MAX_REDECOMPOSE_ATTEMPTS is reached."""
+    failed_1 = _make_subtask(
+        wiki_page="Task_0042_Sub_01",
+        title="Sub 01",
+        status="failed",
+        attempt=2,
+        max_attempts=3,
+    )
+    failed_2 = _make_subtask(
+        wiki_page="Task_0042_Sub_02",
+        title="Sub 02",
+        status="failed",
+        attempt=2,
+        max_attempts=3,
+    )
+    state = _make_state(
+        subtasks=[failed_1, failed_2],
+        failed_subtask_ids=[failed_1["id"], failed_2["id"]],
+    )
+    state["redecompose_attempt"] = 2  # already at cap
+
+    mock_client_instance = _mock_client_for_cm(AsyncMock())
+    mock_client_cls = MagicMock(return_value=mock_client_instance)
+
+    with patch("factory.nodes.escalate.MeshWikiClient", mock_client_cls):
+        result = await escalate_node(state)
+
+    assert result["escalation_decision"] == "abandon"
+    assert "redecompose cap" in result.get("error", "").lower()
+
+
+@pytest.mark.asyncio
+async def test_escalate_ignores_skipped_subtasks_in_majority_count() -> None:
+    """Subtasks skipped by a prior redecompose round are not counted as failures."""
+    old_skipped = _make_subtask(
+        wiki_page="Task_0042_OldSub_01",
+        title="Old Sub 01",
+        status="skipped",
+        attempt=2,
+        max_attempts=3,
+    )
+    new_failed = _make_subtask(
+        wiki_page="Task_0042_NewSub_01",
+        title="New Sub 01",
+        status="failed",
+        attempt=0,
+        max_attempts=3,
+    )
+    new_merged = _make_subtask(
+        wiki_page="Task_0042_NewSub_02",
+        title="New Sub 02",
+        status="merged",
+    )
+    # failed_subtask_ids accumulates both old and new — the node must filter by status.
+    state = _make_state(
+        subtasks=[old_skipped, new_failed, new_merged],
+        failed_subtask_ids=[old_skipped["id"], new_failed["id"]],
+    )
+
+    mock_client_instance = _mock_client_for_cm(AsyncMock())
+    mock_client_cls = MagicMock(return_value=mock_client_instance)
+
+    with patch("factory.nodes.escalate.MeshWikiClient", mock_client_cls):
+        result = await escalate_node(state)
+
+    # new_failed has retries left → retry, not redecompose.
+    assert result["escalation_decision"] == "retry"
+    # The retried subtask's attempt is incremented; old skipped subtask is unchanged.
+    updated = {s["id"]: s for s in result["subtasks"]}
+    assert updated[old_skipped["id"]]["status"] == "skipped"
+    assert updated[new_failed["id"]]["status"] == "pending"
+    assert updated[new_failed["id"]]["attempt"] == 1
+
+
+@pytest.mark.asyncio
+async def test_escalate_redecompose_excludes_skipped_from_majority() -> None:
+    """Skipped subtasks don't inflate the majority denominator.
+
+    2 old-skipped + 1 failed + 2 merged = 3 active (non-skipped).
+    1 failed out of 3 active is a minority → abandon, not redecompose.
+    Without the filter, 1 failed out of 5 total would still be minority, but
+    if we had computed against 3 active the threshold would be ceil(3/2)=2
+    and 1 < 2 → correct abandon.
+    """
+    old_skipped_1 = _make_subtask(
+        wiki_page="Task_0042_OldSub_01", title="Old 01", status="skipped", attempt=2
+    )
+    old_skipped_2 = _make_subtask(
+        wiki_page="Task_0042_OldSub_02", title="Old 02", status="skipped", attempt=2
+    )
+    new_failed = _make_subtask(
+        wiki_page="Task_0042_NewSub_01",
+        title="New Sub 01",
+        status="failed",
+        attempt=2,
+        max_attempts=3,
+    )
+    new_merged_1 = _make_subtask(
+        wiki_page="Task_0042_NewSub_02", title="New Sub 02", status="merged"
+    )
+    new_merged_2 = _make_subtask(
+        wiki_page="Task_0042_NewSub_03", title="New Sub 03", status="merged"
+    )
+    # 1 currently-failed vs 3 active (non-skipped) → minority → abandon, not redecompose.
+    state = _make_state(
+        subtasks=[old_skipped_1, old_skipped_2, new_failed, new_merged_1, new_merged_2],
+        failed_subtask_ids=[old_skipped_1["id"], old_skipped_2["id"], new_failed["id"]],
+    )
+
+    mock_client_instance = _mock_client_for_cm(AsyncMock())
+    mock_client_cls = MagicMock(return_value=mock_client_instance)
+
+    with patch("factory.nodes.escalate.MeshWikiClient", mock_client_cls):
+        result = await escalate_node(state)
+
+    assert result["escalation_decision"] == "abandon"
 
 
 @pytest.mark.asyncio

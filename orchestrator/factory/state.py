@@ -87,8 +87,9 @@ class FactoryState(TypedDict):
     """Full state for a single factory task run (one LangGraph thread)."""
 
     # Identity
-    thread_id: str  # LangGraph thread ID = parent task wiki page name
+    thread_id: str  # LangGraph thread ID = task UUID (or page name for legacy tasks)
     task_wiki_page: str
+    task_uuid: str | None  # UUID from page frontmatter; None for pre-UUID pages
     title: str
     requirements: str  # full page content (markdown)
 
@@ -131,6 +132,10 @@ class FactoryState(TypedDict):
     # Target repo for git clone — read from task frontmatter `repo:` field; falls
     # back to FACTORY_GITHUB_REPO when absent.  Set once by task_intake_node.
     task_repo: str | None
+
+    # Redecompose loop control — set by escalate_node when decision=="redecompose".
+    redecompose_context: str | None  # failure summary passed to PM for the next decompose
+    redecompose_attempt: int  # counts redecompose rounds; escalate_node caps at MAX
 
     # Per-branch routing — echoed back by grind_node / pm_review_node so the
     # conditional routing function can identify which subtask this branch is for.

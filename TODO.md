@@ -20,12 +20,12 @@
 | 13 | **Observability** — structured logging, metrics endpoint | Planned |
 | 14 | **Version History** — SQLite revisions, diff view, restore | ✅ Complete |
 | S1 | **Staging Integration** — `staging` branch, grinders → staging, auto-merge, E2B template | ✅ Complete |
-| F8 | **Factory v2: Gap Fixes** — cost tracking, concurrency control, bookkeeper bot | 🔲 Planned |
+| F8 | **Factory v2: Gap Fixes** — cost tracking, concurrency control, bookkeeper bot | ✅ Complete |
 | F9 | **Factory v2: HBR Manager** — resource tracking, daily budget, 24/7 scheduler | 🔲 Planned |
 | F10 | **Factory v2: Live Visualization** — D3.js factory graph, `/factory/live`, WebSocket | 🔲 Planned |
 | F11 | **Factory v2: Stale PR Bot** — autonomous CI failure fixer | 🔲 Planned |
 
-**Priority:** S1 → F8 → F9 → F10 → F11 → 11 → 12 → 13
+**Priority:** F9 → F10 → F11 → 11 → 12 → 13
 
 **~390 tests passing** (70 graph-core + ~321 Python), CI pipeline active.
 
@@ -141,11 +141,11 @@ Fix correctness and reliability issues in the v1 orchestrator.
 - [x] **F8.11** httpx clients — share a single `httpx.AsyncClient` per session in `MeshWikiClient` and `GitHubClient`
 
 **Larger refactors / lower priority**
-- [ ] **F8.12** Stable page identity via UUID — terminal session keys, WebSocket lookups, and graph thread IDs all use the fragile human-readable page name (spaces/underscores/special chars cause mismatch bugs). Root cause: wiki URLs encode spaces as underscores, but page names can also contain real underscores (e.g. `get_engine()`), making the two indistinguishable in a URL. Add a `uuid` frontmatter field generated on page creation; use it as the canonical key everywhere internally, keeping the page name only for display/URL routing
-- [ ] **F8.13** Redecompose escalation — implement `"redecompose"` decision in `escalate_node`
-- [ ] **F8.14** Signed grinder commits — GitHub App token or GPG key in E2B sandbox
+- [x] **F8.12** Stable page identity via UUID — terminal session keys, WebSocket lookups, and graph thread IDs all use the fragile human-readable page name (spaces/underscores/special chars cause mismatch bugs). Root cause: wiki URLs encode spaces as underscores, but page names can also contain real underscores (e.g. `get_engine()`), making the two indistinguishable in a URL. Add a `uuid` frontmatter field generated on page creation; use it as the canonical key everywhere internally, keeping the page name only for display/URL routing
+- [x] **F8.13** Redecompose escalation — implement `"redecompose"` decision in `escalate_node`
+- [~] **F8.14** Signed grinder commits — deferred (GitHub App token or GPG key in E2B sandbox)
 - [x] **F8.15** Persist grinder terminal output and run a review bot — terminal chunks are currently streamed to the browser and discarded; storing them (e.g. appended to the task wiki page or a sidecar log file) would enable a post-run bot to analyze patterns across sessions: recurring lint failures, commands that always fail first try, slow steps, Kilo confusion about tool use. Bot output could feed back into improved task prompts, better bootstrap steps, or a "known issues" section in CLAUDE.md
-- [ ] **F8.16** `/api/graph`, `/ws/graph`, `/metrics` are unauthenticated — exposes all page names, links, and per-page view counts to anonymous users; acceptable for now but worth locking down before any public exposure
+- [x] **F8.16** `/api/graph`, `/ws/graph`, `/metrics` are unauthenticated — exposes all page names, links, and per-page view counts to anonymous users; acceptable for now but worth locking down before any public exposure
 
 **Completed**
 - [x] Configurable PM model — `FACTORY_PM_DECOMPOSE_MODEL`, `FACTORY_PM_REVIEW_MODEL`, `FACTORY_PM_TRIAGE_MODEL` env vars
@@ -177,6 +177,7 @@ Real-time factory activity view using D3.js, same visual language as the wiki gr
 - [ ] `GET /api/factory/graph` and `GET /api/factory/activity` REST endpoints
 - [ ] `/factory/live` page: D3 force graph (task circles colored by status, agent diamonds, dashed parent edges), detail panel (slide-in right, terminal embed for in_progress), activity feed strip at bottom
 - [ ] `base.html` — add conditional "Factory" nav link when `factory_enabled`
+- [ ] **Command-center flow view** — XSIAM-style horizontal pipeline visualization: sources (wiki backlog) → processing vortex (PM + grinder nodes) → outcomes (merged/failed/open PRs), with animated flowing paths between stages, live counters per stage, and branching arcs for auto vs manual routes. Inspired by Palo Alto XSIAM Command Center dashboard aesthetic.
 
 **Key files:** `core/factory_ws_manager.py` (new), `static/js/factory.js` (new), `static/css/factory.css` (new), `templates/factory_live.html` (new), `core/task_machine.py`, `main.py`, `api/tasks.py`
 
@@ -376,3 +377,4 @@ Moved to v2 milestones (see F8–F11 above):
 - Focus on correctness over performance initially
 - Keep Python as the primary interface; Rust is an implementation detail
 - Python 3.14 requires ABI3 forward compatibility flag for PyO3
+- Signed grinder commits (F8.14) deferred — GitHub App token or GPG key in E2B sandbox so factory PRs carry verified authorship

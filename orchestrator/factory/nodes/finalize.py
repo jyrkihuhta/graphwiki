@@ -37,10 +37,13 @@ async def finalize_node(state: FactoryState) -> dict:
     async with MeshWikiClient() as client:
         task_page = state["task_wiki_page"]
 
-        # C7: guard — don't finalize if any subtask is still pending/in_progress
+        # C7: guard — don't finalize if any subtask is still pending/in_progress.
+        # "skipped" subtasks are those retired by a redecompose round; they count
+        # as terminal so they never block finalization.
         subtasks = state.get("subtasks", [])
         pending = [
-            s for s in subtasks if s.get("status") not in ("merged", "done", "failed")
+            s for s in subtasks
+            if s.get("status") not in ("merged", "done", "failed", "skipped")
         ]
         if pending:
             logger.warning(

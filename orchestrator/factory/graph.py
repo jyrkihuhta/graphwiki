@@ -108,7 +108,8 @@ def route_after_pm_review(state: FactoryState) -> list[Send] | str:
         return [Send("grind", {**state, "_current_subtask_id": subtask_id})]
 
     # Subtask approved (merged).  Check if all subtasks are now terminal.
-    terminal_statuses = {"merged", "done", "failed"}
+    # "skipped" subtasks are ones retired by a redecompose round — treat as terminal.
+    terminal_statuses = {"merged", "done", "failed", "skipped"}
     all_done = all(s["status"] in terminal_statuses for s in state["subtasks"])
 
     if not all_done:

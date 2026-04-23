@@ -296,9 +296,8 @@ class _OpenAIResponseAdapter:
     the response at the correct rate rather than the Anthropic model's rate.
     """
 
-    _response_model: str = "MiniMax-M2.7"
-
-    def __init__(self, oai_resp: Any) -> None:
+    def __init__(self, oai_resp: Any, model: str) -> None:
+        self._response_model: str = model
         choice = oai_resp.choices[0]
         msg = choice.message
 
@@ -405,7 +404,7 @@ async def _call_openai_compatible(
         tools=oai_tools if oai_tools else openai.NOT_GIVEN,
         tool_choice="auto" if oai_tools else openai.NOT_GIVEN,
     )
-    return _OpenAIResponseAdapter(oai_resp)
+    return _OpenAIResponseAdapter(oai_resp, model)
 
 
 async def _messages_create_with_retry(
@@ -456,7 +455,8 @@ async def _messages_create_with_retry(
     # ── Fallback 1: OpenRouter ────────────────────────────────────────────────
     if settings.openrouter_api_key:
         logger.warning(
-            "pm_agent: falling back to OpenRouter (model=%s)", settings.pm_openrouter_model
+            "pm_agent: falling back to OpenRouter (model=%s)",
+            settings.pm_openrouter_model,
         )
         return await _call_openai_compatible(
             api_key=settings.openrouter_api_key,
@@ -524,6 +524,8 @@ async def decompose_with_pm(
     state: FactoryState,
     meshwiki_client: "MeshWikiClient",
     github_client: "GitHubClient | None",
+    *,
+    redecompose_context: str | None = None,
 ) -> dict[str, Any]:
     """Run the PM agentic loop to decompose a parent task into subtasks.
 
@@ -564,11 +566,22 @@ async def decompose_with_pm(
 
     task_wiki_page = state["task_wiki_page"]
     task_title = state.get("title", task_wiki_page)
+    redecompose_block = (
+        f"\n\n## ⚠️ Redecompose Notice\n\n"
+        f"A previous decomposition of this task was attempted but failed. "
+        f"Here is what went wrong:\n\n{redecompose_context}\n\n"
+        f"**Please produce a significantly different decomposition.** "
+        f"Use smaller, more atomic subtasks and/or a different technical approach "
+        f"to avoid repeating the same failures."
+        if redecompose_context
+        else ""
+    )
     user_message = (
         f"## Parent Task: {task_title}\n\n"
         f"**Wiki page path:** `{task_wiki_page}`\n\n"
         f"**Requirements:**\n{state.get('requirements', '')}\n\n"
-        f"## Context Pages\n\n{context_block}\n\n"
+        f"## Context Pages\n\n{context_block}"
+        f"{redecompose_block}\n\n"
         "Please decompose this task into concrete, independently implementable subtasks. "
         "Use the `meshwiki_create_subtask` tool for each subtask. "
         f"Subtask page names must use the format `{task_wiki_page}_TASK001_Short_title`, "
@@ -945,7 +958,8 @@ async def diagnose_with_pm(
         messages=[{"role": "user", "content": user_message}],
     )
 
-    incremental_cost_usd = tokens_to_usd(response.usage, settings.pm_decompose_model)
+    effective_model = getattr(response, "_response_model", settings.pm_decompose_model)
+    incremental_cost_usd = tokens_to_usd(response.usage, effective_model)
 
     revised = ""
     for block in response.content:
@@ -957,4 +971,7 @@ async def diagnose_with_pm(
         subtask["id"],
         len(revised),
     )
-    return {"revised_description": revised.strip(), "incremental_cost_usd": incremental_cost_usd}
+    return {
+        "revised_description": revised.strip(),
+        "incremental_cost_usd": incremental_cost_usd,
+    }

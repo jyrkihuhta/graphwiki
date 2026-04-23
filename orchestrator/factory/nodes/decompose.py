@@ -97,8 +97,12 @@ async def decompose_node(state: FactoryState) -> dict:
     if settings.dry_run:
         return await _decompose_dry_run(state, settings.dry_run_step_delay_seconds)
 
+    redecompose_context: str | None = state.get("redecompose_context")
+
     async with MeshWikiClient() as meshwiki_client:
-        result = await decompose_with_pm(state, meshwiki_client, None)
+        result = await decompose_with_pm(
+            state, meshwiki_client, None, redecompose_context=redecompose_context
+        )
         subtasks = result["subtasks"]
         incremental_cost = result.get("incremental_cost_usd", 0.0)
 
@@ -173,6 +177,7 @@ async def decompose_node(state: FactoryState) -> dict:
         "subtasks": dispatched,
         "graph_status": "dispatching",
         "incremental_costs_usd": [incremental_cost],
+        "redecompose_context": None,  # consumed; clear so it doesn't linger
     }
 
 
