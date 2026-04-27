@@ -51,7 +51,8 @@ async def pm_review_node(state: FactoryState) -> dict:
     if settings.dry_run:
         return await _pm_review_dry_run(state, subtask, settings.dry_run_step_delay_seconds)
 
-    async with MeshWikiClient() as meshwiki_client, GitHubClient() as github_client:
+    task_repo: str | None = state.get("task_repo") or None
+    async with MeshWikiClient() as meshwiki_client, GitHubClient(repo=task_repo) as github_client:
         incremental_cost: float = 0.0
 
         try:
