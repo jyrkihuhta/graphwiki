@@ -1,0 +1,314 @@
+"""Validate armory node: deterministic quality gate for armory artifact PRs.
+
+Runs between ``pm_review`` and ``human_review_code``.  For non-armory tasks
+(``artifact_type`` is ``None`` or ``"code"``) this node is a transparent
+pass-through.
+
+For armory artifact types it checks:
+- **tool**: no forbidden network-I/O imports in any changed ``.py`` file.
+- **playbook**: all YAML blocks in changed ``.md``/``.yaml`` files parse cleanly.
+- **wordlist**: no validation (structure is trivially valid).
+
+On failure the node marks the offending subtask as ``changes_requested``,
+posts a review comment on the PR, and sets ``graph_status`` to
+``"armory_validation_failed"`` so the routing function re-dispatches the
+grinder.  On success ``graph_status`` is set to ``"armory_validated"``.
+"""
+
+from __future__ import annotations
+
+import logging
+import re
+
+import yaml
+
+from ..armory_prompts import FORBIDDEN_IMPORTS
+from ..config import get_settings
+from ..integrations.github_client import GitHubClient, _extract_pr_number
+from ..state import FactoryState, SubTask
+
+logger = logging.getLogger(__name__)
+
+_ARMORY_TYPES: frozenset[str] = frozenset({"tool", "playbook", "wordlist"})
+
+_VALID_MODES: frozenset[str] = frozenset({"intruder", "forge", "analytical", "oob"})
+_VALID_SEVERITIES: frozenset[str] = frozenset({"critical", "high", "medium", "low", "info"})
+_PLAYBOOK_REQUIRED_FM: tuple[str, ...] = ("name", "leaf_type")
+_CHECK_REQUIRED_KEYS: tuple[str, ...] = ("id", "name", "mode", "category", "severity")
+
+
+# ---------------------------------------------------------------------------
+# Node
+# ---------------------------------------------------------------------------
+
+
+async def validate_armory_node(state: FactoryState) -> dict:
+    """Deterministic quality gate for armory artifact PRs.
+
+    Reads ``artifact_type`` from state.  If not an armory type, returns
+    ``graph_status="armory_validated"`` immediately (pass-through).
+
+    For armory types, inspects each PM-approved subtask's PR files via the
+    GitHub API and runs the appropriate checks.  Subtasks that fail validation
+    are re-queued for grinding (``status="changes_requested"``).
+
+    Args:
+        state: Current FactoryState.
+
+    Returns:
+        Partial state update with ``graph_status`` and (on failure) updated
+        ``subtasks`` list.
+    """
+    artifact_type: str | None = state.get("artifact_type")
+
+    if artifact_type not in _ARMORY_TYPES:
+        logger.debug(
+            "validate_armory: artifact_type=%r is not an armory type — pass-through",
+            artifact_type,
+        )
+        return {"graph_status": "armory_validated"}
+
+    task_repo: str = state.get("task_repo") or get_settings().github_repo
+    subtasks: list[SubTask] = list(state.get("subtasks") or [])
+
+    updated_subtasks: list[SubTask] = []
+    any_failed = False
+
+    async with GitHubClient(repo=task_repo) as github_client:
+        for subtask in subtasks:
+            if subtask["status"] != "merged":
+                updated_subtasks.append(subtask)
+                continue
+
+            pr_number: int | None = subtask.get("pr_number") or _extract_pr_number(
+                subtask.get("pr_url") or ""
+            )
+            if not pr_number:
+                logger.warning(
+                    "validate_armory: no PR number for subtask %s — skipping",
+                    subtask["id"],
+                )
+                updated_subtasks.append(subtask)
+                continue
+
+            try:
+                pr_files = await github_client.get_pr_files(pr_number)
+            except Exception as exc:
+                logger.warning(
+                    "validate_armory: failed to fetch PR #%d files for subtask %s: %s",
+                    pr_number,
+                    subtask["id"],
+                    exc,
+                )
+                updated_subtasks.append(subtask)
+                continue
+
+            if artifact_type == "tool":
+                errors = _check_tool_files(pr_files)
+            elif artifact_type == "playbook":
+                errors = _check_playbook_files(pr_files)
+            else:
+                errors = []  # wordlist: no structural checks
+
+            if errors:
+                any_failed = True
+                feedback = "Armory validation failed:\n" + "\n".join(
+                    f"- {e}" for e in errors
+                )
+                logger.info(
+                    "validate_armory: subtask %s PR #%d failed validation: %s",
+                    subtask["id"],
+                    pr_number,
+                    feedback,
+                )
+                updated: SubTask = SubTask(
+                    **{
+                        **subtask,
+                        "status": "changes_requested",
+                        "review_feedback": feedback,
+                        "attempt": subtask.get("attempt", 0) + 1,
+                    }
+                )
+                try:
+                    await github_client.request_changes(pr_number, feedback)
+                except Exception as exc:
+                    logger.warning(
+                        "validate_armory: failed to post review on PR #%d: %s",
+                        pr_number,
+                        exc,
+                    )
+                updated_subtasks.append(updated)
+            else:
+                logger.info(
+                    "validate_armory: subtask %s PR #%d passed validation",
+                    subtask["id"],
+                    pr_number,
+                )
+                updated_subtasks.append(subtask)
+
+    if any_failed:
+        return {
+            "subtasks": updated_subtasks,
+            "graph_status": "armory_validation_failed",
+        }
+    return {"graph_status": "armory_validated"}
+
+
+# ---------------------------------------------------------------------------
+# Checkers
+# ---------------------------------------------------------------------------
+
+
+def _check_tool_files(pr_files: list[dict]) -> list[str]:
+    """Check added Python lines for forbidden network-I/O imports.
+
+    Args:
+        pr_files: List of PR file objects from the GitHub API.
+
+    Returns:
+        List of error strings (empty means all clear).
+    """
+    errors: list[str] = []
+    seen: set[str] = set()  # (filename, import) dedup
+
+    for f in pr_files:
+        filename: str = f.get("filename", "")
+        if not filename.endswith(".py"):
+            continue
+        patch: str = f.get("patch", "") or ""
+        for raw_line in patch.splitlines():
+            if not raw_line.startswith("+") or raw_line.startswith("+++"):
+                continue
+            line = raw_line[1:].strip()
+            for bad in FORBIDDEN_IMPORTS:
+                if _matches_forbidden_import(line, bad):
+                    key = (filename, bad)
+                    if key not in seen:
+                        seen.add(key)
+                        errors.append(
+                            f"`{filename}`: forbidden import `{bad}` — "
+                            "use the injected `client` parameter for HTTP instead"
+                        )
+                    break
+
+    return errors
+
+
+def _matches_forbidden_import(line: str, module: str) -> bool:
+    """Return True if *line* is an import statement for *module*.
+
+    Matches both ``import urllib`` / ``import urllib.request`` and
+    ``from urllib import ...`` / ``from urllib.request import ...``.
+
+    Args:
+        line: A single stripped Python source line.
+        module: Module name to check (e.g. ``"urllib"``).
+
+    Returns:
+        True if the line imports the given module.
+    """
+    escaped = re.escape(module)
+    return bool(
+        re.match(rf"^import\s+{escaped}(\s|$|\.)", line)
+        or re.match(rf"^from\s+{escaped}(\s|\.|$)", line)
+    )
+
+
+def _check_playbook_files(pr_files: list[dict]) -> list[str]:
+    """Validate YAML syntax and required fields in changed playbook files.
+
+    Args:
+        pr_files: List of PR file objects from the GitHub API.
+
+    Returns:
+        List of error strings (empty means all clear).
+    """
+    errors: list[str] = []
+
+    for f in pr_files:
+        filename: str = f.get("filename", "")
+        if not any(filename.endswith(ext) for ext in (".md", ".yaml", ".yml")):
+            continue
+
+        patch: str = f.get("patch", "") or ""
+        added_lines = [
+            line[1:]
+            for line in patch.splitlines()
+            if line.startswith("+") and not line.startswith("+++")
+        ]
+        added_text = "\n".join(added_lines)
+
+        # Validate all fenced YAML blocks (```yaml ... ```) in added text.
+        for block in re.findall(r"```ya?ml\n(.*?)```", added_text, re.DOTALL):
+            try:
+                data = yaml.safe_load(block)
+            except yaml.YAMLError as exc:
+                errors.append(f"`{filename}`: invalid YAML block — {exc}")
+                continue
+
+            # If the block looks like a checks list, validate each check entry.
+            if isinstance(data, dict) and "checks" in data:
+                errs = _validate_checks(filename, data["checks"])
+                errors.extend(errs)
+
+        # Validate YAML frontmatter in Markdown files (--- ... ---).
+        if filename.endswith(".md"):
+            fm_match = re.match(r"^---\n(.*?)^---", added_text, re.DOTALL | re.MULTILINE)
+            if fm_match:
+                try:
+                    fm = yaml.safe_load(fm_match.group(1)) or {}
+                except yaml.YAMLError as exc:
+                    errors.append(f"`{filename}`: invalid frontmatter YAML — {exc}")
+                    fm = {}
+
+                if isinstance(fm, dict):
+                    for field in _PLAYBOOK_REQUIRED_FM:
+                        if field not in fm:
+                            errors.append(
+                                f"`{filename}`: missing required frontmatter field `{field}`"
+                            )
+
+    return errors
+
+
+def _validate_checks(filename: str, checks: object) -> list[str]:
+    """Validate a ``checks:`` list from a playbook YAML block.
+
+    Args:
+        filename: Source file name (for error messages).
+        checks: Parsed value of the ``checks`` key (should be a list).
+
+    Returns:
+        List of error strings.
+    """
+    errors: list[str] = []
+
+    if not isinstance(checks, list):
+        return [f"`{filename}`: `checks` must be a list, got {type(checks).__name__}"]
+
+    if not checks:
+        return [f"`{filename}`: `checks` list must not be empty"]
+
+    for idx, check in enumerate(checks):
+        if not isinstance(check, dict):
+            errors.append(f"`{filename}`: check[{idx}] must be a mapping")
+            continue
+        for key in _CHECK_REQUIRED_KEYS:
+            if key not in check:
+                errors.append(
+                    f"`{filename}`: check[{idx}] missing required field `{key}`"
+                )
+        mode = check.get("mode")
+        if mode and mode not in _VALID_MODES:
+            errors.append(
+                f"`{filename}`: check[{idx}] invalid mode `{mode}` "
+                f"(must be one of: {', '.join(sorted(_VALID_MODES))})"
+            )
+        severity = check.get("severity")
+        if severity and severity not in _VALID_SEVERITIES:
+            errors.append(
+                f"`{filename}`: check[{idx}] invalid severity `{severity}` "
+                f"(must be one of: {', '.join(sorted(_VALID_SEVERITIES))})"
+            )
+
+    return errors

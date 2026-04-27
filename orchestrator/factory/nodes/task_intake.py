@@ -107,6 +107,13 @@ async def task_intake_node(state: FactoryState) -> dict:
         metadata.get("repo") or settings.default_repo or settings.github_repo
     )
 
+    # Sub-path within the repo where the grinder should focus (e.g. "python/molly/tools/").
+    # None → work at repo root (MeshWiki default).
+    task_repo_root: str | None = metadata.get("repo_root") or None
+
+    # Artifact type — "tool" | "playbook" | "wordlist" | None/"code" (MeshWiki default).
+    artifact_type: str | None = metadata.get("artifact_type") or None
+
     # Normalise: metadata values from YAML may come back as booleans or strings
     raw_skip = metadata.get("skip_decomposition", False)
     skip_decomposition: bool = raw_skip is True or str(raw_skip).lower() == "true"
@@ -181,6 +188,8 @@ async def task_intake_node(state: FactoryState) -> dict:
                 "title": title,
                 "requirements": requirements,
                 "task_repo": task_repo,
+                "task_repo_root": task_repo_root,
+                "artifact_type": artifact_type,
                 "task_uuid": task_uuid,
                 "subtasks": subtasks,
                 "decomposition_approved": True,
@@ -230,6 +239,8 @@ async def task_intake_node(state: FactoryState) -> dict:
             "title": title,
             "requirements": requirements,
             "task_repo": task_repo,
+            "task_repo_root": task_repo_root,
+            "artifact_type": artifact_type,
             "task_uuid": task_uuid,
             "subtasks": [subtask],
             "decomposition_approved": True,
@@ -240,6 +251,8 @@ async def task_intake_node(state: FactoryState) -> dict:
         "title": title,
         "requirements": requirements,
         "task_repo": task_repo,
+        "task_repo_root": task_repo_root,
+        "artifact_type": artifact_type,
         "task_uuid": task_uuid,
         "graph_status": "decomposing",
     }

@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, Any
 
 import anthropic
 
+from ..armory_prompts import get_armory_prompt
 from ..config import get_settings
 from ..cost import sandbox_time_to_usd, tokens_to_usd
 from ..state import FactoryState, SubTask
@@ -498,6 +499,54 @@ class GrinderToolExecutor:
         return f"Task {page_name} transitioned to {status}"
 
 
+def _artifact_intro(artifact_type: str | None, task_repo_root: str | None) -> str:
+    """Return a one-paragraph repo/artifact description for the grinder task prompt.
+
+    Used by :func:`grind_subtask_e2b` to replace the hardcoded MeshWiki
+    description when working on a non-MeshWiki repository (e.g. molly-armory).
+
+    Args:
+        artifact_type: Artifact type from task frontmatter (``tool``, ``playbook``,
+            ``wordlist``, or ``None``/``"code"`` for the MeshWiki default).
+        task_repo_root: Sub-path within the repo where the work lives, or ``None``.
+
+    Returns:
+        A short paragraph describing the repo context and what the grinder must produce.
+    """
+    root_note = f" Work primarily in `{task_repo_root}/`." if task_repo_root else ""
+
+    if artifact_type == "tool":
+        return (
+            "You are working on the Molly armory repository (molly-armory). "
+            "Your goal is to implement a new Molly security-testing tool as a Python module.  "
+            "Each tool is a class that inherits from `ToolBase` (in `molly.tools.base`), "
+            "exposes a `capability_name` class attribute, a `schema()` classmethod returning "
+            "an OpenAI function-calling schema, and an async `run(**kwargs)` method that "
+            "returns a result dict.  Tests live in `tests/`.  "
+            "Run tests with `python -m pytest tests/ -x -q`.  "
+            "Lint with `ruff check . && black --check .` from the repo root." + root_note
+        )
+    if artifact_type == "playbook":
+        return (
+            "You are working on the Molly armory repository (molly-armory). "
+            "Your goal is to create or update a YAML playbook for Molly's security-testing pipeline.  "
+            "Playbooks define attack patterns: capabilities required, mutation templates, "
+            "and expected response conditions.  Validate YAML syntax after writing.  "
+            "Lint with `ruff check . && black --check .` from the repo root." + root_note
+        )
+    if artifact_type == "wordlist":
+        return (
+            "You are working on the Molly armory repository (molly-armory). "
+            "Your goal is to create or extend a wordlist file (plain text, one entry per line) "
+            "for use in Molly's security-testing scans.  "
+            "Place the file in the appropriate directory and update any index files." + root_note
+        )
+    # Default: MeshWiki
+    return (
+        "You are working on the MeshWiki project (FastAPI + Python 3.12 + Rust graph engine)."
+    )
+
+
 def _strip_ansi(text: str) -> str:
     """Remove ANSI colour/escape codes from *text*.
 
@@ -600,6 +649,10 @@ async def grind_subtask_e2b(
     settings = get_settings()
     subtask = dict(subtask)
 
+    artifact_type: str | None = state.get("artifact_type") or None
+    task_repo_root: str | None = state.get("task_repo_root") or None
+    is_meshwiki = artifact_type is None or artifact_type == "code"
+
     # Transition to in_progress (best-effort — 422 is expected when the task was
     # already transitioned externally, e.g. skip_decomposition flow)
     try:
@@ -658,9 +711,27 @@ async def grind_subtask_e2b(
         )
         step9_verb = "Create a PR"
 
+    repo_intro = _artifact_intro(artifact_type, task_repo_root)
+    armory_protocol = get_armory_prompt(artifact_type)
+
+    if is_meshwiki:
+        autofix_step = (
+            "4. Run autofix on Python files only: black src/ && isort --profile black src/ && ruff check src/\n"
+            "   (Tools are installed globally — do NOT use .venv/bin/ prefix. black/isort are for .py files ONLY; do not run them on .js, .css, or other file types.)\n"
+        )
+        test_step = "5. Run: python -m pytest src/tests/ -x -q\n"
+    else:
+        lint_target = task_repo_root.rstrip("/") if task_repo_root else "."
+        autofix_step = (
+            f"4. Run autofix: ruff check --fix {lint_target} && black {lint_target}\n"
+            "   (Tools are installed globally — do NOT use .venv/bin/ prefix.)\n"
+        )
+        test_step = "5. Run: python -m pytest tests/ -x -q\n"
+
     task_prompt = (
-        f"You are working on the MeshWiki project (FastAPI + Python 3.12 + Rust graph engine). "
+        f"{repo_intro} "
         f"Implement the following task and open a GitHub PR when done.\n\n"
+        f"{armory_protocol + chr(10) if armory_protocol else ''}"
         f"## Task: {subtask['title']}\n\n"
         f"{page_content}\n"
         f"{rework_section}\n"
@@ -668,9 +739,8 @@ async def grind_subtask_e2b(
         f"1. Explore the codebase to understand context\n"
         f"{branch_instruction}"
         f"3. Implement the changes with tests\n"
-        f"4. Run autofix on Python files only: black src/ && isort --profile black src/ && ruff check src/\n"
-        f"   (Tools are installed globally — do NOT use .venv/bin/ prefix. black/isort are for .py files ONLY; do not run them on .js, .css, or other file types.)\n"
-        f"5. Run: python -m pytest src/tests/ -x -q\n"
+        f"{autofix_step}"
+        f"{test_step}"
         f"6. Fix any lint/test failures\n"
         f"7. Commit your changes\n"
         f"8. Rebase onto the latest {base_branch} to avoid merge conflicts:\n"
@@ -781,21 +851,24 @@ async def grind_subtask_e2b(
         if result.exit_code != 0:
             raise RuntimeError(f"git clone failed: {result.stderr}")
 
-        # Install Python deps
-        await sbx.commands.run(
-            "cd /tmp/repo && pip install -e '.[dev]' -q --no-cache-dir",
-            timeout=600,
-            on_stdout=_on_stdout,
-            on_stderr=_on_stderr,
-        )
+        # Install Python deps — MeshWiki only; armory repos are not Python packages.
+        if is_meshwiki:
+            await sbx.commands.run(
+                "cd /tmp/repo && pip install -e '.[dev]' -q --no-cache-dir",
+                timeout=600,
+                on_stdout=_on_stdout,
+                on_stderr=_on_stderr,
+            )
 
-        # Install orchestrator deps (langgraph, anthropic, etc.)
-        await sbx.commands.run(
-            "cd /tmp/repo/orchestrator && pip install -e '.[dev]' -q --no-cache-dir",
-            timeout=600,
-            on_stdout=_on_stdout,
-            on_stderr=_on_stderr,
-        )
+        # Install orchestrator deps (langgraph, anthropic, etc.) — MeshWiki tasks only.
+        # Armory repos (tool/playbook/wordlist) do not have an orchestrator subdirectory.
+        if is_meshwiki:
+            await sbx.commands.run(
+                "cd /tmp/repo/orchestrator && pip install -e '.[dev]' -q --no-cache-dir",
+                timeout=600,
+                on_stdout=_on_stdout,
+                on_stderr=_on_stderr,
+            )
 
         # Write task file
         await asyncio.wait_for(sbx.files.write("/tmp/task.md", task_prompt), timeout=30)

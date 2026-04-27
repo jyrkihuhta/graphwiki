@@ -7,6 +7,7 @@
 
   var prevByName  = {};
   var activityLog = [];
+  var wsActive    = false;  // true while /ws/factory is connected
 
   var GRAPH_STATUS_LABELS = {
     intake: "Intake", decomposing: "Decomposing", dispatching: "Dispatching",
@@ -71,8 +72,12 @@
     });
     Object.keys(next).forEach(function (name) {
       var s = next[name], p = prevByName[name];
-      if (p !== undefined && p !== s) pushActivity({name: name, from: p, to: s, time: Date.now()});
-      else if (p === undefined) pushActivity({name: name, from: null, to: s, time: Date.now()});
+      // When WS is active it is the canonical transition source; only update
+      // prevByName here so the next poll diff stays accurate.
+      if (!wsActive) {
+        if (p !== undefined && p !== s) pushActivity({name: name, from: p, to: s, time: Date.now()});
+        else if (p === undefined) pushActivity({name: name, from: null, to: s, time: Date.now()});
+      }
     });
     prevByName = next;
   }
@@ -419,9 +424,63 @@
     return "rgba(" + r + "," + g + "," + b + "," + alpha + ")";
   }
 
+  // ── Activity history (server ring buffer) ────────────────────────────────
+
+  function loadActivity() {
+    fetch("/api/factory/activity")
+      .then(function (r) { return r.ok ? r.json() : []; })
+      .then(function (items) {
+        if (!items.length) return;
+        // Server returns oldest-first; prepend each so newest ends up first.
+        var capped = items.slice(-MAX_ACTIVITY);
+        for (var i = capped.length - 1; i >= 0; i--) {
+          activityLog.push(capped[i]);
+        }
+        activityLog.reverse();
+        renderActivity();
+      })
+      .catch(function () {});
+  }
+
+  // ── Factory WebSocket (push-based transitions) ────────────────────────────
+
+  var wsRetryMs = 1000;
+
+  function openFactoryWS() {
+    var proto = location.protocol === "https:" ? "wss:" : "ws:";
+    var ws = new WebSocket(proto + "//" + location.host + "/ws/factory");
+
+    ws.addEventListener("open", function () {
+      wsActive = true;
+      wsRetryMs = 1000;
+    });
+
+    ws.addEventListener("message", function (ev) {
+      try {
+        var msg = JSON.parse(ev.data);
+        if (msg.type === "transition") {
+          // Keep prevByName in sync so poll-based diff won't re-detect this.
+          prevByName[msg.name] = msg.to;
+          pushActivity({name: msg.name, from: msg["from"], to: msg.to, time: msg.time});
+        }
+      } catch (e) {}
+    });
+
+    ws.addEventListener("close", function () {
+      wsActive = false;
+      // Exponential back-off, cap at 30 s.
+      wsRetryMs = Math.min(wsRetryMs * 2, 30000);
+      setTimeout(openFactoryWS, wsRetryMs);
+    });
+
+    ws.addEventListener("error", function () { ws.close(); });
+  }
+
   // ── Init ──────────────────────────────────────────────────────────────────
 
   window.addEventListener("resize", drawPaths);
+  loadActivity();
+  openFactoryWS();
   pollTasks();
   pollStatus();
 })();

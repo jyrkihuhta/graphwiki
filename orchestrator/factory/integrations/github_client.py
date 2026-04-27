@@ -227,6 +227,29 @@ class GitHubClient:
         return resp.json()
 
 
+    async def get_pr_files(self, pr_number: int) -> list[dict]:
+        """List files changed by a pull request.
+
+        Args:
+            pr_number: GitHub pull request number.
+
+        Returns:
+            List of file objects, each with ``filename``, ``status``,
+            ``additions``, ``deletions``, and ``patch`` (unified diff hunk).
+            Up to 300 files are returned (GitHub's API limit per page).
+
+        Raises:
+            httpx.HTTPStatusError: On non-2xx responses.
+        """
+        url = f"/repos/{self._repo}/pulls/{pr_number}/files"
+        resp = await self._client.get(
+            url,
+            headers=self._headers(),
+            params={"per_page": 100},
+        )
+        resp.raise_for_status()
+        return resp.json()
+
     async def list_open_prs(self, head_prefix: str = "factory/") -> list[dict]:
         """List open PRs whose head branch starts with *head_prefix*.
 

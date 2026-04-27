@@ -17,14 +17,15 @@ import asyncio
 import hashlib
 import hmac
 import json
-import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 
 import httpx
 
-log = logging.getLogger(__name__)
+from meshwiki.core.logging import get_logger
+
+log = get_logger(__name__)
 
 _MAX_ATTEMPTS = 5
 _BASE_DELAY = 1.0  # seconds; actual delays: 1, 2, 4, 8, 16
@@ -127,12 +128,10 @@ class WebhookDispatcher:
             self._queue.put_nowait(evt)
         except asyncio.QueueFull:
             log.error(
-                "webhook_queue_full: dropping event=%s page=%s — "
-                "queue size=%d; consider raising _QUEUE_SIZE or "
-                "investigating delivery latency",
-                event,
-                page_name,
-                self._QUEUE_SIZE,
+                "webhook_queue_full",
+                webhook_event=event,
+                page=page_name,
+                queue_size=self._QUEUE_SIZE,
             )
 
     async def _dispatch_loop(self) -> None:
@@ -143,11 +142,11 @@ class WebhookDispatcher:
                     await self._send_with_retries(client, evt)
                 except Exception as exc:
                     log.error(
-                        "webhook_dead_letter: event=%s page=%s exhausted %d attempts: %s",
-                        evt.event,
-                        evt.page_name,
-                        _MAX_ATTEMPTS,
-                        exc,
+                        "webhook_dead_letter",
+                        webhook_event=evt.event,
+                        page=evt.page_name,
+                        attempts=_MAX_ATTEMPTS,
+                        error=str(exc),
                     )
                     await self._write_dead_letter(evt, str(exc))
                 finally:
@@ -161,12 +160,12 @@ class WebhookDispatcher:
             if attempt > 0:
                 delay = _BASE_DELAY * (2 ** (attempt - 1))
                 log.warning(
-                    "webhook_retry: event=%s page=%s attempt=%d/%d delay=%.1fs",
-                    evt.event,
-                    evt.page_name,
-                    attempt + 1,
-                    _MAX_ATTEMPTS,
-                    delay,
+                    "webhook_retry",
+                    webhook_event=evt.event,
+                    page=evt.page_name,
+                    attempt=attempt + 1,
+                    max_attempts=_MAX_ATTEMPTS,
+                    delay_s=round(delay, 1),
                 )
                 await asyncio.sleep(delay)
             try:
@@ -210,7 +209,7 @@ class WebhookDispatcher:
         try:
             await asyncio.to_thread(_append_jsonl, self._dead_letter_path, record)
         except Exception as exc:
-            log.error("webhook_dead_letter_write_failed: %s", exc)
+            log.error("webhook_dead_letter_write_failed", error=str(exc))
 
 
 def _append_jsonl(path: Path, record: dict) -> None:

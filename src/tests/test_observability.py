@@ -204,6 +204,35 @@ async def test_logging_produces_structured_events():
     assert record.get("log_level") == "info"
 
 
+@pytest.mark.asyncio
+async def test_request_id_bound_to_context(client):
+    """LoggingMiddleware must bind request_id to structlog context vars."""
+    import structlog
+    import structlog.contextvars
+
+    import meshwiki.main
+
+    captured: list[dict] = []
+
+    original_dispatch = meshwiki.main.LoggingMiddleware.dispatch
+
+    async def capturing_dispatch(self, request, call_next):
+        response = await original_dispatch(self, request, call_next)
+        captured.append(dict(structlog.contextvars.get_contextvars()))
+        return response
+
+    meshwiki.main.LoggingMiddleware.dispatch = capturing_dispatch
+    try:
+        await client.get("/health/live")
+    finally:
+        meshwiki.main.LoggingMiddleware.dispatch = original_dispatch
+
+    assert captured, "dispatch was never called"
+    ctx = captured[0]
+    assert "request_id" in ctx
+    assert len(ctx["request_id"]) == 36  # UUID4
+
+
 # ── M0.2: /health/ready endpoint ─────────────────────────────────────────────
 
 

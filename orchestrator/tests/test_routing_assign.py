@@ -168,6 +168,36 @@ class TestSelectSubtasksToDispatch:
             result = _select_subtasks_to_dispatch(state)
         assert result == []
 
+    def test_hbr_budget_exhausted_blocks_dispatch(self) -> None:
+        """When HBR reports budget exhausted, no subtasks are dispatched."""
+        from unittest.mock import MagicMock
+
+        sub = _make_subtask("t1", files=["src/t1.py"])
+        state = _make_state(subtasks=[sub], active_grinders=[])
+        mock_hbr = MagicMock()
+        mock_hbr.can_allocate_sandbox.return_value = False
+        with (
+            patch("factory.nodes.assign.FACTORY_MAX_CONCURRENT_SANDBOXES", 5),
+            patch("factory.nodes.assign.get_hbr", return_value=mock_hbr),
+        ):
+            result = _select_subtasks_to_dispatch(state)
+        assert result == []
+
+    def test_hbr_budget_ok_does_not_block(self) -> None:
+        """When HBR reports budget available, dispatch proceeds normally."""
+        from unittest.mock import MagicMock
+
+        sub = _make_subtask("t1", files=["src/t1.py"])
+        state = _make_state(subtasks=[sub], active_grinders=[])
+        mock_hbr = MagicMock()
+        mock_hbr.can_allocate_sandbox.return_value = True
+        with (
+            patch("factory.nodes.assign.FACTORY_MAX_CONCURRENT_SANDBOXES", 5),
+            patch("factory.nodes.assign.get_hbr", return_value=mock_hbr),
+        ):
+            result = _select_subtasks_to_dispatch(state)
+        assert len(result) == 1
+
     def test_mixed_statuses_only_eligible_dispatched(self) -> None:
         """Only 'pending'/'changes_requested' subtasks are considered."""
         sub_pending = _make_subtask("t1", status="pending")

@@ -11,6 +11,7 @@ from .merge_check import merge_check_node
 from .pm_diagnose import pm_diagnose_node
 from .pm_review import pm_review_node
 from .task_intake import task_intake_node
+from .validate_armory import validate_armory_node
 
 __all__ = [
     "task_intake_node",
@@ -25,4 +26,5 @@ __all__ = [
     "merge_check_node",
     "finalize_node",
     "escalate_node",
+    "validate_armory_node",
 ]

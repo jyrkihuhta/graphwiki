@@ -111,9 +111,7 @@ class Settings(BaseSettings):
     dry_run_step_delay_seconds: float = (
         3.0  # FACTORY_DRY_RUN_STEP_DELAY_SECONDS — simulated delay per pipeline step
     )
-    ci_fixer_enabled: bool = (
-        False  # FACTORY_CI_FIXER_ENABLED — enable the CI fixer bot
-    )
+    ci_fixer_enabled: bool = False  # FACTORY_CI_FIXER_ENABLED — enable the CI fixer bot
     ci_fixer_interval_seconds: int = (
         120  # FACTORY_CI_FIXER_INTERVAL_SECONDS — how often to scan for failing CI
     )
@@ -131,6 +129,30 @@ class Settings(BaseSettings):
     )
     insight_model: str = (
         "claude-haiku-4-5-20251001"  # FACTORY_INSIGHT_MODEL — LLM for synthesis
+    )
+    daily_budget_usd: float = (
+        0.0  # FACTORY_DAILY_BUDGET_USD — max USD to spend per calendar day (0 = disabled)
+    )
+    stale_pr_enabled: bool = (
+        False  # FACTORY_STALE_PR_ENABLED — enable stale-PR fix-task bot
+    )
+    stale_pr_interval_seconds: int = (
+        300  # FACTORY_STALE_PR_INTERVAL_SECONDS — how often the bot scans PRs
+    )
+    stale_pr_failure_minutes: int = (
+        30  # FACTORY_STALE_PR_FAILURE_MINUTES — min age of a CI failure before acting
+    )
+    stale_pr_max_attempts: int = (
+        2  # FACTORY_STALE_PR_MAX_ATTEMPTS — max fix tasks created per PR
+    )
+    molly_url: str = (
+        ""  # FACTORY_MOLLY_URL — Molly HTTP API base URL, e.g. http://molly:8780
+    )
+    molly_api_token: str = (
+        ""  # FACTORY_MOLLY_API_TOKEN — Bearer token for Molly /armory/reload
+    )
+    armory_repo: str = (
+        ""  # FACTORY_ARMORY_REPO — molly-armory GitHub repo, e.g. jyrkihuhta/molly-armory
     )
 
     model_config = SettingsConfigDict(env_prefix="FACTORY_")

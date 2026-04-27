@@ -18,6 +18,7 @@ from .nodes import (
     pm_review_node,
     route_grinders,
     task_intake_node,
+    validate_armory_node,
 )
 from .state import FactoryState
 
@@ -122,6 +123,29 @@ def route_after_pm_review(state: FactoryState) -> list[Send] | str:
     return "all_approved"
 
 
+def route_after_validate_armory(state: FactoryState) -> list[Send] | str:
+    """Route after the armory validation gate.
+
+    On failure, re-dispatches each subtask that needs rework via ``Send("grind",...)``.
+    On success, continues to ``human_review_code`` (or ``merge_check`` when
+    ``auto_merge`` is enabled).
+    """
+    if state.get("graph_status") == "armory_validation_failed":
+        failed = [
+            s for s in state.get("subtasks", []) if s["status"] == "changes_requested"
+        ]
+        if failed:
+            return [
+                Send("grind", {**state, "_current_subtask_id": s["id"]})
+                for s in failed
+            ]
+        return "escalate"
+
+    if get_settings().auto_merge:
+        return "skip_human_review"
+    return "all_approved"
+
+
 def route_after_human_code_review(state: FactoryState) -> str:
     """Route after human reviews the final code."""
     if state.get("human_approval_response") == "approve":
@@ -162,6 +186,7 @@ def build_graph(checkpointer):
     graph.add_node("grind", grind_node)
     graph.add_node("pm_review", pm_review_node)
     graph.add_node("pm_diagnose", pm_diagnose_node)
+    graph.add_node("validate_armory", validate_armory_node)
     graph.add_node("human_review_code", human_review_code_node)
     graph.add_node("merge_check", merge_check_node)
     graph.add_node("finalize", finalize_node)
@@ -208,10 +233,20 @@ def build_graph(checkpointer):
         "pm_review",
         route_after_pm_review,
         {
+            "all_approved": "validate_armory",
+            "skip_human_review": "validate_armory",
+            "escalate": "escalate",
+            END: END,
+        },
+    )
+
+    graph.add_conditional_edges(
+        "validate_armory",
+        route_after_validate_armory,
+        {
             "all_approved": "human_review_code",
             "skip_human_review": "merge_check",
             "escalate": "escalate",
-            END: END,
         },
     )
 

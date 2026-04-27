@@ -6,6 +6,7 @@ webhook events after each successful transition.
 
 from __future__ import annotations
 
+import time
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -138,6 +139,18 @@ async def transition_task(
             page_name=page_name,
             data=metadata_dict,
             canonical_event=canonical,
+        )
+
+        from meshwiki.core.factory_ws_manager import factory_ws_manager
+
+        await factory_ws_manager.broadcast(
+            {
+                "type": "transition",
+                "name": page_name,
+                "from": current_status,
+                "to": new_status,
+                "time": time.time() * 1000,
+            }
         )
 
     return metadata_dict

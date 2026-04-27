@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable
 
+import structlog
 from fastapi import (
     Depends,
     FastAPI,
@@ -110,6 +111,8 @@ class LoggingMiddleware(BaseHTTPMiddleware):
 
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
         request_id = str(uuid.uuid4())
+        structlog.contextvars.clear_contextvars()
+        structlog.contextvars.bind_contextvars(request_id=request_id)
         start = time.monotonic()
         response = await call_next(request)
         duration_ms = round((time.monotonic() - start) * 1000, 2)
@@ -120,7 +123,6 @@ class LoggingMiddleware(BaseHTTPMiddleware):
 
         log.info(
             "http_request",
-            request_id=request_id,
             method=method,
             path=request.url.path,
             status_code=response.status_code,
@@ -771,6 +773,71 @@ async def view_page(request: Request, name: str):
     )
 
 
+@app.get("/api/pages/{name:path}/fragment", response_class=HTMLResponse)
+async def page_content_fragment(name: str, request: Request):
+    """Return rendered inner content of a page for HTMX MetaTable refresh.
+
+    Replaces only the innerHTML of ``#page-content``; does not return a full
+    page layout.  Called by the ``metatable-refresh`` HTMX trigger wired to
+    the ``/ws/graph`` ``page_updated`` WebSocket event.
+    """
+    _validate_page_name(name)
+    page = await storage.get_page(name)
+    if page is None:
+        raise HTTPException(status_code=404, detail="Page not found")
+
+    frontmatter: dict = {}
+    engine = get_engine()
+    if engine is not None:
+        try:
+            frontmatter = engine.get_metadata(name) or {}
+        except Exception:
+            pass
+
+    _storage_extra = (
+        dict(page.metadata.model_extra)
+        if hasattr(page.metadata, "model_extra") and page.metadata.model_extra
+        else {}
+    )
+    page_metadata: dict = frontmatter if frontmatter else _storage_extra
+
+    all_pages_for_recent = await storage.list_pages_with_metadata()
+    recent_pages = sorted(
+        [p for p in all_pages_for_recent if p.metadata.modified],
+        key=lambda p: p.metadata.modified,
+        reverse=True,
+    )
+
+    page_contents: dict[str, str] = {}
+    if "<<Include(" in page.content:
+        all_page_names = await storage.list_pages()
+        pages = await asyncio.gather(*(storage.get_page(n) for n in all_page_names))
+        page_contents = {
+            n: p.content for n, p in zip(all_page_names, pages) if p is not None
+        }
+
+    html_content, _ = parse_wiki_content_with_toc(
+        page.content,
+        page_exists=page_exists_sync,
+        page_name=name,
+        page_metadata=page_metadata,
+        recent_pages=recent_pages,
+        page_contents=page_contents,
+        page_modified=page.metadata.modified,
+        pages=all_pages_for_recent,
+    )
+
+    return templates.TemplateResponse(
+        request,
+        "partials/page_content_fragment.html",
+        get_context(
+            page=page,
+            html_content=html_content,
+            frontmatter=frontmatter,
+        ),
+    )
+
+
 @app.post("/page/{name:path}/delete")
 async def delete_page(name: str):
     """Delete a page."""
@@ -1031,6 +1098,36 @@ async def factory_tasks(
             continue
         results.append({"name": page.name, "metadata": page.metadata.model_dump()})
     return results
+
+
+@app.get("/api/factory/activity")
+async def factory_activity():
+    """Return the server-side activity ring buffer for the factory dashboard."""
+    if not settings.factory_enabled:
+        raise HTTPException(status_code=404, detail="Factory not enabled")
+    from meshwiki.core.factory_ws_manager import factory_ws_manager
+
+    return factory_ws_manager.get_activity()
+
+
+@app.websocket("/ws/factory")
+async def ws_factory(websocket: WebSocket):
+    """Push-based factory event stream for the live dashboard."""
+    if not settings.factory_enabled:
+        await websocket.close(code=1008)
+        return
+    from meshwiki.core.factory_ws_manager import factory_ws_manager
+
+    await websocket.accept()
+    client_id, queue = factory_ws_manager.connect()
+    try:
+        while True:
+            msg = await queue.get()
+            await websocket.send_json(msg)
+    except WebSocketDisconnect:
+        pass
+    finally:
+        factory_ws_manager.disconnect(client_id)
 
 
 @app.get("/api/factory/status")

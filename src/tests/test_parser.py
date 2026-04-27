@@ -433,3 +433,28 @@ class TestMacroEscape:
     def test_escaped_epicstatus_renders_literal(self):
         html = parse_wiki_content("\\<<EpicStatus>>")
         assert "macro-literal" in html
+
+    def test_inline_backtick_protects_pagecount(self):
+        html = parse_wiki_content("Use `<<PageCount>>` inline.")
+        assert "page-count" not in html
+        assert "<code>" in html
+
+    def test_inline_backtick_protects_taglist(self):
+        html = parse_wiki_content("Try `<<TagList>>` here.")
+        assert "tag-list" not in html
+        assert "<code>" in html
+
+    def test_inline_backtick_protects_metatable(self):
+        html = parse_wiki_content("See `<<MetaTable(status=done)>>`.")
+        assert "metatable" not in html
+        assert "<code>" in html
+
+    def test_inline_backtick_protects_pagelist(self):
+        html = parse_wiki_content("Use `<<PageList>>` to list pages.")
+        assert "page-list" not in html
+        assert "<code>" in html
+
+    def test_inline_backtick_does_not_suppress_normal_macro(self):
+        # Macro outside backticks should still expand (PageList → empty or list)
+        html = parse_wiki_content("<<PageList>> and `literal`.")
+        assert "macro-literal" not in html

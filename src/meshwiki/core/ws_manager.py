@@ -5,12 +5,12 @@ connected WebSocket clients via per-client asyncio queues.
 """
 
 import asyncio
-import logging
 from typing import Any
 
 from meshwiki.core.graph import get_engine
+from meshwiki.core.logging import get_logger
 
-logger = logging.getLogger(__name__)
+log = get_logger(__name__)
 
 
 def _event_to_dict(event: Any) -> dict[str, Any]:
@@ -39,20 +39,14 @@ class ConnectionManager:
         self._next_id += 1
         queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue(maxsize=256)
         self._clients[client_id] = queue
-        logger.info(
-            "WebSocket client %d connected (%d total)",
-            client_id,
-            len(self._clients),
-        )
+        log.info("ws_client_connected", client_id=client_id, total=len(self._clients))
         return client_id, queue
 
     def disconnect(self, client_id: int) -> None:
         """Unregister a client."""
         self._clients.pop(client_id, None)
-        logger.info(
-            "WebSocket client %d disconnected (%d total)",
-            client_id,
-            len(self._clients),
+        log.info(
+            "ws_client_disconnected", client_id=client_id, total=len(self._clients)
         )
 
     @property
@@ -87,7 +81,7 @@ class ConnectionManager:
             except asyncio.CancelledError:
                 break
             except Exception:
-                logger.exception("Error polling graph events")
+                log.exception("ws_poll_error")
             await asyncio.sleep(interval)
 
     async def _broadcast(self, msg: dict[str, Any]) -> None:
@@ -96,7 +90,7 @@ class ConnectionManager:
             try:
                 queue.put_nowait(msg)
             except asyncio.QueueFull:
-                logger.warning("Client %d queue full, dropping event", client_id)
+                log.warning("ws_queue_full", client_id=client_id)
 
 
 # Module-level singleton

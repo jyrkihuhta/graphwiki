@@ -133,6 +133,15 @@ class FactoryState(TypedDict):
     # back to FACTORY_GITHUB_REPO when absent.  Set once by task_intake_node.
     task_repo: str | None
 
+    # Sub-path within the cloned repo where the work lives, e.g. "python/molly/tools/".
+    # None means the grinder works at the repo root (default for MeshWiki tasks).
+    task_repo_root: str | None
+
+    # Artifact type — shapes the grinder's system prompt and tool/test paths.
+    # None or "code" → MeshWiki default behaviour.
+    # "tool" | "playbook" | "wordlist" → Molly armory artifact types.
+    artifact_type: str | None
+
     # Redecompose loop control — set by escalate_node when decision=="redecompose".
     redecompose_context: str | None  # failure summary passed to PM for the next decompose
     redecompose_attempt: int  # counts redecompose rounds; escalate_node caps at MAX

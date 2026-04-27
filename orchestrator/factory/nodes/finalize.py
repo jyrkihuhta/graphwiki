@@ -2,6 +2,9 @@
 
 import logging
 
+import httpx
+
+from ..config import get_settings
 from ..integrations.meshwiki_client import MeshWikiClient
 from ..state import FactoryState
 
@@ -10,6 +13,24 @@ logger = logging.getLogger(__name__)
 # Ordered steps required to reach "done" from any active parent state.
 # The wiki state machine enforces: in_progress → review → merged → done.
 _PATH_TO_DONE = ["review", "merged", "done"]
+
+
+async def _notify_molly_reload() -> None:
+    """POST to Molly /armory/reload so it hot-reloads the newly merged tool."""
+    settings = get_settings()
+    if not settings.molly_url:
+        return
+    url = settings.molly_url.rstrip("/") + "/armory/reload"
+    headers = {}
+    if settings.molly_api_token:
+        headers["Authorization"] = f"Bearer {settings.molly_api_token}"
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            resp = await client.post(url, headers=headers)
+            resp.raise_for_status()
+        logger.info("finalize: Molly armory reload triggered (%s)", resp.status_code)
+    except Exception as exc:
+        logger.warning("finalize: Molly armory reload failed (non-fatal): %s", exc)
 
 
 async def finalize_node(state: FactoryState) -> dict:
@@ -67,6 +88,7 @@ async def finalize_node(state: FactoryState) -> dict:
             start = _PATH_TO_DONE.index(current_status) + 1
 
         extra_fields = {"cost_usd": str(round(total_cost, 4))}
+        reached_done = False
         for step in _PATH_TO_DONE[start:]:
             try:
                 await client.transition_task(
@@ -75,6 +97,8 @@ async def finalize_node(state: FactoryState) -> dict:
                     extra_fields=extra_fields if step == "done" else None,
                 )
                 logger.info("finalize: transitioned %s to %s", task_page, step)
+                if step == "done":
+                    reached_done = True
             except Exception as exc:
                 logger.error(
                     "finalize: failed to transition %s to %s: %s",
@@ -84,4 +108,11 @@ async def finalize_node(state: FactoryState) -> dict:
                 )
                 break
 
-        return {"graph_status": "completed", "cost_usd": total_cost}
+    # Trigger Molly armory reload when an armory tool task completes successfully.
+    if reached_done and state.get("artifact_type") == "tool":
+        try:
+            await _notify_molly_reload()
+        except Exception as exc:
+            logger.warning("finalize: _notify_molly_reload raised unexpectedly: %s", exc)
+
+    return {"graph_status": "completed", "cost_usd": total_cost}

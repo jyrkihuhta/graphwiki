@@ -37,7 +37,10 @@
     </div>
 
     <div class="page-body">
-        <div class="page-content" id="page-content">
+        <div class="page-content" id="page-content"
+             hx-get="/api/pages/{{ page.name.replace(' ', '_') }}/fragment"
+             hx-trigger="metatable-refresh"
+             hx-swap="innerHTML">
             {% if frontmatter %}
             <aside class="frontmatter-card">
                 <h4 class="frontmatter-card-header">Properties</h4>
@@ -126,4 +129,35 @@
 </article>
 {% endblock %}
 
+{% block extra_scripts %}
+<script>
+(function () {
+  var proto = location.protocol === "https:" ? "wss:" : "ws:";
+  var ws = new WebSocket(proto + "//" + location.host + "/ws/graph");
+  var debounce;
 
+  ws.addEventListener("message", function (ev) {
+    try {
+      var msg = JSON.parse(ev.data);
+      if (msg.type === "page_updated") {
+        // Debounce: wait 800ms after the last event before refreshing.
+        clearTimeout(debounce);
+        debounce = setTimeout(function () {
+          htmx.trigger(document.getElementById("page-content"), "metatable-refresh");
+        }, 800);
+      }
+    } catch (e) {}
+  });
+
+  // After HTMX swaps in new content, re-initialise Mermaid diagrams.
+  document.addEventListener("htmx:afterSwap", function (e) {
+    if (e.target && e.target.id === "page-content") {
+      if (typeof mermaid !== "undefined") {
+        var nodes = e.target.querySelectorAll(".mermaid:not([data-processed])");
+        if (nodes.length) mermaid.run({ nodes: nodes });
+      }
+    }
+  });
+})();
+</script>
+{% endblock %}

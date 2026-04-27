@@ -5,6 +5,7 @@ import logging
 from langgraph.types import Send
 
 from ..config import FACTORY_MAX_CONCURRENT_SANDBOXES
+from ..hbr import get_hbr
 from ..state import FactoryState, SubTask
 
 logger = logging.getLogger(__name__)
@@ -37,6 +38,13 @@ def _select_subtasks_to_dispatch(
         logger.info(
             "assign_grinders: at concurrency cap (%d), no slots free",
             FACTORY_MAX_CONCURRENT_SANDBOXES,
+        )
+        return []
+
+    if not get_hbr().can_allocate_sandbox():
+        logger.info(
+            "assign_grinders: daily budget exhausted — deferring dispatch for task %s",
+            state.get("task_wiki_page", "<unknown>"),
         )
         return []
 

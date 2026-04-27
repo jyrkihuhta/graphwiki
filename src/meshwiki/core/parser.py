@@ -23,7 +23,7 @@ class MacroEscapePreprocessor(Preprocessor):
     def run(self, lines: list[str]) -> list[str]:
         text = "\n".join(lines)
 
-        code_block_re = re.compile(r"(```.*?```|~~~.*?~~~)", re.DOTALL)
+        code_block_re = re.compile(r"(```.*?```|~~~.*?~~~|`[^`\n]+`)", re.DOTALL)
         code_blocks: list[str] = []
 
         def stash_code(m: re.Match) -> str:
@@ -268,7 +268,7 @@ class MetaTablePreprocessor(Preprocessor):
             return lines
 
         # Strip out fenced code blocks so we don't replace macros inside them
-        code_block_re = re.compile(r"(```.*?```|~~~.*?~~~)", re.DOTALL)
+        code_block_re = re.compile(r"(```.*?```|~~~.*?~~~|`[^`\n]+`)", re.DOTALL)
         code_blocks: list[str] = []
 
         def stash_code(m: re.Match) -> str:
@@ -386,7 +386,7 @@ class RecentChangesPreprocessor(Preprocessor):
         if "<<RecentChanges" not in text:
             return lines
 
-        code_block_re = re.compile(r"(```.*?```|~~~.*?~~~)", re.DOTALL)
+        code_block_re = re.compile(r"(```.*?```|~~~.*?~~~|`[^`\n]+`)", re.DOTALL)
         code_blocks: list[str] = []
 
         def stash_code(m: re.Match) -> str:
@@ -444,7 +444,7 @@ class TagListPreprocessor(Preprocessor):
         if "<<TagList>>" not in text:
             return lines
 
-        code_block_re = re.compile(r"(```.*?```|~~~.*?~~~)", re.DOTALL)
+        code_block_re = re.compile(r"(```.*?```|~~~.*?~~~|`[^`\n]+`)", re.DOTALL)
         code_blocks: list[str] = []
 
         def stash_code(m: re.Match) -> str:
@@ -510,7 +510,7 @@ class LastModifiedPreprocessor(Preprocessor):
         if "<<LastModified>>" not in text:
             return lines
 
-        code_block_re = re.compile(r"(```.*?```|~~~.*?~~~)", re.DOTALL)
+        code_block_re = re.compile(r"(```.*?```|~~~.*?~~~|`[^`\n]+`)", re.DOTALL)
         code_blocks: list[str] = []
 
         def stash_code(m: re.Match) -> str:
@@ -578,7 +578,7 @@ class PageCountPreprocessor(Preprocessor):
         if "<<PageCount>>" not in text:
             return lines
 
-        code_block_re = re.compile(r"(```.*?```|~~~.*?~~~)", re.DOTALL)
+        code_block_re = re.compile(r"(```.*?```|~~~.*?~~~|`[^`\n]+`)", re.DOTALL)
         code_blocks: list[str] = []
 
         def stash_code(m: re.Match) -> str:
@@ -948,7 +948,7 @@ class TaskStatusPreprocessor(Preprocessor):
             return lines
 
         # Protect fenced code blocks (same technique as MetaTablePreprocessor).
-        code_block_re = re.compile(r"(```.*?```|~~~.*?~~~)", re.DOTALL)
+        code_block_re = re.compile(r"(```.*?```|~~~.*?~~~|`[^`\n]+`)", re.DOTALL)
         code_blocks: list[str] = []
 
         def stash_code(m: re.Match) -> str:
@@ -1108,7 +1108,7 @@ class PageListPreprocessor(Preprocessor):
         if "<<PageList" not in text:
             return lines
 
-        code_block_re = re.compile(r"(```.*?```|~~~.*?~~~)", re.DOTALL)
+        code_block_re = re.compile(r"(```.*?```|~~~.*?~~~|`[^`\n]+`)", re.DOTALL)
         code_blocks: list[str] = []
 
         def stash_code(m: re.Match) -> str:
@@ -1192,7 +1192,7 @@ class BackLinksPreprocessor(Preprocessor):
         if "<<BackLinks>>" not in text:
             return lines
 
-        code_block_re = re.compile(r"(```.*?```|~~~.*?~~~)", re.DOTALL)
+        code_block_re = re.compile(r"(```.*?```|~~~.*?~~~|`[^`\n]+`)", re.DOTALL)
         code_blocks: list[str] = []
 
         def stash_code(m: re.Match) -> str:
@@ -1309,7 +1309,7 @@ class TableOfContentsPreprocessor(Preprocessor):
         if "<<TableOfContents" not in text:
             return lines
 
-        code_block_re = re.compile(r"(```.*?```|~~~.*?~~~)", re.DOTALL)
+        code_block_re = re.compile(r"(```.*?```|~~~.*?~~~|`[^`\n]+`)", re.DOTALL)
         code_blocks: list[str] = []
 
         def stash_code(m: re.Match) -> str:
@@ -1576,7 +1576,7 @@ class IncludePreprocessor(Preprocessor):
         if "<<Include(" not in text:
             return lines
 
-        code_block_re = re.compile(r"(```.*?```|~~~.*?~~~)", re.DOTALL)
+        code_block_re = re.compile(r"(```.*?```|~~~.*?~~~|`[^`\n]+`)", re.DOTALL)
         code_blocks: list[str] = []
 
         def stash_code(m: re.Match) -> str:
@@ -1758,7 +1758,7 @@ class NewPagePreprocessor(Preprocessor):
         if "<<NewPage(" not in text:
             return lines
 
-        code_block_re = re.compile(r"(```.*?```|~~~.*?~~~)", re.DOTALL)
+        code_block_re = re.compile(r"(```.*?```|~~~.*?~~~|`[^`\n]+`)", re.DOTALL)
         code_blocks: list[str] = []
 
         def stash_code(m: re.Match) -> str:

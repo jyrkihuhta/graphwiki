@@ -18,9 +18,11 @@ from .bots.ci_fixer import CIFixerBot
 from .bots.insight import InsightBot
 from .bots.registry import BotRegistry
 from .bots.scheduler import SchedulerBot
+from .bots.stale_pr_bot import StalePRBot
 from .bots.terminal_review import TerminalReviewBot
-from .config import get_settings, validate_settings
+from .config import FACTORY_MAX_CONCURRENT_SANDBOXES, get_settings, validate_settings
 from .graph import build_graph
+from .hbr import get_hbr
 from .integrations.meshwiki_client import MeshWikiClient
 from .state import FactoryState
 
@@ -175,6 +177,13 @@ async def lifespan(app: FastAPI):
             "factory: insight bot enabled (interval=%ds)",
             settings.insight_interval_seconds,
         )
+    if settings.stale_pr_enabled:
+        bot_registry.register(StalePRBot())
+        logger.info(
+            "factory: stale-pr bot enabled (interval=%ds, failure_minutes=%d)",
+            settings.stale_pr_interval_seconds,
+            settings.stale_pr_failure_minutes,
+        )
     app.state.bot_registry = bot_registry
 
     async with AsyncSqliteSaver.from_conn_string(settings.checkpoint_db) as saver:
@@ -249,9 +258,7 @@ async def _resolve_thread_id(page_name: str, data: dict[str, Any]) -> str:
         if page:
             return page.get("metadata", {}).get("uuid") or page_name
     except Exception as exc:
-        logger.debug(
-            "factory: could not fetch UUID for %s: %s", page_name, exc
-        )
+        logger.debug("factory: could not fetch UUID for %s: %s", page_name, exc)
     return page_name
 
 
@@ -321,9 +328,7 @@ async def status(request: Request) -> dict:
     total_cost_usd: float = 0.0
     total_grinders: int = 0
 
-    page_thread_map: dict[str, str] = getattr(
-        request.app.state, "page_thread_map", {}
-    )
+    page_thread_map: dict[str, str] = getattr(request.app.state, "page_thread_map", {})
     for page_id in sorted(active_thread_ids):
         # active_thread_ids contains page names (from asyncio task names).
         # Resolve to the actual LangGraph thread_id (UUID) when available.
@@ -361,16 +366,9 @@ async def status(request: Request) -> dict:
         "max_concurrent_parent_tasks": settings.max_concurrent_parent_tasks,
         "active_parent_tasks": len(active_thread_ids),
         "active_grinders": total_grinders,
-        "max_concurrent_sandboxes": None,  # filled below
+        "max_concurrent_sandboxes": FACTORY_MAX_CONCURRENT_SANDBOXES,
         "total_cost_usd": round(total_cost_usd, 4),
     }
-    # Pull sandbox cap from module-level constant
-    try:
-        from .config import FACTORY_MAX_CONCURRENT_SANDBOXES
-
-        resources["max_concurrent_sandboxes"] = FACTORY_MAX_CONCURRENT_SANDBOXES
-    except Exception:
-        resources["max_concurrent_sandboxes"] = None
 
     return {
         "bots": bot_registry.get_status(),
@@ -378,6 +376,42 @@ async def status(request: Request) -> dict:
         "resources": resources,
         "generated_at": time.time(),
     }
+
+
+@app.get("/hbr/status")
+async def hbr_status(request: Request) -> dict:
+    """HBR resource manager: daily cost vs budget, per-model usage, active sandboxes."""
+    hbr = get_hbr()
+    result = hbr.status()
+
+    # Count active sandboxes from LangGraph state across all running threads.
+    graph = request.app.state.graph
+    page_thread_map: dict[str, str] = getattr(request.app.state, "page_thread_map", {})
+    running_tasks = {
+        t.get_name(): t
+        for t in asyncio.all_tasks()
+        if t.get_name().startswith("graph:") and not t.done()
+    }
+    active_thread_ids: set[str] = set()
+    for task_name in running_tasks:
+        parts = task_name.split(":", 2)
+        if len(parts) >= 2:
+            active_thread_ids.add(parts[1])
+
+    active_sandboxes = 0
+    for page_id in active_thread_ids:
+        thread_id = page_thread_map.get(page_id, page_id)
+        try:
+            config = {"configurable": {"thread_id": thread_id}}
+            snapshot = await graph.aget_state(config)
+            if snapshot:
+                active_sandboxes += len(snapshot.values.get("active_grinders") or [])
+        except Exception as exc:
+            logger.debug("hbr_status: could not read state for %s: %s", page_id, exc)
+
+    result["active_sandboxes"] = active_sandboxes
+    result["max_sandboxes"] = FACTORY_MAX_CONCURRENT_SANDBOXES
+    return result
 
 
 @app.post("/webhook")

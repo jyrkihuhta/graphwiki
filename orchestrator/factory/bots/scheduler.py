@@ -23,6 +23,7 @@ import time
 
 from ..agents.pm_agent import anthropic_blocked_seconds_remaining
 from ..config import get_settings
+from ..hbr import get_hbr
 from ..integrations.meshwiki_client import MeshWikiClient
 from ..integrations.minimax_client import MiniMaxUsageClient
 from .base import BaseBot, BotResult
@@ -154,6 +155,17 @@ class SchedulerBot(BaseBot):
                     "scheduler: Anthropic circuit breaker active (%.0fs remaining), "
                     "using fallback provider",
                     blocked_secs,
+                )
+
+            # ── 2c. Check daily budget ────────────────────────────────────
+            if not get_hbr().can_allocate_sandbox():
+                elapsed = time.monotonic() - started
+                logger.info("scheduler: daily budget exhausted — pausing dispatch")
+                return BotResult(
+                    ran_at=started,
+                    actions_taken=0,
+                    errors=[],
+                    details=f"daily_budget_exhausted elapsed={elapsed:.2f}s",
                 )
 
             # ── 3. Fetch planned tasks ────────────────────────────────────

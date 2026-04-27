@@ -5,6 +5,8 @@ from __future__ import annotations
 import logging
 
 from ..agents.grinder_agent import grind_subtask
+from ..config import get_settings
+from ..hbr import get_hbr
 from ..integrations.meshwiki_client import MeshWikiClient
 from ..state import FactoryState
 
@@ -76,6 +78,8 @@ async def grind_node(state: FactoryState) -> dict:
         result = await grind_subtask(state, subtask, meshwiki_client)
         updated = result["subtask"]
         incremental_cost = result.get("incremental_cost_usd", 0.0)
+        if incremental_cost > 0:
+            get_hbr().record_cost(get_settings().grinder_model, incremental_cost)
 
         final_status = updated.get("status", "failed")
         extra_fields: dict = {}
