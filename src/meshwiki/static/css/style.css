@@ -464,12 +464,22 @@ body {
     transition: opacity 0.15s;
 }
 
-.pre:hover .copy-btn,
-.copy-btn:focus {
+pre:hover .copy-btn,
+pre:focus-within .copy-btn {
     opacity: 1;
 }
 
-.copy-btn:hover {
+.copy-btn:active {
+    opacity: 1;
+}
+
+[data-theme="dark"] .copy-btn {
+    background: var(--color-bg);
+    border-color: var(--color-border);
+    color: var(--color-text-muted);
+}
+
+[data-theme="dark"] .copy-btn:hover {
     background: var(--color-bg-secondary);
     color: var(--color-text);
 }
