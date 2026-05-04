@@ -31,11 +31,15 @@ logger = logging.getLogger(__name__)
 
 _ARMORY_TYPES: frozenset[str] = frozenset({"tool", "playbook", "wordlist"})
 
-# Must match molly/playbook.py:CHECK_MODES — "deterministic" runs via Intruder,
-# "analytical" runs the LLM pipeline, "idea" is dormant. Mismatched names here
-# previously rubber-stamped invalid playbooks (mode: intruder) and rejected
-# valid ones (mode: deterministic).
-_VALID_MODES: frozenset[str] = frozenset({"deterministic", "analytical", "idea"})
+# The vocabulary that the contract test (molly-armory/contract-test/) validates.
+# - "deterministic" — runs via Intruder mutation sweep
+# - "analytical"    — runs via the 7-stage LLM pipeline
+# - "idea"          — dormant; promoted during research
+# - "oob"           — runs via OobGenerateTool; injects {{OOB_URL}} payloads
+# Other words (intruder, forge, nuclei, jwt_forge, …) are rejected: nuclei/
+# feroxbuster/jwt_forge/concurrent are routed via `requires_capabilities`,
+# not the `mode:` field.
+_VALID_MODES: frozenset[str] = frozenset({"deterministic", "analytical", "idea", "oob"})
 _VALID_SEVERITIES: frozenset[str] = frozenset(
     {"critical", "high", "medium", "low", "info", "unknown"}
 )
