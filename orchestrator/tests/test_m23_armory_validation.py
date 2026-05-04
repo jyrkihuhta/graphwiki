@@ -171,7 +171,7 @@ _VALID_CHECKS_YAML = """\
 checks:
   - id: test_check
     name: Test Check
-    mode: intruder
+    mode: deterministic
     category: auth
     severity: high
 ```
@@ -261,7 +261,7 @@ def test_check_playbook_files_invalid_severity() -> None:
 checks:
   - id: test_check
     name: Test Check
-    mode: intruder
+    mode: deterministic
     category: auth
     severity: extreme
 ```
@@ -284,6 +284,131 @@ checks: []
 
 def test_check_playbook_files_ignores_non_playbook_files() -> None:
     files = [_make_file("python/tool.py", "+import yaml\n")]
+    assert _check_playbook_files(files) == []
+
+
+# ---------------------------------------------------------------------------
+# Regression: actual crash modes that have hit Molly in production.
+# ---------------------------------------------------------------------------
+
+# Production-shape playbook — has `checks:` IN the frontmatter, not in a
+# fenced ```yaml block. Real Molly playbooks all look like this.
+_FRONTMATTER_WITH_CHECKS = """\
+---
+playbook: my-playbook
+name: My Playbook
+leaf_type: rest_api
+applies_to:
+  - rest
+checks:
+  - id: test_check
+    name: Test Check
+    mode: deterministic
+    category: auth
+    severity: high
+---
+"""
+
+
+def test_check_playbook_files_missing_playbook_key_caught() -> None:
+    """Reproduces the May 2026 crash: Factory PRs landed without a top-level
+    `playbook:` key, causing PlaybookLoader.from_doc() to raise KeyError on
+    Molly startup. The validator must catch this BEFORE merge."""
+    bad_fm = """\
+---
+id: my-playbook
+name: My Playbook
+leaf_type: rest_api
+---
+"""
+    files = [_make_md_file("playbooks/test.md", bad_fm + _VALID_CHECKS_YAML)]
+    errors = _check_playbook_files(files)
+    assert any("`playbook`" in e for e in errors), errors
+
+
+def test_check_playbook_files_validates_frontmatter_checks() -> None:
+    """Real playbooks put `checks:` in the frontmatter (between --- markers),
+    not in a fenced yaml block. The validator must apply the same per-check
+    rules to frontmatter checks. Previously skipped — invalid checks landed."""
+    bad_fm_checks = """\
+---
+playbook: my-playbook
+name: My Playbook
+leaf_type: rest_api
+checks:
+  - id: bad
+    name: Bad
+    mode: NotARealMode
+    category: auth
+    severity: high
+---
+"""
+    files = [_make_md_file("playbooks/test.md", bad_fm_checks)]
+    errors = _check_playbook_files(files)
+    assert any("mode" in e and "NotARealMode" in e for e in errors), errors
+
+
+def test_check_playbook_files_frontmatter_checks_missing_required() -> None:
+    bad_fm = """\
+---
+playbook: my-playbook
+name: My Playbook
+leaf_type: rest_api
+checks:
+  - id: c1
+    name: C1
+    mode: deterministic
+    severity: high
+---
+"""
+    files = [_make_md_file("playbooks/test.md", bad_fm)]
+    errors = _check_playbook_files(files)
+    assert any("category" in e for e in errors), errors
+
+
+def test_check_playbook_files_accepts_real_playbook_shape() -> None:
+    """The shape every real Molly playbook uses must pass cleanly."""
+    files = [_make_md_file("playbooks/test.md", _FRONTMATTER_WITH_CHECKS)]
+    assert _check_playbook_files(files) == []
+
+
+def test_check_playbook_files_accepts_idea_mode() -> None:
+    """`idea` is a valid mode — dormant checks promoted during research."""
+    fm = """\
+---
+playbook: ideas-only
+name: Ideas
+leaf_type: rest_api
+checks:
+  - id: dormant1
+    name: Dormant
+    mode: idea
+    category: ssrf
+    severity: medium
+---
+"""
+    files = [_make_md_file("playbooks/test.md", fm)]
+    assert _check_playbook_files(files) == []
+
+
+def test_check_playbook_files_accepts_unknown_severity() -> None:
+    """Several factory-generated playbooks use severity: unknown — that's
+    allowed by the underlying loader (defaults to "unknown") so the
+    validator should accept it too."""
+    fm = """\
+---
+playbook: legacy
+name: Legacy
+leaf_type: rest_api
+checks:
+  - id: c1
+    name: C1
+    mode: analytical
+    category: misc
+    severity: unknown
+---
+"""
+    files = [_make_md_file("playbooks/test.md", fm)]
     assert _check_playbook_files(files) == []
 
 

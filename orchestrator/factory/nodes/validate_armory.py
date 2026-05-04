@@ -31,9 +31,18 @@ logger = logging.getLogger(__name__)
 
 _ARMORY_TYPES: frozenset[str] = frozenset({"tool", "playbook", "wordlist"})
 
-_VALID_MODES: frozenset[str] = frozenset({"intruder", "forge", "analytical", "oob"})
-_VALID_SEVERITIES: frozenset[str] = frozenset({"critical", "high", "medium", "low", "info"})
-_PLAYBOOK_REQUIRED_FM: tuple[str, ...] = ("name", "leaf_type")
+# Must match molly/playbook.py:CHECK_MODES — "deterministic" runs via Intruder,
+# "analytical" runs the LLM pipeline, "idea" is dormant. Mismatched names here
+# previously rubber-stamped invalid playbooks (mode: intruder) and rejected
+# valid ones (mode: deterministic).
+_VALID_MODES: frozenset[str] = frozenset({"deterministic", "analytical", "idea"})
+_VALID_SEVERITIES: frozenset[str] = frozenset(
+    {"critical", "high", "medium", "low", "info", "unknown"}
+)
+# `playbook` is the top-level required key — Playbook.from_doc() crashes with
+# KeyError if missing. `name` and `leaf_type` are needed for tech-fingerprint
+# matching to actually fire the playbook.
+_PLAYBOOK_REQUIRED_FM: tuple[str, ...] = ("playbook", "name", "leaf_type")
 _CHECK_REQUIRED_KEYS: tuple[str, ...] = ("id", "name", "mode", "category", "severity")
 
 
@@ -267,6 +276,10 @@ def _check_playbook_files(pr_files: list[dict]) -> list[str]:
                             errors.append(
                                 f"`{filename}`: missing required frontmatter field `{field}`"
                             )
+                    # Real playbooks put `checks:` IN the frontmatter, not a
+                    # fenced block. Validate them with the same rules.
+                    if "checks" in fm:
+                        errors.extend(_validate_checks(filename, fm["checks"]))
 
     return errors
 
