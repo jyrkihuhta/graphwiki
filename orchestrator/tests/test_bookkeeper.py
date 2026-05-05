@@ -39,6 +39,23 @@ def _stale_task(name: str, stale_hours: float = 3.0) -> dict:
     }
 
 
+def _stale_task_real_api_shape(name: str, stale_hours: float = 3.0) -> dict:
+    """Return a task dict with the *real* MeshWiki API field name (`modified`,
+    not `updated_at`). The API has always returned `modified`; the original
+    bookkeeper looked for `updated_at` and silently no-op'd on every task —
+    this regression test holds the line."""
+    updated = datetime.now(tz=timezone.utc) - timedelta(hours=stale_hours)
+    return {
+        "name": name,
+        "metadata": {
+            "status": "in_progress",
+            # Production format: ISO 8601 with microseconds, no timezone.
+            "modified": updated.strftime("%Y-%m-%dT%H:%M:%S.%f"),
+            "created": updated.strftime("%Y-%m-%dT%H:%M:%S.%f"),
+        },
+    }
+
+
 def _fresh_task(name: str) -> dict:
     """Return a task dict updated 30 minutes ago (not stale)."""
     updated = datetime.now(tz=timezone.utc) - timedelta(minutes=30)
@@ -137,6 +154,78 @@ async def test_fix_stuck_skips_task_without_updated_at() -> None:
 
     assert actions == 0
     assert errors == []
+    wiki.transition_task.assert_not_awaited()
+
+
+# ---------------------------------------------------------------------------
+# Regression: real MeshWiki API field name is `modified`, not `updated_at`.
+# The original bookkeeper read `updated_at` exclusively, so production
+# never had a parseable timestamp and never timed out a single task.
+# Result: scheduler cap (3/3) filled with zombies for 2.5 weeks (Apr 20
+# → May 5 2026), blocking the entire Factory queue.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_fix_stuck_reads_modified_field_from_real_api() -> None:
+    """Real MeshWiki responses use `modified`. Bookkeeper must read it."""
+    bot = _make_bot(stale_hours=2.0)
+    task = _stale_task_real_api_shape("Task_real", stale_hours=3.0)
+
+    wiki = AsyncMock()
+    wiki.list_tasks = AsyncMock(return_value=[task])
+    wiki.transition_task = AsyncMock()
+    wiki.get_page = AsyncMock(
+        return_value={"name": "Task_real", "content": "---\nstatus: in_progress\n---\n"}
+    )
+    wiki.create_page = AsyncMock()
+
+    actions, errors = await bot._fix_stuck_in_progress(wiki, stale_hours=2.0)
+
+    assert actions == 1, f"expected 1 transition, got {actions}; errors={errors}"
+    assert errors == []
+    wiki.transition_task.assert_awaited_once_with("Task_real", "failed")
+
+
+@pytest.mark.asyncio
+async def test_fix_stuck_real_api_fresh_task_skipped() -> None:
+    """Real-shape (modified) timestamp from 30min ago is fresh, not stale."""
+    bot = _make_bot(stale_hours=2.0)
+    task = _stale_task_real_api_shape("Task_fresh", stale_hours=0.5)  # 30min
+
+    wiki = AsyncMock()
+    wiki.list_tasks = AsyncMock(return_value=[task])
+    wiki.transition_task = AsyncMock()
+
+    actions, errors = await bot._fix_stuck_in_progress(wiki, stale_hours=2.0)
+
+    assert actions == 0
+    wiki.transition_task.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_fix_stuck_prefers_modified_over_updated_at() -> None:
+    """If both fields present (transitional state), `modified` wins.
+    Defends against a stale `updated_at` masking a fresh `modified`."""
+    bot = _make_bot(stale_hours=2.0)
+    fresh = datetime.now(tz=timezone.utc) - timedelta(minutes=15)
+    very_old = datetime.now(tz=timezone.utc) - timedelta(hours=10)
+    task = {
+        "name": "Task_mixed",
+        "metadata": {
+            "status": "in_progress",
+            "modified": fresh.strftime("%Y-%m-%dT%H:%M:%S.%f"),
+            "updated_at": _utc_iso(very_old),
+        },
+    }
+
+    wiki = AsyncMock()
+    wiki.list_tasks = AsyncMock(return_value=[task])
+    wiki.transition_task = AsyncMock()
+
+    actions, errors = await bot._fix_stuck_in_progress(wiki, stale_hours=2.0)
+
+    assert actions == 0, "fresh `modified` must win over stale `updated_at`"
     wiki.transition_task.assert_not_awaited()
 
 

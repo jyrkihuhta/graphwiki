@@ -148,12 +148,25 @@ class BookkeeperBot(BaseBot):
                 continue
 
             metadata: dict = task.get("metadata", {})
-            updated_at_raw: str | None = metadata.get("updated_at")
+            # MeshWiki's API returns the last-modified timestamp as `modified`,
+            # not `updated_at`. The original implementation looked for
+            # `updated_at` — which silently never existed in production
+            # responses, so this whole rule was dead code from day one
+            # (commit 1fd621a, 2026-04-20). Symptom: tasks sat in_progress
+            # indefinitely, the scheduler's concurrency cap (3/3) filled up
+            # with zombies, and no new work could dispatch.
+            #
+            # We read both names so the test suite's synthesized `updated_at`
+            # fixtures keep passing without changes.
+            updated_at_raw: str | None = (
+                metadata.get("modified") or metadata.get("updated_at")
+            )
             updated_at = _parse_updated_at(updated_at_raw)
 
             if updated_at is None:
                 logger.debug(
-                    "bookkeeper: %s has no parseable updated_at — skipping", page_name
+                    "bookkeeper: %s has no parseable modified/updated_at — skipping",
+                    page_name,
                 )
                 continue
 
